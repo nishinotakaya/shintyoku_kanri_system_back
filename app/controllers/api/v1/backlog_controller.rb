@@ -1,0 +1,172 @@
+module Api
+  module V1
+    class BacklogController < BaseController
+      def show_setting
+        s = current_user.backlog_setting || current_user.build_backlog_setting(BacklogSetting::DEFAULTS)
+        render json: serialize_setting(s)
+      end
+
+      def update_setting
+        s = current_user.backlog_setting || current_user.build_backlog_setting(BacklogSetting::DEFAULTS)
+        s.assign_attributes(setting_params)
+        s.save!
+        render json: serialize_setting(s)
+      end
+
+      def test_connection
+        s = current_user.backlog_setting
+        return render(json: { success: false, error: "設定が未保存です" }) unless s
+
+        client = BacklogClient.new(s)
+        result = client.test_connection
+        render json: result
+      end
+
+      def sync
+        result = BacklogSyncService.new(current_user).call
+        render json: {
+          synced: result.size,
+          tasks: result.map { |t| serialize_task(t) }
+        }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      def reorder
+        ids = params[:ids] || []
+        ids.each_with_index do |id, i|
+          current_user.backlog_tasks.where(id: id).update_all(position: i)
+        end
+        head :ok
+      end
+
+      def update_task
+        task = current_user.backlog_tasks.find(params[:id])
+        permitted = params.permit(:memo, :summary, :start_date, :end_date, :status_id, :progress_value, :deploy_date, :deploy_note, :url, :assignee_name)
+        if permitted[:status_id].present?
+          permitted[:status_name] = BacklogTask::STATUS_NAMES[permitted[:status_id].to_i]
+          if permitted[:status_id].to_i == 4 && task.completed_on.nil?
+            permitted[:completed_on] = Date.current
+          elsif permitted[:status_id].to_i != 4
+            permitted[:completed_on] = nil
+          end
+        end
+        task.update!(permitted)
+        render json: serialize_task(task)
+      end
+
+      def create_task
+        task = current_user.backlog_tasks.create!(
+          issue_key: "LOCAL-#{SecureRandom.hex(3).upcase}",
+          summary: params[:summary],
+          status_id: 1,
+          status_name: "未対応",
+          created_on: Date.current,
+          memo: params[:memo],
+          due_date: params[:due_date],
+          deploy_note: params[:deploy_note],
+          url: params[:url].presence || params[:deploy_note],
+          assignee_name: current_user.display_name,
+          source: "local"
+        )
+        render json: serialize_task(task), status: :created
+      end
+
+      def destroy_task
+        current_user.backlog_tasks.find(params[:id]).destroy!
+        head :no_content
+      end
+
+      def sync_to_work_reports
+        year, month = parse_month
+        svc = BacklogToWorkReportService.new(
+          user: current_user,
+          year: year,
+          month: month,
+          category: params[:category] || "wings",
+          daily_hours: params[:daily_hours]&.to_f || 8.0
+        )
+        applied = svc.apply!
+        render json: { applied: applied.size }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      def import_sheet
+        url = params[:spreadsheet_url]
+        sheet = params[:sheet_name].presence
+        return render(json: { error: "スプレッドシートURLを入力してください" }, status: :bad_request) unless url.present?
+
+        result = GoogleSheetsImporter.new(user: current_user, spreadsheet_url: url, sheet_name: sheet).call
+        render json: { imported: result[:imported], sheets: result[:sheets] }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      def export_sheet
+        url = params[:spreadsheet_url]
+        return render(json: { error: "スプレッドシートURLを入力してください" }, status: :bad_request) unless url.present?
+
+        result = GoogleSheetsExporter.new(user: current_user, spreadsheet_url: url).call
+        render json: { success: true, active: result[:active], completed: result[:completed] }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      def sheet_tabs
+        url = params[:spreadsheet_url]
+        return render(json: { error: "URLを入力してください" }, status: :bad_request) unless url.present?
+
+        sheets = GoogleSheetsImporter.new(user: current_user, spreadsheet_url: url).list_sheets
+        render json: { sheets: sheets }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      def tasks
+        tasks = current_user.backlog_tasks.order(:status_id, Arel.sql("COALESCE(position, 9999)"), :issue_key)
+        # ステータスでフィルタ
+        if params[:status_ids].present?
+          ids = params[:status_ids].split(",").map(&:to_i)
+          tasks = tasks.by_status(ids)
+        end
+        render json: tasks.map { |t| serialize_task(t) }
+      end
+
+      private
+
+      def setting_params
+        params.require(:backlog_setting).permit(
+          :backlog_url, :backlog_email, :backlog_password, :board_id, :user_backlog_id, :session_cookie, :api_key, :assignee_name_filter
+        )
+      end
+
+      def serialize_setting(s)
+        {
+          backlog_url: s.backlog_url,
+          backlog_email: s.backlog_email,
+          has_password: s.backlog_password.present?,
+          board_id: s.board_id,
+          user_backlog_id: s.user_backlog_id,
+          has_cookie: s.session_cookie.present?,
+          has_api_key: s.api_key.present?,
+          assignee_name_filter: s.assignee_name_filter
+        }
+      end
+
+      def serialize_task(t)
+        {
+          id: t.id, issue_key: t.issue_key, summary: t.summary,
+          status_id: t.status_id, status_name: t.status_name,
+          progress: t.progress,
+          created_on: t.created_on, completed_on: t.completed_on,
+          start_date: t.start_date, end_date: t.end_date, due_date: t.due_date,
+          memo: t.memo, position: t.position,
+          deploy_date: t.deploy_date, deploy_note: t.deploy_note,
+          source: t.source, assignee_name: t.assignee_name, assignee_id: t.assignee_id,
+          url: t.url
+        }
+      end
+    end
+  end
+end

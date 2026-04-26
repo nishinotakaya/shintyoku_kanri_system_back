@@ -1,0 +1,199 @@
+<% def fmt_yen(n)
+  return "" if n.nil?
+  s = n.abs.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
+  n.negative? ? "-#{s}" : s
+end
+require "base64"
+_hanko_path = "#{Rails.root}/public/hanko_nishino.png"
+hanko_src = File.exist?(_hanko_path) ? "data:image/png;base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil %>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>交通費精算書 <%= @year %>年<%= @month %>月分</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP", sans-serif;
+    color: #1a1a1a;
+    font-size: 12px;
+    margin: 0;
+    padding: 36px 40px;
+    line-height: 1.6;
+  }
+  .top {
+    text-align: right;
+    font-size: 11px;
+    color: #555;
+  }
+  h1.title {
+    text-align: center;
+    font-size: 28px;
+    letter-spacing: 12px;
+    margin: 8px 0 28px;
+    font-weight: 600;
+  }
+  .head {
+    display: flex;
+    justify-content: space-between;
+    gap: 32px;
+    margin-bottom: 24px;
+  }
+  .head .left { flex: 1; }
+  .head .right {
+    flex: 0 0 38%;
+    font-size: 11px;
+    line-height: 1.55;
+    position: relative;
+  }
+  .hanko-img {
+    position: absolute;
+    top: -8px; right: -4px;
+    width: 80px; height: 80px;
+  }
+  .client {
+    font-size: 16px;
+    font-weight: 700;
+    border-bottom: 1.5px solid #333;
+    padding-bottom: 4px;
+    margin-bottom: 14px;
+    display: inline-block;
+  }
+  .subtitle { font-weight: 600; margin-bottom: 8px; }
+  .amount-box {
+    margin-top: 14px;
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 6px;
+    width: 320px;
+  }
+  .amount-box .label { font-size: 14px; font-weight: 700; }
+  .amount-box .value { font-size: 22px; font-weight: 700; margin-left: auto; }
+  .period { margin-top: 8px; font-size: 11px; color: #444; }
+  .issuer-name { font-size: 14px; font-weight: 700; }
+
+  table.items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 22px;
+    font-size: 11px;
+  }
+  table.items th, table.items td {
+    border: 1px solid #888;
+    padding: 7px 8px;
+    vertical-align: middle;
+  }
+  table.items th {
+    background: #efefef;
+    font-weight: 700;
+    text-align: center;
+  }
+  table.items td.center { text-align: center; }
+  table.items td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.items .empty td { height: 24px; }
+  table.items tfoot td {
+    border: 1px solid #888;
+  }
+  table.items tfoot td.lbl { text-align: center; background: #fafafa; font-weight: 600; }
+  table.items tfoot td.val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  table.items tfoot td.spacer { border: none; }
+  .bank {
+    margin-top: 28px;
+    font-size: 11px;
+  }
+  .bank .lbl { font-weight: 700; }
+</style>
+</head>
+<body>
+  <% setting = user.invoice_setting_for("wings") %>
+  <div class="top">
+    <%= period.last.strftime("%Y年%m月%d日") %><br>
+    <%= user.display_name %> / <%= @year %>年<%= @month %>月分
+  </div>
+
+  <h1 class="title">交通費精算書</h1>
+
+  <div class="head">
+    <div class="left">
+      <div class="client"><%= user.company_name %> 御中</div>
+      <div class="subtitle">(インボイス制度対応)</div>
+      <div>下記のとおり精算申し上げます。</div>
+      <div class="amount-box">
+        <span class="label">ご精算金額</span>
+        <span class="value">¥ <%= fmt_yen(total) %> -</span>
+      </div>
+      <div class="period">申請期間 : <%= period.first.strftime("%Y年%m月%d日") %> 〜 <%= period.last.strftime("%Y年%m月%d日") %></div>
+    </div>
+    <div class="right">
+      <% if hanko_src %>
+      <img class="hanko-img" src="<%= hanko_src %>" />
+      <% end %>
+      <div class="issuer-name"><%= user.display_name %></div>
+      <% if setting.registration_no.present? %>
+      <div>適格請求書発行事業者登録番号</div>
+      <div><%= setting.registration_no %></div>
+      <br>
+      <% end %>
+      <div>〒<%= setting.postal_code %></div>
+      <div><%= setting.address %></div>
+      <br>
+      <div>TEL: <%= setting.tel %></div>
+      <div><%= setting.email %></div>
+    </div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:5%">No.</th>
+        <th style="width:10%">日付</th>
+        <th style="width:14%">目的</th>
+        <th style="width:9%">交通機関</th>
+        <th style="width:11%">出発</th>
+        <th style="width:3%">〜</th>
+        <th style="width:11%">到着</th>
+        <th style="width:6%">往復</th>
+        <th style="width:7%">領収書<br>番号</th>
+        <th style="width:11%">金額(円)</th>
+        <th>支払先・路線</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% rows.each do |r| %>
+      <tr>
+        <td class="center"><%= r[:no] %></td>
+        <td class="center"><%= r[:date].strftime("%m/%d") %></td>
+        <td><%= r[:purpose] %></td>
+        <td class="center"><%= r[:transport] %></td>
+        <td class="center"><%= r[:from] %></td>
+        <td class="center">〜</td>
+        <td class="center"><%= r[:to] %></td>
+        <td class="center"><%= r[:round_trip] ? "✓" : "" %></td>
+        <td class="center"><%= r[:receipt] %></td>
+        <td class="num"><%= fmt_yen(r[:amount]) %></td>
+        <td><%= r[:line] %></td>
+      </tr>
+      <% end %>
+      <% [(10 - rows.size), 0].max.times do %>
+      <tr class="empty"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <% end %>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td class="spacer" colspan="8"></td>
+        <td class="lbl">合計</td>
+        <td class="val"><%= fmt_yen(total) %></td>
+        <td class="spacer"></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="bank">
+    <div class="lbl">お振込先：</div>
+    <div><%= setting.bank_info %></div>
+  </div>
+</body>
+</html>

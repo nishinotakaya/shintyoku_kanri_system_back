@@ -1,0 +1,2 @@
+class TeamSchedule < ApplicationRecord
+end
