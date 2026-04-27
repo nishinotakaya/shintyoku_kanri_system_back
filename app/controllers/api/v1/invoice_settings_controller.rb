@@ -18,7 +18,7 @@ module Api
       def preview
         year, month = parse_month
         cat = params[:category].presence
-        data = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat).calculation
+        data = InvoicePdfRenderer.new(viewing_user, year: year, month: month, category: cat).calculation
         render json: data
       end
 

@@ -17,7 +17,7 @@ module Api
 
       def create
         cat = params[:category].presence || "wings"
-        report = current_user.work_reports.find_or_initialize_by(work_date: params[:work_date], category: cat)
+        report = viewing_user.work_reports.find_or_initialize_by(work_date: params[:work_date], category: cat)
         report.assign_attributes(report_params)
         report.save!
         sync_expense_from_report(report)
@@ -205,19 +205,21 @@ module Api
       end
 
       def set_report
-        @report = current_user.work_reports.find(params[:id])
+        # admin は他ユーザーの work_report も編集可（viewing_user 経由）
+        @report = viewing_user.work_reports.find(params[:id])
       end
 
-      # 乗車区間・交通費 → 立替金に自動同期
+      # 乗車区間・交通費 → 立替金に自動同期（report の所属ユーザーで連動）
       def sync_expense_from_report(report)
         cat = report.category || "wings"
+        owner = report.user
 
         if report.transit_section.present? && report.transit_fee.to_i > 0
           parts = report.transit_section.split(/\s*[~～〜\-\s]+/)
           from = parts[0].to_s.strip
           to = parts[1].to_s.strip
 
-          expense = current_user.expenses.find_or_initialize_by(
+          expense = owner.expenses.find_or_initialize_by(
             expense_date: report.work_date, category: cat
           )
           expense.from_station = from
@@ -227,11 +229,11 @@ module Api
           expense.round_trip = true if expense.round_trip.nil?
           expense.receipt_no ||= "無"
           expense.amount = report.transit_fee
-          expense.payee_or_line ||= current_user.default_transit_line
+          expense.payee_or_line ||= owner.default_transit_line
           expense.save!
         else
           # 乗車区間が空になったら立替金も削除
-          current_user.expenses.where(expense_date: report.work_date, category: cat).destroy_all
+          owner.expenses.where(expense_date: report.work_date, category: cat).destroy_all
         end
       end
 
