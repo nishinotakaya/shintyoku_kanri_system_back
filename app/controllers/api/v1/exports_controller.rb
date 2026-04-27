@@ -73,14 +73,25 @@ module Api
       end
 
       # macOS 限定: osascript で「フォルダを選択」ダイアログを開いて POSIX パスを返す
+      # default_path を渡すとそのフォルダを初期表示
       def pick_local_dir
-        out, err, status = Open3.capture3(
-          "osascript", "-e",
-          'tell application "Finder" to set f to POSIX path of (choose folder with prompt "保存先フォルダを選択")'
-        )
+        default_path = params[:default_path].to_s
+        # default_path が存在しない場合は親をたどって存在する先頭まで戻す
+        while default_path.present? && !File.directory?(default_path)
+          parent = File.dirname(default_path)
+          break if parent == default_path
+          default_path = parent
+        end
+
+        applescript = if default_path.present? && File.directory?(default_path)
+          %(tell application "Finder" to set f to POSIX path of (choose folder with prompt "保存先フォルダを選択" default location (POSIX file "#{default_path}")))
+        else
+          %(tell application "Finder" to set f to POSIX path of (choose folder with prompt "保存先フォルダを選択"))
+        end
+
+        out, err, status = Open3.capture3("osascript", "-e", applescript)
         return render(json: { canceled: true }, status: :ok) unless status.success?
-        path = out.strip
-        render json: { path: path }
+        render json: { path: out.strip }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
