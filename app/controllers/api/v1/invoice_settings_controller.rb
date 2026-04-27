@@ -28,7 +28,7 @@ module Api
         params.require(:invoice_setting).permit(
           :client_name, :honorific, :subject, :item_label, :unit_price, :tax_rate, :payment_due_days,
           :issuer_name, :registration_no, :postal_code, :address, :tel, :email, :bank_info, :payment_due_type,
-          default_items: [:label, :qty, :unit, :price]
+          default_items: [ :label, :qty, :unit, :price ]
         )
       end
 

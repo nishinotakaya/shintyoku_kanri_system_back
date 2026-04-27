@@ -20,7 +20,7 @@ Rails.application.routes.draw do
       post   "team_schedules/export", to: "team_schedules#export"
       patch  "team_schedules/:id",    to: "team_schedules#update"
 
-      resources :work_reports, only: [:index, :create, :update, :destroy] do
+      resources :work_reports, only: [ :index, :create, :update, :destroy ] do
         collection do
           post :clock_in
           post :clock_out
@@ -31,7 +31,7 @@ Rails.application.routes.draw do
         end
       end
 
-      resources :expenses, only: [:index, :create, :update, :destroy]
+      resources :expenses, only: [ :index, :create, :update, :destroy ]
 
       get "exports/work_report.xlsx", to: "exports#work_report"
       get "exports/expense.xlsx",     to: "exports#expense"
@@ -54,7 +54,7 @@ Rails.application.routes.draw do
       patch "monthly_setting", to: "monthly_settings#update"
 
       # バックログ
-      resources :todos, only: [:index, :create, :update, :destroy]
+      resources :todos, only: [ :index, :create, :update, :destroy ]
 
       get   "backlog/setting",    to: "backlog#show_setting"
       patch "backlog/setting",    to: "backlog#update_setting"

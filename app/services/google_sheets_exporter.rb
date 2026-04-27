@@ -12,7 +12,7 @@ class GoogleSheetsExporter
     section_wip:  { red: 0.6, green: 0.8, blue: 1.0 },     # 青（処理中）
     section_todo: { red: 1.0, green: 0.88, blue: 0.55 },   # オレンジ（未対応）
     completed:    { red: 0.5, green: 0.85, blue: 0.5 },    # 濃い緑（完了）
-    white:        { red: 1.0, green: 1.0, blue: 1.0 },
+    white:        { red: 1.0, green: 1.0, blue: 1.0 }
   }.freeze
 
   def initialize(user:, spreadsheet_url:)
@@ -76,7 +76,7 @@ class GoogleSheetsExporter
   def ensure_sheet(existing, title)
     return if existing.include?(title)
     req = Google::Apis::SheetsV4::BatchUpdateSpreadsheetRequest.new(
-      requests: [{ add_sheet: { properties: { title: title } } }]
+      requests: [ { add_sheet: { properties: { title: title } } } ]
     )
     @service.batch_update_spreadsheet(@spreadsheet_id, req)
   end
@@ -85,8 +85,8 @@ class GoogleSheetsExporter
     rows = []
 
     # ヘッダ
-    rows << ["", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考"]
-    rows << ["", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", ""]
+    rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
+    rows << [ "", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", "" ]
     rows << []
 
     section_rows = [] # セクション行の位置を記録 [row_index, color_key]
@@ -95,32 +95,32 @@ class GoogleSheetsExporter
     recent = @user.backlog_tasks.where(status_id: 4)
       .where("completed_on >= ?", Date.current - 2).order(completed_on: :desc)
     if recent.any?
-      section_rows << [rows.size, :completed]
-      rows << ["", "【完了（2日以内）】"]
+      section_rows << [ rows.size, :completed ]
+      rows << [ "", "【完了（2日以内）】" ]
       recent.each { |t| rows << task_row(t) }
       rows << []
     end
 
     # 処理済セクション
     if done_tasks.any?
-      section_rows << [rows.size, :section_done]
-      rows << ["", "【処理済】"]
+      section_rows << [ rows.size, :section_done ]
+      rows << [ "", "【処理済】" ]
       done_tasks.each { |t| rows << task_row(t) }
       rows << []
     end
 
     # 処理中セクション
     if wip_tasks.any?
-      section_rows << [rows.size, :section_wip]
-      rows << ["", "【処理中】"]
+      section_rows << [ rows.size, :section_wip ]
+      rows << [ "", "【処理中】" ]
       wip_tasks.each { |t| rows << task_row(t) }
       rows << []
     end
 
     # 未対応セクション
     if todo_tasks.any?
-      section_rows << [rows.size, :section_todo]
-      rows << ["", "【未対応】"]
+      section_rows << [ rows.size, :section_todo ]
+      rows << [ "", "【未対応】" ]
       todo_tasks.each { |t| rows << task_row(t) }
       rows << []
     end
@@ -130,12 +130,12 @@ class GoogleSheetsExporter
 
   def write_completed_sheet(sheet_name, tasks)
     rows = []
-    rows << ["", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考"]
-    rows << ["", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", ""]
+    rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
+    rows << [ "", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", "" ]
     rows << []
 
-    section_rows = [[rows.size, :completed]]
-    rows << ["", "【完了】"]
+    section_rows = [ [ rows.size, :completed ] ]
+    rows << [ "", "【完了】" ]
     tasks.each { |t| rows << task_row(t) }
 
     write_and_format(sheet_name, rows, section_rows)
@@ -197,9 +197,9 @@ class GoogleSheetsExporter
       next_start = (i + 1 < section_rows.size) ? section_rows[i + 1][0] : rows.size
       if next_start > row_idx + 1
         light_color = {
-          red: [COLORS[color_key][:red] * 0.3 + 0.7, 1.0].min,
-          green: [COLORS[color_key][:green] * 0.3 + 0.7, 1.0].min,
-          blue: [COLORS[color_key][:blue] * 0.3 + 0.7, 1.0].min,
+          red: [ COLORS[color_key][:red] * 0.3 + 0.7, 1.0 ].min,
+          green: [ COLORS[color_key][:green] * 0.3 + 0.7, 1.0 ].min,
+          blue: [ COLORS[color_key][:blue] * 0.3 + 0.7, 1.0 ].min
         }
         requests << format_rows(sheet_id, row_idx + 1, next_start, light_color, false)
         # A列のidを非表示（文字色=背景色）

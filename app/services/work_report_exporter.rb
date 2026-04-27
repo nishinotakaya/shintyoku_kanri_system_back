@@ -53,7 +53,7 @@ class WorkReportExporter
     last_period_row = DATA_START_ROW + period.count - 1
     if last_period_row < sample_end
       (last_period_row + 1..sample_end).each do |row|
-        [COL_DATE, COL_CONTENT, COL_HOURS, COL_TRANSIT, COL_FEE].each do |col|
+        [ COL_DATE, COL_CONTENT, COL_HOURS, COL_TRANSIT, COL_FEE ].each do |col|
           cells << { row: row, col: col, value: nil }
         end
       end

@@ -1,7 +1,7 @@
 class User < ApplicationRecord
   devise :database_authenticatable, :registerable, :validatable,
          :omniauthable, :jwt_authenticatable,
-         omniauth_providers: [:google_oauth2],
+         omniauth_providers: [ :google_oauth2 ],
          jwt_revocation_strategy: JwtDenylist
 
   has_many :work_reports, dependent: :destroy
@@ -30,7 +30,7 @@ class User < ApplicationRecord
 
   def period_for(year, month)
     cd = closing_day || 25
-    to_day = [cd, Date.new(year, month, -1).day].min
+    to_day = [ cd, Date.new(year, month, -1).day ].min
     to = Date.new(year, month, to_day)
     from = to.prev_month + 1
     from..to

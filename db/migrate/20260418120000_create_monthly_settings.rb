@@ -7,6 +7,6 @@ class CreateMonthlySettings < ActiveRecord::Migration[8.0]
       t.date :application_date
       t.timestamps
     end
-    add_index :monthly_settings, [:user_id, :year, :month], unique: true
+    add_index :monthly_settings, [ :user_id, :year, :month ], unique: true
   end
 end

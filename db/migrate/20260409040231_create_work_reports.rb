@@ -13,6 +13,6 @@ class CreateWorkReports < ActiveRecord::Migration[8.0]
 
       t.timestamps
     end
-    add_index :work_reports, [:user_id, :work_date], unique: true
+    add_index :work_reports, [ :user_id, :work_date ], unique: true
   end
 end

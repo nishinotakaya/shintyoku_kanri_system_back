@@ -26,7 +26,7 @@ module Api
           :default_transit_from, :default_transit_to, :default_transit_fee, :default_transit_line,
           :postal_code, :address, :attendance_schedule_url, :local_save_dir,
           custom_off_days: [], commute_days: [],
-          transit_routes: [:from, :to, :fee, :line])
+          transit_routes: [ :from, :to, :fee, :line ])
       end
 
       def payload

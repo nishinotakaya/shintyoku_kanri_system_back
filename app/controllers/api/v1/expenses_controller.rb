@@ -1,7 +1,7 @@
 module Api
   module V1
     class ExpensesController < BaseController
-      before_action :set_expense, only: [:update, :destroy]
+      before_action :set_expense, only: [ :update, :destroy ]
 
       def index
         year, month = parse_month

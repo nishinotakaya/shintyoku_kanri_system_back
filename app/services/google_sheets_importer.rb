@@ -23,11 +23,11 @@ class GoogleSheetsImporter
     titles = sheets.map { |s| s[:title] }
     # 指定があればそのシートのみ。なければ「現在のタスク」「完了タスク」両方（存在する方）を対象
     targets = if @sheet_name
-                [@sheet_name]
-              else
-                defaults = ["現在のタスク", "完了タスク"] & titles
-                defaults.any? ? defaults : [titles.first].compact
-              end
+                [ @sheet_name ]
+    else
+                defaults = [ "現在のタスク", "完了タスク" ] & titles
+                defaults.any? ? defaults : [ titles.first ].compact
+    end
 
     imported = []
     targets.each do |target|
@@ -113,9 +113,9 @@ class GoogleSheetsImporter
       id_val = title_col == 1 ? row[0].to_s.strip : ""
       task = if id_val.match?(/\A\d+\z/)
                @user.backlog_tasks.find_by(id: id_val.to_i) || @user.backlog_tasks.find_or_initialize_by(issue_key: key)
-             else
+      else
                @user.backlog_tasks.find_or_initialize_by(issue_key: key)
-             end
+      end
       task.issue_key ||= key
       task.summary = title[0..80]
       task.created_on = start
@@ -159,9 +159,9 @@ class GoogleSheetsImporter
     a_texts = rows[0..9].count { |r| r[0].to_s.strip.present? }
 
     if b_texts > a_texts
-      [1, 5, 6, 7, 8, 9]  # B列タイトル
+      [ 1, 5, 6, 7, 8, 9 ]  # B列タイトル
     else
-      [0, 4, 5, 6, 7, 8]  # A列タイトル
+      [ 0, 4, 5, 6, 7, 8 ]  # A列タイトル
     end
   end
 

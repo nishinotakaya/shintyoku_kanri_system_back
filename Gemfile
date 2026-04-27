@@ -35,7 +35,7 @@ gem "rubyXL", "~> 3.4"
 gem "ruby-openai", "~> 7.4"
 
 # .env loader (development)
-gem "dotenv-rails", "~> 3.1", groups: [:development, :test]
+gem "dotenv-rails", "~> 3.1", groups: [ :development, :test ]
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
@@ -53,4 +53,4 @@ gem "omniauth-google-oauth2", "~> 1.2"
 
 gem "google-apis-sheets_v4", "~> 0.47.0"
 
-gem "dockerfile-rails", ">= 1.7", :group => :development
+gem "dockerfile-rails", ">= 1.7", group: :development

@@ -1,7 +1,7 @@
 module Api
   module V1
     class TodosController < BaseController
-      before_action :set_todo, only: [:update, :destroy]
+      before_action :set_todo, only: [ :update, :destroy ]
 
       def index
         active = current_user.todos.active

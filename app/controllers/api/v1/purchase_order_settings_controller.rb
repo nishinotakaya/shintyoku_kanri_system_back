@@ -42,7 +42,7 @@ module Api
           :closing_day, :hours_per_cycle, :rate_per_hour, :base_monthly, :unit,
           :price_mode, :range_min, :range_max,
           :delivery_location, :payment_method, :remarks,
-          items: [:description, :qty, :unit, :unit_price, :amount]
+          items: [ :description, :qty, :unit, :unit_price, :amount ]
         )
       end
 

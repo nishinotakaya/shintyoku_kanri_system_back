@@ -108,7 +108,7 @@ class ProgressImporter
       if i == count - 1
         h = remaining.round(1)
       else
-        h = [base, remaining - (count - i - 1) * 0.5].min # 残りに最低 0.5h ずつ確保
+        h = [ base, remaining - (count - i - 1) * 0.5 ].min # 残りに最低 0.5h ずつ確保
         h = (h * 2).round / 2.0
         remaining -= h
       end

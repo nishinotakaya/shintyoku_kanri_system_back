@@ -22,6 +22,6 @@ class CreatePurchaseOrderSettings < ActiveRecord::Migration[8.0]
 
       t.timestamps
     end
-    add_index :purchase_order_settings, [:user_id, :category], unique: true
+    add_index :purchase_order_settings, [ :user_id, :category ], unique: true
   end
 end

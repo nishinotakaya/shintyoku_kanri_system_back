@@ -10,7 +10,7 @@ class CreateTeamSchedules < ActiveRecord::Migration[8.0]
 
       t.timestamps
     end
-    add_index :team_schedules, [:date, :person], unique: true
+    add_index :team_schedules, [ :date, :person ], unique: true
     add_index :team_schedules, :year_month
   end
 end

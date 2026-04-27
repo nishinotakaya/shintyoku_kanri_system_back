@@ -1,7 +1,7 @@
 module Api
   module V1
     class WorkReportsController < BaseController
-      before_action :set_report, only: [:update, :destroy]
+      before_action :set_report, only: [ :update, :destroy ]
 
       def index
         year, month = parse_month
@@ -80,7 +80,7 @@ module Api
       def apply_transit
         year, month = parse_month
         period = current_user.period_for(year, month)
-        commute_days = (current_user.commute_days || [1, 2, 3, 4, 5]).map(&:to_i).to_set
+        commute_days = (current_user.commute_days || [ 1, 2, 3, 4, 5 ]).map(&:to_i).to_set
         custom_off = (current_user.custom_off_days || []).map { |d| Date.parse(d) rescue nil }.compact.to_set
         from = current_user.default_transit_from
         to = current_user.default_transit_to
@@ -199,7 +199,7 @@ module Api
       end
 
       def format_hours(h)
-        h == h.to_i ? h.to_i.to_s : ('%.1f' % h)
+        h == h.to_i ? h.to_i.to_s : ("%.1f" % h)
       end
 
       def set_report

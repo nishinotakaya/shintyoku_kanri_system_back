@@ -16,9 +16,9 @@ class BacklogSyncService
       if overwrite_mode
         uid = client.find_user_id_by_name(name_filter)
         raise "Backlog で「#{name_filter}」のユーザーが見つかりません。設定中の API キーが「#{name_filter}」本人のものか、または admin 権限を持つ API キーかを確認してください。" unless uid
-        client.fetch_issues_for([uid], status_ids: [1, 2, 3, 4])
+        client.fetch_issues_for([ uid ], status_ids: [ 1, 2, 3, 4 ])
       else
-        client.fetch_issues(status_ids: [1, 2, 3, 4])
+        client.fetch_issues(status_ids: [ 1, 2, 3, 4 ])
       end
 
     synced = []

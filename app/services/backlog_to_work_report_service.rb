@@ -19,7 +19,7 @@ class BacklogToWorkReportService
     @category = category
     @daily_hours = daily_hours.to_f
     @custom_off = (@user.custom_off_days || []).map { |d| Date.parse(d) rescue nil }.compact.to_set
-    @commute_days = (@user.commute_days || [1, 2, 3, 4, 5]).map(&:to_i).to_set # デフォルト月〜金
+    @commute_days = (@user.commute_days || [ 1, 2, 3, 4, 5 ]).map(&:to_i).to_set # デフォルト月〜金
   end
 
   def call
@@ -113,7 +113,7 @@ class BacklogToWorkReportService
       if i == count - 1
         h = remaining.round(1)
       else
-        h = [base, remaining - (count - i - 1) * 0.5].min
+        h = [ base, remaining - (count - i - 1) * 0.5 ].min
         h = (h * 2).round / 2.0
         remaining -= h
       end

@@ -47,9 +47,9 @@ module Api
         payload = params.permit(
           :order_date, :order_no, :subject, :tax_rate, :category,
           :delivery_deadline, :delivery_location, :payment_method, :remarks,
-          recipient: [:name, :postal_code, :address],
-          issuer: [:company_name, :representative, :postal_code, :address],
-          items: [:description, :qty, :unit, :unit_price, :amount]
+          recipient: [ :name, :postal_code, :address ],
+          issuer: [ :company_name, :representative, :postal_code, :address ],
+          items: [ :description, :qty, :unit, :unit_price, :amount ]
         ).to_h.deep_symbolize_keys
         path = PurchaseOrderPdfRenderer.new(current_user, payload).call
         order_no = payload[:order_no].presence || "ORD"
@@ -83,10 +83,21 @@ module Api
           default_path = parent
         end
 
+        # Finder を前面化してからダイアログを出す（ブラウザ背面に隠れないように）
         applescript = if default_path.present? && File.directory?(default_path)
-          %(tell application "Finder" to set f to POSIX path of (choose folder with prompt "保存先フォルダを選択" default location (POSIX file "#{default_path}")))
+          <<~OSA
+            tell application "Finder"
+              activate
+              set f to POSIX path of (choose folder with prompt "保存先フォルダを選択" default location (POSIX file "#{default_path}"))
+            end tell
+          OSA
         else
-          %(tell application "Finder" to set f to POSIX path of (choose folder with prompt "保存先フォルダを選択"))
+          <<~OSA
+            tell application "Finder"
+              activate
+              set f to POSIX path of (choose folder with prompt "保存先フォルダを選択")
+            end tell
+          OSA
         end
 
         out, err, status = Open3.capture3("osascript", "-e", applescript)

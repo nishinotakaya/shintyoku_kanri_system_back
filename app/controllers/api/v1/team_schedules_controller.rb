@@ -70,7 +70,7 @@ module Api
       def parse_month_param
         month_str = params[:month].presence || Date.current.strftime("%Y-%m")
         year_str, month_part = month_str.split("-")
-        [year_str.to_i, month_part.to_i]
+        [ year_str.to_i, month_part.to_i ]
       end
     end
   end

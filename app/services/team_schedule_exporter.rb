@@ -32,10 +32,10 @@ class TeamScheduleExporter
 
     person_columns = PERSONS.to_h do |person_name|
       column_index = header.each_with_index.find { |value, _| value.to_s.include?(person_name) }&.last
-      [person_name, column_index ? column_index + 2 : nil]
+      [ person_name, column_index ? column_index + 2 : nil ]
     end
 
-    schedules = TeamSchedule.where(year_month: sheet_title).index_by { |record| [record.person, record.date] }
+    schedules = TeamSchedule.where(year_month: sheet_title).index_by { |record| [ record.person, record.date ] }
 
     update_value_ranges = []
     person_columns.each do |person_name, status_column|
@@ -52,14 +52,14 @@ class TeamScheduleExporter
           next
         end
 
-        record = schedules[[person_name, date_value]]
+        record = schedules[[ person_name, date_value ]]
         next unless record
 
         column_letter = column_letter_for(status_column)
         cell_a1 = "#{sheet_title}!#{column_letter}#{row_index + 1}"
         update_value_ranges << Google::Apis::SheetsV4::ValueRange.new(
           range: cell_a1,
-          values: [[record.status.to_s]]
+          values: [ [ record.status.to_s ] ]
         )
       end
     end

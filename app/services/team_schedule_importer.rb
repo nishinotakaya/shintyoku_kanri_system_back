@@ -38,7 +38,7 @@ class TeamScheduleImporter
     # 人名 → ステータス列のマッピング
     person_columns = PERSONS.to_h do |person_name|
       column_index = header.each_with_index.find { |value, _| value.to_s.include?(person_name) }&.last
-      [person_name, column_index ? column_index + 2 : nil]
+      [ person_name, column_index ? column_index + 2 : nil ]
     end
 
     imported = 0

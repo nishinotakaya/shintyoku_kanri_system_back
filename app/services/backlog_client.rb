@@ -8,8 +8,8 @@ class BacklogClient
     @base_url = setting.backlog_url.chomp("/")
     @api_key = setting.api_key
     @user_id = setting.user_backlog_id
-    @assignee_ids = JSON.parse(setting.assignee_ids || "[]") rescue [setting.user_backlog_id]
-    @assignee_ids = [@user_id] if @assignee_ids.empty?
+    @assignee_ids = JSON.parse(setting.assignee_ids || "[]") rescue [ setting.user_backlog_id ]
+    @assignee_ids = [ @user_id ] if @assignee_ids.empty?
     raise "Backlog API キーが未設定です" unless @api_key.present?
   end
 
@@ -50,7 +50,7 @@ class BacklogClient
   public
 
   # 任意の assignee_ids で fetch_issues を実行
-  def fetch_issues_for(assignee_ids, project_id: nil, status_ids: [1, 2, 3, 4])
+  def fetch_issues_for(assignee_ids, project_id: nil, status_ids: [ 1, 2, 3, 4 ])
     @assignee_ids = Array(assignee_ids)
     fetch_issues(project_id: project_id, status_ids: status_ids)
   end
@@ -61,7 +61,7 @@ class BacklogClient
   end
 
   # 自分にアサインされたイシューを取得（全ステータス）
-  def fetch_issues(project_id: nil, status_ids: [1, 2, 3, 4])
+  def fetch_issues(project_id: nil, status_ids: [ 1, 2, 3, 4 ])
     all_issues = []
     @assignee_ids.each do |aid|
       params = {

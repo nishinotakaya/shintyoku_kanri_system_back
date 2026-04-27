@@ -9,15 +9,15 @@ class WorkReportCommandParser
           properties: {
             from:    { type: "string", description: "ISO date YYYY-MM-DD" },
             to:      { type: "string", description: "ISO date YYYY-MM-DD" },
-            hours:   { type: ["number", "null"] },
-            content: { type: ["string", "null"], description: "作業内容。SAP-XXXX(時間) 形式は大文字" }
+            hours:   { type: [ "number", "null" ] },
+            content: { type: [ "string", "null" ], description: "作業内容。SAP-XXXX(時間) 形式は大文字" }
           },
-          required: ["from", "to", "hours", "content"],
+          required: [ "from", "to", "hours", "content" ],
           additionalProperties: false
         }
       }
     },
-    required: ["ops"],
+    required: [ "ops" ],
     additionalProperties: false
   }.freeze
 

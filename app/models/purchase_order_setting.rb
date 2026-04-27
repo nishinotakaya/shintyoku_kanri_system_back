@@ -3,5 +3,5 @@ class PurchaseOrderSetting < ApplicationRecord
 
   serialize :items, coder: JSON, type: Array
 
-  validates :category, presence: true, uniqueness: { scope: [:user_id, :position] }
+  validates :category, presence: true, uniqueness: { scope: [ :user_id, :position ] }
 end
