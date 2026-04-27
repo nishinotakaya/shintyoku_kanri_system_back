@@ -36,14 +36,32 @@ class User < ApplicationRecord
     from..to
   end
 
+  # 他ユーザーのデータをコピーして初期化したいメールアドレスのマップ
+  # 例: 新ユーザー(calmdownyourlife) を作る際に kawamura のデータを丸ごと引き継ぐ
+  CLONE_FROM_ON_CREATE = {
+    "calmdownyourlife@gmail.com" => "kawamura@gmail.com"
+  }.freeze
+
   # Google OAuth でユーザーを検索 or 作成
   def self.from_google_oauth(auth)
-    where(provider: auth.provider, uid: auth.uid).first_or_create! do |user|
-      user.email = auth.info.email
-      user.password = Devise.friendly_token[0, 20]
-      user.display_name = auth.info.name
-      user.avatar_url = auth.info.image
-      user.company_name = auth.info.email.split("@").last.split(".").first.capitalize
+    user = where(provider: auth.provider, uid: auth.uid).first
+    return user if user
+
+    user = create! do |new_user|
+      new_user.provider = auth.provider
+      new_user.uid = auth.uid
+      new_user.email = auth.info.email
+      new_user.password = Devise.friendly_token[0, 20]
+      new_user.display_name = auth.info.name
+      new_user.avatar_url = auth.info.image
+      new_user.company_name = auth.info.email.split("@").last.split(".").first.capitalize
     end
+
+    src_email = CLONE_FROM_ON_CREATE[user.email]
+    if src_email && (src = User.find_by(email: src_email))
+      UserCloner.copy_all(src: src, dst: user)
+    end
+
+    user
   end
 end
