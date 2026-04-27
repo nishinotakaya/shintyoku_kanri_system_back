@@ -5,11 +5,13 @@ module Api
 
       def index
         year, month = parse_month
-        period = current_user.period_for(year, month)
-        reports = current_user.work_reports.in_range(period)
+        target = viewing_user
+        period = target.period_for(year, month)
+        reports = target.work_reports.in_range(period)
         render json: {
           period: { from: period.first, to: period.last },
-          reports: reports.map { |r| serialize(r) }
+          reports: reports.map { |r| serialize(r) },
+          viewing: { id: target.id, display_name: target.display_name }
         }
       end
 

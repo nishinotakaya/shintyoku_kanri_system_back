@@ -5,10 +5,11 @@ module Api
 
       def index
         year, month = parse_month
-        period = current_user.period_for(year, month)
+        target = viewing_user
+        period = target.period_for(year, month)
         render json: {
           period: { from: period.first, to: period.last },
-          expenses: current_user.expenses.in_range(period).map { |e| serialize(e) }
+          expenses: target.expenses.in_range(period).map { |e| serialize(e) }
         }
       end
 

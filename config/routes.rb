@@ -13,6 +13,7 @@ Rails.application.routes.draw do
       get   "me", to: "me#show"
       patch "me", to: "me#update"
       post  "me/import_schedule", to: "me#import_schedule"
+      get   "users/pickable", to: "me#pickable_users"
 
       get    "team_schedules",        to: "team_schedules#index"
       post   "team_schedules",        to: "team_schedules#create"

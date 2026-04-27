@@ -5,6 +5,12 @@ module Api
         render json: payload
       end
 
+      # 管理者のみ: カレンダーで「他ユーザーとして閲覧」する選択肢を返す
+      def pickable_users
+        return render(json: []) unless current_user.admin?
+        render json: User.order(:id).map { |u| { id: u.id, display_name: u.display_name, email: u.email, admin: u.admin? } }
+      end
+
       def update
         current_user.update!(me_params)
         render json: payload
@@ -48,7 +54,8 @@ module Api
           postal_code: current_user.postal_code,
           address: current_user.address,
           attendance_schedule_url: current_user.attendance_schedule_url,
-          local_save_dir: current_user.local_save_dir
+          local_save_dir: current_user.local_save_dir,
+          admin: current_user.admin?
         }
       end
     end

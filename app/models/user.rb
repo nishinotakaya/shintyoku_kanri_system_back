@@ -17,6 +17,11 @@ class User < ApplicationRecord
     monthly_settings.find_by(year: year, month: month)&.application_date || Date.current
   end
 
+  # 管理者判定（暫定: 表示名に「西野」を含む）
+  def admin?
+    display_name.to_s.include?("西野")
+  end
+
   def invoice_setting_for(category = "wings")
     invoice_settings.find_by(category: category) ||
       invoice_settings.build(InvoiceSetting.defaults_for(category).merge(category: category))

@@ -158,7 +158,7 @@ module Api
       def tasks_on_date
         target_date = Date.iso8601(params[:date].to_s)
         recent_completed_threshold = target_date - 3
-        scope = current_user.backlog_tasks
+        scope = viewing_user.backlog_tasks
           .where(
             "(status_id <> 4 AND ((start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) OR " \
             "(created_on IS NULL OR created_on <= ?) AND (completed_on IS NULL OR completed_on >= ?))) " \
