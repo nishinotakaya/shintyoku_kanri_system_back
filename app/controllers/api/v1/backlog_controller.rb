@@ -169,7 +169,9 @@ module Api
         if params[:assignee].present?
           scope = scope.where("assignee_name LIKE ?", "%#{params[:assignee]}%")
         end
-        render json: scope.order(:status_id, Arel.sql("COALESCE(position, 9999)"), :issue_key).map { |t| serialize_task(t) }
+        # 表示順: 処理済(3) → 処理中(2) → 未対応(1) → 完了(4) → その他
+        status_order = Arel.sql("CASE status_id WHEN 3 THEN 1 WHEN 2 THEN 2 WHEN 1 THEN 3 WHEN 4 THEN 4 ELSE 5 END")
+        render json: scope.order(status_order, Arel.sql("COALESCE(position, 9999)"), :issue_key).map { |t| serialize_task(t) }
       rescue ArgumentError
         render json: { error: "date パラメータが不正です" }, status: :bad_request
       end
