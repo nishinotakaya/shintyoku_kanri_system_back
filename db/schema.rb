@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_04_26_105701) do
+ActiveRecord::Schema[8.0].define(version: 2026_04_26_140126) do
   create_table "backlog_settings", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "backlog_url"
@@ -90,6 +90,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_26_105701) do
     t.datetime "updated_at", null: false
     t.string "category"
     t.string "payment_due_type"
+    t.string "honorific"
     t.index ["user_id"], name: "index_invoice_settings_on_user_id"
   end
 

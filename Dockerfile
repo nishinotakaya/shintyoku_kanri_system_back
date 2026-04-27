@@ -14,9 +14,17 @@ FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
 # Rails app lives here
 WORKDIR /rails
 
-# Install base packages
+# Install base packages（Node + Python + Chromium ランタイム依存 + 日本語フォント）
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y curl libjemalloc2 sqlite3 && \
+    apt-get install --no-install-recommends -y \
+      curl libjemalloc2 sqlite3 \
+      python3 python3-openpyxl \
+      ca-certificates gnupg \
+      libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 \
+      libxkbcommon0 libpango-1.0-0 libcairo2 libasound2 libxcomposite1 \
+      libxdamage1 libxfixes3 libxrandr2 fonts-noto-cjk && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install --no-install-recommends -y nodejs && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
 # Set production environment
@@ -39,6 +47,12 @@ RUN bundle install && \
     rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
     bundle exec bootsnap precompile --gemfile
 
+# Install Node deps + Playwright Chromium (HTML→PDF 用)
+COPY package.json package-lock.json ./
+RUN npm ci && \
+    npx playwright install chromium && \
+    rm -rf ~/.npm
+
 # Copy application code
 COPY . .
 
@@ -51,19 +65,16 @@ RUN bundle exec bootsnap precompile app/ lib/
 # Final stage for app image
 FROM base
 
-# Copy built artifacts: gems, application
 COPY --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
 COPY --from=build /rails /rails
+COPY --from=build /root/.cache/ms-playwright /root/.cache/ms-playwright
 
-# Run and own only the runtime files as a non-root user for security
-RUN groupadd --system --gid 1000 rails && \
-    useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash && \
-    chown -R rails:rails db log storage tmp
-USER 1000:1000
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
 
 # Entrypoint prepares the database.
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
 # Start server via Thruster by default, this can be overwritten at runtime
 EXPOSE 80
+ENV PORT=80
 CMD ["./bin/thrust", "./bin/rails", "server"]

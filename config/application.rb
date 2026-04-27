@@ -44,5 +44,13 @@ module RailsBackend
     # OmniAuth にセッションが必要なので最小限追加
     config.middleware.use ActionDispatch::Cookies
     config.middleware.use ActionDispatch::Session::CookieStore, key: "_attendance_session"
+
+    # API only モードで action_mailer/railtie を読み込んでいないため、
+    # Devise gem の app/mailers/devise/mailer.rb を eager_load から除外する
+    # （メール送信機能を使わないため、実際の利用は発生しない）
+    initializer "exclude_devise_mailer_from_eager_load", after: :let_zeitwerk_take_over do
+      devise_spec = Gem.loaded_specs["devise"]
+      Rails.autoloaders.main.ignore("#{devise_spec.full_gem_path}/app/mailers") if devise_spec
+    end
   end
 end

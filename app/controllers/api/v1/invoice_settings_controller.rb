@@ -26,7 +26,7 @@ module Api
 
       def setting_params
         params.require(:invoice_setting).permit(
-          :client_name, :subject, :item_label, :unit_price, :tax_rate, :payment_due_days,
+          :client_name, :honorific, :subject, :item_label, :unit_price, :tax_rate, :payment_due_days,
           :issuer_name, :registration_no, :postal_code, :address, :tel, :email, :bank_info, :payment_due_type,
           default_items: [:label, :qty, :unit, :price]
         )
@@ -35,7 +35,7 @@ module Api
       def serialize(s)
         {
           category: s.category,
-          client_name: s.client_name, subject: s.subject, item_label: s.item_label,
+          client_name: s.client_name, honorific: s.honorific, subject: s.subject, item_label: s.item_label,
           unit_price: s.unit_price, tax_rate: s.tax_rate, payment_due_days: s.payment_due_days,
           issuer_name: s.issuer_name, registration_no: s.registration_no,
           postal_code: s.postal_code, address: s.address, tel: s.tel, email: s.email,

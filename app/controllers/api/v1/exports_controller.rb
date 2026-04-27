@@ -85,6 +85,29 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # 指定パス配下のサブディレクトリ一覧（ローカル運用前提・OS のフォルダ階層を返す）
+      def list_local_dirs
+        raw = params[:path].to_s
+        # template placeholders を展開（{year} {month} {cat} {name}）
+        cat_folder = LocalFileSaver::CATEGORY_FOLDER[params[:category].to_s] || "TAMA"
+        path = LocalFileSaver.expand_template(
+          raw,
+          year: params[:year].presence&.to_i || Date.current.year,
+          month: params[:month].presence&.to_i || Date.current.month,
+          cat: cat_folder,
+          user: current_user
+        )
+        path = File.expand_path(path)
+        return render(json: { path: path, exists: false, entries: [] }) unless File.directory?(path)
+        entries = Dir.children(path)
+                     .reject { |child| child.start_with?(".") }
+                     .select { |child| File.directory?(File.join(path, child)) }
+                     .sort
+        render json: { path: path, exists: true, entries: entries }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
 
       def save_local?

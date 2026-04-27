@@ -164,7 +164,43 @@ module Api
         File.delete(tmp) if defined?(tmp) && tmp && File.exist?(tmp)
       end
 
+      # タスクを業務報告に追記（既存があれば追記、なければ作成）
+      # params: work_date, category, issue_key, hours, target_assignee（省略時は current_user）
+      def append_task
+        target = resolve_target_user(params[:target_assignee])
+        unless target == current_user || admin_user?(current_user)
+          return render(json: { error: "他ユーザーへの追加権限がありません" }, status: :forbidden)
+        end
+        cat = params[:category].presence || "wings"
+        issue_key = params[:issue_key].to_s
+        hours = params[:hours].to_f
+        report = target.work_reports.find_or_initialize_by(work_date: params[:work_date], category: cat)
+        existing_content = report.content.to_s
+        entry_str = hours > 0 ? "#{issue_key}(#{format_hours(hours)})" : issue_key
+        report.content = existing_content.empty? ? entry_str : "#{existing_content}/#{entry_str}"
+        report.hours = (report.hours.to_f + hours)
+        report.save!
+        render json: serialize(report).merge(target_user: target.display_name)
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
+
+      def admin_user?(user)
+        user.display_name.to_s.include?("西野")
+      end
+
+      def resolve_target_user(target_assignee)
+        return current_user if target_assignee.blank?
+        surname = current_user.display_name.to_s.split(/[\s　]/).first.to_s
+        return current_user if target_assignee.to_s.include?(surname) || surname.include?(target_assignee.to_s)
+        User.where("display_name LIKE ?", "%#{target_assignee}%").first || current_user
+      end
+
+      def format_hours(h)
+        h == h.to_i ? h.to_i.to_s : ('%.1f' % h)
+      end
 
       def set_report
         @report = current_user.work_reports.find(params[:id])

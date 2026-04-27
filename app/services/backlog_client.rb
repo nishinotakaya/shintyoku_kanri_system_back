@@ -55,6 +55,11 @@ class BacklogClient
     fetch_issues(project_id: project_id, status_ids: status_ids)
   end
 
+  # 指定 issue のコメント一覧（古い順）
+  def fetch_comments(issue_key)
+    get("/api/v2/issues/#{issue_key}/comments", { "order" => "asc", "count" => 100 })
+  end
+
   # 自分にアサインされたイシューを取得（全ステータス）
   def fetch_issues(project_id: nil, status_ids: [1, 2, 3, 4])
     all_issues = []

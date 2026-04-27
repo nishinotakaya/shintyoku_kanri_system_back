@@ -25,6 +25,8 @@ gem "rack-cors"
 # Auth
 gem "devise", "~> 4.9"
 gem "devise-jwt", "~> 0.12"
+# Devise 4.9.4 が Zeitwerk 2.7 の strict require と非互換のため 2.6 系に固定
+gem "zeitwerk", "~> 2.6.0"
 
 # Excel 既存テンプレートを書式維持で編集
 gem "rubyXL", "~> 3.4"
@@ -50,3 +52,5 @@ gem "omniauth-google-oauth2", "~> 1.2"
 # omniauth-rails_csrf_protection は API モードでは不要（CSRF トークンがない）
 
 gem "google-apis-sheets_v4", "~> 0.47.0"
+
+gem "dockerfile-rails", ">= 1.7", :group => :development

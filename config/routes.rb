@@ -14,8 +14,11 @@ Rails.application.routes.draw do
       patch "me", to: "me#update"
       post  "me/import_schedule", to: "me#import_schedule"
 
-      get   "team_schedules",        to: "team_schedules#index"
-      post  "team_schedules/import", to: "team_schedules#import"
+      get    "team_schedules",        to: "team_schedules#index"
+      post   "team_schedules",        to: "team_schedules#create"
+      post   "team_schedules/import", to: "team_schedules#import"
+      post   "team_schedules/export", to: "team_schedules#export"
+      patch  "team_schedules/:id",    to: "team_schedules#update"
 
       resources :work_reports, only: [:index, :create, :update, :destroy] do
         collection do
@@ -24,6 +27,7 @@ Rails.application.routes.draw do
           post :voice_command
           post :transcribe
           post :import_progress
+          post :append_task
         end
       end
 
@@ -35,6 +39,7 @@ Rails.application.routes.draw do
       get "exports/invoice.pdf",      to: "exports#invoice"
       post "exports/purchase_order.pdf", to: "exports#purchase_order"
       post "exports/pick_dir",            to: "exports#pick_local_dir"
+      get  "exports/list_dirs",           to: "exports#list_local_dirs"
 
       get   "invoice_setting", to: "invoice_settings#show"
       patch "invoice_setting", to: "invoice_settings#update"
@@ -56,6 +61,8 @@ Rails.application.routes.draw do
       post  "backlog/test",       to: "backlog#test_connection"
       post  "backlog/sync",       to: "backlog#sync"
       get   "backlog/tasks",      to: "backlog#tasks"
+      get   "backlog/tasks_on_date", to: "backlog#tasks_on_date"
+      get   "backlog/tasks/:issue_key/comments", to: "backlog#task_comments"
       post  "backlog/tasks",       to: "backlog#create_task"
       patch "backlog/tasks/:id",  to: "backlog#update_task"
       delete "backlog/tasks/:id", to: "backlog#destroy_task"

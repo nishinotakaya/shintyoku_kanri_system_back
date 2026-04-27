@@ -5,8 +5,12 @@
   neg ? "-#{s}" : s
 end
 require "base64"
-_hanko_path = "#{Rails.root}/public/hanko_nishino.png"
-hanko_src = File.exist?(_hanko_path) ? "data:image/png;base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil %>
+_issuer_surname = (setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || user.display_name.to_s.split(/[\s　]/).first.to_s
+_hanko_map = { "西野" => "hanko_nishino.png", "川村" => "hanko_kawamura.svg" }
+_hanko_file = _hanko_map[_issuer_surname]
+_hanko_path = _hanko_file ? "#{Rails.root}/public/#{_hanko_file}" : nil
+_mime = _hanko_file&.end_with?(".svg") ? "image/svg+xml" : "image/png"
+hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil %>
 <!doctype html>
 <html lang="ja">
 <head>
@@ -118,7 +122,7 @@ hanko_src = File.exist?(_hanko_path) ? "data:image/png;base64,#{Base64.strict_en
 
   <div class="head">
     <div class="left">
-      <div class="client"><%= setting.client_name %> 御中</div>
+      <div class="client"><%= setting.client_name %> <%= setting.honorific.presence || "御中" %></div>
       <% if setting.subject.to_s.strip.present? %>
       <div class="subject">件名 : <%= setting.subject %></div>
       <% end %>

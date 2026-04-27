@@ -133,6 +133,47 @@ module Api
         render json: tasks.map { |t| serialize_task(t) }
       end
 
+      # 指定日に活動中だったタスクを返す（完了以外で、計画/実績期間が当日を覆う）
+      # assignee 指定で担当者名で絞り込み
+      def task_comments
+        task = current_user.backlog_tasks.find_by!(issue_key: params[:issue_key])
+        s = current_user.backlog_setting
+        return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
+        comments = BacklogClient.new(s).fetch_comments(task.issue_key)
+        render json: comments.map { |c|
+          {
+            id: c["id"],
+            content: c["content"],
+            created_user_name: c.dig("createdUser", "name"),
+            created: c["created"],
+            updated: c["updated"]
+          }
+        }
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "タスクが見つかりません" }, status: :not_found
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      def tasks_on_date
+        target_date = Date.iso8601(params[:date].to_s)
+        recent_completed_threshold = target_date - 3
+        scope = current_user.backlog_tasks
+          .where(
+            "(status_id <> 4 AND ((start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) OR " \
+            "(created_on IS NULL OR created_on <= ?) AND (completed_on IS NULL OR completed_on >= ?))) " \
+            "OR (status_id = 4 AND completed_on IS NOT NULL AND completed_on >= ? AND completed_on <= ?)",
+            target_date, target_date, target_date, target_date,
+            recent_completed_threshold, target_date
+          )
+        if params[:assignee].present?
+          scope = scope.where("assignee_name LIKE ?", "%#{params[:assignee]}%")
+        end
+        render json: scope.order(:status_id, Arel.sql("COALESCE(position, 9999)"), :issue_key).map { |t| serialize_task(t) }
+      rescue ArgumentError
+        render json: { error: "date パラメータが不正です" }, status: :bad_request
+      end
+
       private
 
       def setting_params
