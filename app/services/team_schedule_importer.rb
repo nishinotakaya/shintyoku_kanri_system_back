@@ -119,10 +119,24 @@ class TeamScheduleImporter
         curr_range = "#{letter}#{curr_first_row}:#{letter}#{curr_last_row}"
         prev_range = prev_sheet ? "'#{prev_sheet}'!#{letter}#{prev_first_row}:#{letter}#{prev_last_row}" : nil
         ranges = [ curr_range, prev_range ].compact
-        tama_terms = ranges.map { |r| "(COUNTA(#{r}) - COUNTIF(#{r},\"*リビング*\") - COUNTIF(#{r},\"*休み*\") - COUNTIF(#{r},\"*定休*\"))" }
-        living_terms = ranges.map { |r| "COUNTIF(#{r},\"*リビング*\")" }
-        tama_formula = "=(" + tama_terms.join(" + ") + ") * 8"
-        living_formula = "=(" + living_terms.join(" + ") + ") * 8"
+
+        # 「午前タマ/午後リビング」= タマ3h + リビング5h
+        # その他リビング含 = リビング 8h
+        # 休み/定休 = 0、それ以外 = タマ 8h
+        # T合計 = (純粋タマ日 × 8) + (午前タマ午後リビング日 × 3)
+        # L合計 = (純粋リビング日 × 8) + (午前タマ午後リビング日 × 5)
+        split_pat = "*午前タマ*午後リビング*"
+        tama_terms = ranges.map do |r|
+          # 純粋タマ = 全 - リビング含 - 休み - 定休（午前タマ/午後リビング はリビング含に入るのでこれで除外済み）
+          "(COUNTA(#{r}) - COUNTIF(#{r},\"*リビング*\") - COUNTIF(#{r},\"*休み*\") - COUNTIF(#{r},\"*定休*\")) * 8 + COUNTIF(#{r},\"#{split_pat}\") * 3"
+        end
+        living_terms = ranges.map do |r|
+          # 純粋リビング日 = リビング含 - 午前タマ午後リビング → ×8、 split → ×5
+          "(COUNTIF(#{r},\"*リビング*\") - COUNTIF(#{r},\"#{split_pat}\")) * 8 + COUNTIF(#{r},\"#{split_pat}\") * 5"
+        end
+        tama_formula = "=" + tama_terms.join(" + ")
+        living_formula = "=" + living_terms.join(" + ")
+
         data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ tama_formula ] ])
         data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ living_formula ] ])
       else
