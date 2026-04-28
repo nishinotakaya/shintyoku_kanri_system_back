@@ -36,8 +36,14 @@ module Api
       def invoice
         year, month = parse_month
         cat = params[:category].presence
-        path = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat, application_date: parse_application_date).call
-        filename = with_name_prefix("請求書_#{year}年_#{month}月分.pdf")
+        target_user, override = resolve_invoice_target(year: year, month: month, category: cat)
+        path = InvoicePdfRenderer.new(
+          target_user,
+          year: year, month: month, category: cat,
+          application_date: parse_application_date,
+          client_name_override: override
+        ).call
+        filename = with_name_prefix("請求書_#{year}年_#{month}月分.pdf", user: target_user)
         return respond_save_local(:invoice, path, filename, cat, year, month) if save_local?
         send_file path, type: "application/pdf", filename: filename, disposition: "attachment"
       end
@@ -144,11 +150,27 @@ module Api
       end
 
       # display_name の苗字を先頭につける（"西野 鷹也" → "西野_..."）
-      def with_name_prefix(filename)
-        surname = current_user.display_name.to_s.split(/[\s　]/).first
+      def with_name_prefix(filename, user: current_user)
+        surname = user.display_name.to_s.split(/[\s　]/).first
         return filename if surname.blank?
         return filename if filename.start_with?("#{surname}_")
         "#{surname}_#{filename}"
+      end
+
+      # 承認済の InvoiceSubmission を指定して admin (西野) が DL する場合、
+      # 請求元ユーザー (例: 川村) の請求書を「株式会社ラボップ」宛で生成する。
+      # それ以外のケースは現行通り current_user の請求書。
+      def resolve_invoice_target(year:, month:, category:)
+        submission_id = params[:invoice_submission_id]
+        return [ current_user, nil ] if submission_id.blank?
+        return [ current_user, nil ] unless current_user.admin?
+
+        submission = InvoiceSubmission.find_by(id: submission_id)
+        return [ current_user, nil ] unless submission&.approved?
+        return [ current_user, nil ] unless submission.year == year && submission.month == month
+        return [ current_user, nil ] if category.present? && submission.category != category
+
+        [ submission.user, "株式会社ラボップ" ]
       end
 
       def parse_application_date

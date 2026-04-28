@@ -34,6 +34,8 @@ Rails.application.routes.draw do
 
       resources :expenses, only: [ :index, :create, :update, :destroy ]
 
+      resources :invoice_submissions, only: [ :index, :create, :update ]
+
       get "exports/work_report.xlsx", to: "exports#work_report"
       get "exports/expense.xlsx",     to: "exports#expense"
       get "exports/expense.pdf",      to: "exports#expense_pdf"

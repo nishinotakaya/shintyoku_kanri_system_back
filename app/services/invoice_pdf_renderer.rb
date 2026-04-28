@@ -8,12 +8,13 @@ class InvoicePdfRenderer
   TEMPLATE = Rails.root.join("app/views/invoices/invoice.html.erb")
   SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
 
-  def initialize(user, year:, month:, category: nil, application_date: nil)
+  def initialize(user, year:, month:, category: nil, application_date: nil, client_name_override: nil)
     @user = user
     @year = year
     @month = month
     @category = category
     @application_date = application_date
+    @client_name_override = client_name_override.presence
     @setting = user.invoice_setting_for(@category || "wings")
   end
 
@@ -75,6 +76,7 @@ class InvoicePdfRenderer
     data = calculation
     setting = @setting
     user = @user
+    client_name = @client_name_override || setting.client_name
 
     html_body = ERB.new(File.read(TEMPLATE)).result(binding)
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_04_26_140126) do
+ActiveRecord::Schema[8.0].define(version: 2026_04_28_022659) do
   create_table "backlog_settings", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "backlog_url"
@@ -92,6 +92,21 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_26_140126) do
     t.string "payment_due_type"
     t.string "honorific"
     t.index ["user_id"], name: "index_invoice_settings_on_user_id"
+  end
+
+  create_table "invoice_submissions", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "year"
+    t.integer "month"
+    t.string "category"
+    t.string "status"
+    t.datetime "submitted_at"
+    t.datetime "reviewed_at"
+    t.integer "reviewer_id"
+    t.text "note"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_invoice_submissions_on_user_id"
   end
 
   create_table "jwt_denylists", force: :cascade do |t|
@@ -225,6 +240,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_26_140126) do
   add_foreign_key "backlog_tasks", "users"
   add_foreign_key "expenses", "users"
   add_foreign_key "invoice_settings", "users"
+  add_foreign_key "invoice_submissions", "users"
   add_foreign_key "purchase_order_settings", "users"
   add_foreign_key "todos", "users"
   add_foreign_key "work_reports", "users"
