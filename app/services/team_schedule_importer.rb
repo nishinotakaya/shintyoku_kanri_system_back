@@ -15,13 +15,15 @@ class TeamScheduleImporter
     @user = user
     @year = year
     @month = month
+    # URL/トークンが無いユーザー (川村など) は admin (西野) の認証情報にフォールバック
+    @credentials_user = pick_credentials_user(user)
   end
 
   def call
-    raise "勤怠スケジュール URL が未登録です" if @user.attendance_schedule_url.blank?
-    raise "Google アクセストークンがありません。Google ログインしてください" if @user.google_access_token.blank?
+    raise "勤怠スケジュール URL が未登録です（管理者の Google 連携が必要）" if @credentials_user.attendance_schedule_url.blank?
+    raise "Google アクセストークンがありません" if @credentials_user.google_access_token.blank?
 
-    spreadsheet_id = extract_id(@user.attendance_schedule_url)
+    spreadsheet_id = extract_id(@credentials_user.attendance_schedule_url)
     sheet_title = format("%04d%02d", @year, @month)
 
     service = Google::Apis::SheetsV4::SheetsService.new
@@ -42,9 +44,6 @@ class TeamScheduleImporter
     end
 
     imported = 0
-    # 集計用: { person => { wings:, living: } }
-    totals = PERSONS.to_h { |person_name| [ person_name, { wings: 0.0, living: 0.0 } ] }
-
     person_columns.each do |person_name, status_column|
       next if status_column.nil?
 
@@ -62,53 +61,51 @@ class TeamScheduleImporter
           next
         end
 
-        normalized = normalize_status(status_value)
         record = TeamSchedule.find_or_initialize_by(date: date_value, person: person_name)
-        record.assign_attributes(status: normalized, year_month: sheet_title)
+        record.assign_attributes(status: normalize_status(status_value), year_month: sheet_title)
         record.save!
         imported += 1
-
-        eh = expected_hours(normalized)
-        totals[person_name][:wings]  += eh[:wings]
-        totals[person_name][:living] += eh[:living]
       end
     end
 
-    write_totals_back(service, spreadsheet_id, sheet_title, person_columns, totals)
+    write_totals_back(service, spreadsheet_id, sheet_title, person_columns)
 
     { sheet: sheet_title, imported: imported, persons: PERSONS }
   end
 
   private
 
-  # シートに合計を書き戻す（A34=T合計、A35=L合計、各人の status 列 row34/35 に値）
-  def write_totals_back(service, spreadsheet_id, sheet_title, person_columns, totals)
+  # 認証情報を持つユーザーを返す（無ければ admin (西野) にフォールバック）
+  def pick_credentials_user(user)
+    return user if user.attendance_schedule_url.present? && user.google_access_token.present?
+    User.where("display_name LIKE ?", "%西野%").find do |candidate|
+      candidate.attendance_schedule_url.present? && candidate.google_access_token.present?
+    end || user
+  end
+
+  # シートに合計関数を書き戻す。A34="T合計", A35="L合計" + 西野(M)/川村(G) の row34/35 に COUNTIF 式
+  def write_totals_back(service, spreadsheet_id, sheet_title, person_columns)
     data = [
       Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!A34", values: [ [ "T合計" ] ]),
       Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!A35", values: [ [ "L合計" ] ])
     ]
-    person_columns.each do |person_name, status_col|
+    %w[西野 川村].each do |person|
+      status_col = person_columns[person]
       next if status_col.nil?
       letter = column_letter(status_col)
-      t = totals[person_name]
-      data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ t[:wings] ] ])
-      data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ t[:living] ] ])
+      range = "#{letter}3:#{letter}33"
+      # タマ: 全エントリ - リビング含む - 休み・定休 を 8h 換算
+      tama_formula = %(=(COUNTA(#{range}) - COUNTIF(#{range},"*リビング*") - COUNTIF(#{range},"*休み*") - COUNTIF(#{range},"*定休*")) * 8)
+      # リビング: リビング含むセル × 8h
+      living_formula = %(=COUNTIF(#{range},"*リビング*") * 8)
+      data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ tama_formula ] ])
+      data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ living_formula ] ])
     end
     request = Google::Apis::SheetsV4::BatchUpdateValuesRequest.new(
       value_input_option: "USER_ENTERED",
       data: data
     )
     service.batch_update_values(spreadsheet_id, request)
-  end
-
-  # ステータス → wings/living 推計時間（CalendarView.expectedHours と同じロジック）
-  def expected_hours(status)
-    s = status.to_s
-    return { wings: 0.0, living: 0.0 } if s.blank? || s.include?("休み") || s.include?("定休")
-    return { wings: 3.5, living: 5.0 } if s.include?("午前") && s.include?("リビング")
-    return { wings: 3.5, living: 5.0 } if s.include?("リビング") && s =~ %r{[/／]}
-    return { wings: 0.0, living: 8.0 } if s.include?("リビング")
-    { wings: 8.0, living: 0.0 }
   end
 
   # 0-indexed 列番号 → A1 形式の列文字（0→A, 25→Z, 26→AA）
