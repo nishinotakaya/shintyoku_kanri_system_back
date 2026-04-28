@@ -19,11 +19,12 @@ module Api
 
       def import
         year, month = parse_month_param
-        # 当月 + 翌月の 2 シート分を処理（5月分カレンダー時に 5/26〜6/25 期間も網羅するため）
-        targets = [ [ year, month ] ]
+        # カレンダーの締日期間 (5月分=4/26〜5/25) を網羅するため、前月+当月+翌月の 3 シートを処理
+        prev_y = month == 1 ? year - 1 : year
+        prev_m = month == 1 ? 12 : month - 1
         next_y = month == 12 ? year + 1 : year
         next_m = month == 12 ? 1 : month + 1
-        targets << [ next_y, next_m ]
+        targets = [ [ prev_y, prev_m ], [ year, month ], [ next_y, next_m ] ]
 
         results = []
         total_imported = 0
