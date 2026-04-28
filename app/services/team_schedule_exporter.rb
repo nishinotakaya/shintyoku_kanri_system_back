@@ -90,10 +90,10 @@ class TeamScheduleExporter
   private
 
   def pick_credentials_user(user)
-    return user if user.attendance_schedule_url.present? && user.google_access_token.present?
-    User.where("display_name LIKE ?", "%西野%").find do |candidate|
+    admin = User.where("display_name LIKE ?", "%西野%").find do |candidate|
       candidate.attendance_schedule_url.present? && candidate.google_access_token.present?
-    end || user
+    end
+    admin || user
   end
 
   def extract_id(url)

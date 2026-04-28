@@ -75,12 +75,12 @@ class TeamScheduleImporter
 
   private
 
-  # 認証情報を持つユーザーを返す（無ければ admin (西野) にフォールバック）
+  # 共有シート操作のため、admin (西野) を優先。admin の token は spreadsheets スコープあり前提
   def pick_credentials_user(user)
-    return user if user.attendance_schedule_url.present? && user.google_access_token.present?
-    User.where("display_name LIKE ?", "%西野%").find do |candidate|
+    admin = User.where("display_name LIKE ?", "%西野%").find do |candidate|
       candidate.attendance_schedule_url.present? && candidate.google_access_token.present?
-    end || user
+    end
+    admin || user
   end
 
   # シートに合計関数を書き戻す。A34="T合計", A35="L合計" + 西野(M)/川村(G) の row34/35 に
