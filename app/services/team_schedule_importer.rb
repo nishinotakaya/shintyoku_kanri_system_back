@@ -42,6 +42,9 @@ class TeamScheduleImporter
     end
 
     imported = 0
+    # 集計用: { person => { wings:, living: } }
+    totals = PERSONS.to_h { |person_name| [ person_name, { wings: 0.0, living: 0.0 } ] }
+
     person_columns.each do |person_name, status_column|
       next if status_column.nil?
 
@@ -59,20 +62,66 @@ class TeamScheduleImporter
           next
         end
 
+        normalized = normalize_status(status_value)
         record = TeamSchedule.find_or_initialize_by(date: date_value, person: person_name)
-        record.assign_attributes(
-          status: normalize_status(status_value),
-          year_month: sheet_title
-        )
+        record.assign_attributes(status: normalized, year_month: sheet_title)
         record.save!
         imported += 1
+
+        eh = expected_hours(normalized)
+        totals[person_name][:wings]  += eh[:wings]
+        totals[person_name][:living] += eh[:living]
       end
     end
+
+    write_totals_back(service, spreadsheet_id, sheet_title, person_columns, totals)
 
     { sheet: sheet_title, imported: imported, persons: PERSONS }
   end
 
   private
+
+  # シートに合計を書き戻す（A34=T合計、A35=L合計、各人の status 列 row34/35 に値）
+  def write_totals_back(service, spreadsheet_id, sheet_title, person_columns, totals)
+    data = [
+      Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!A34", values: [ [ "T合計" ] ]),
+      Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!A35", values: [ [ "L合計" ] ])
+    ]
+    person_columns.each do |person_name, status_col|
+      next if status_col.nil?
+      letter = column_letter(status_col)
+      t = totals[person_name]
+      data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ t[:wings] ] ])
+      data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ t[:living] ] ])
+    end
+    request = Google::Apis::SheetsV4::BatchUpdateValuesRequest.new(
+      value_input_option: "USER_ENTERED",
+      data: data
+    )
+    service.batch_update_values(spreadsheet_id, request)
+  end
+
+  # ステータス → wings/living 推計時間（CalendarView.expectedHours と同じロジック）
+  def expected_hours(status)
+    s = status.to_s
+    return { wings: 0.0, living: 0.0 } if s.blank? || s.include?("休み") || s.include?("定休")
+    return { wings: 3.5, living: 5.0 } if s.include?("午前") && s.include?("リビング")
+    return { wings: 3.5, living: 5.0 } if s.include?("リビング") && s =~ %r{[/／]}
+    return { wings: 0.0, living: 8.0 } if s.include?("リビング")
+    { wings: 8.0, living: 0.0 }
+  end
+
+  # 0-indexed 列番号 → A1 形式の列文字（0→A, 25→Z, 26→AA）
+  def column_letter(zero_indexed_col)
+    n = zero_indexed_col + 1
+    letters = ""
+    while n > 0
+      n -= 1
+      letters = (("A".ord + n % 26).chr) + letters
+      n /= 26
+    end
+    letters
+  end
 
   # 改行・前後空白を除去するのみ（TL@ プレフィクスや括弧補足は保持）
   def normalize_status(value)
