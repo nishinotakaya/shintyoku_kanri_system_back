@@ -83,24 +83,51 @@ class TeamScheduleImporter
     end || user
   end
 
-  # シートに合計関数を書き戻す。A34="T合計", A35="L合計" + 西野(M)/川村(G) の row34/35 に COUNTIF 式
+  # シートに合計関数を書き戻す。A34="T合計", A35="L合計" + 西野(M)/川村(G) の row34/35 に
+  # 締日基準（カレンダーの period_for と同じ）で COUNTIF 式を書く。
+  # 例: closing_day=25, year=2026, month=5 → 期間 4/26〜5/25
+  #   - 4月シート (202604) の row28〜row32 (4/26〜4/30)
+  #   - 5月シート (202605) の row3〜row27 (5/1〜5/25)
   def write_totals_back(service, spreadsheet_id, sheet_title, person_columns)
+    period = @user.period_for(@year, @month)
+    from_d = period.first
+    to_d = period.last
+
+    curr_first_row = (from_d.year == @year && from_d.month == @month) ? from_d.day + 2 : 3
+    curr_last_row  = to_d.day + 2  # to は必ず当月内
+
+    prev_sheet = nil
+    prev_first_row = nil
+    prev_last_row = nil
+    if from_d.month != @month || from_d.year != @year
+      prev_sheet     = format("%04d%02d", from_d.year, from_d.month)
+      prev_first_row = from_d.day + 2
+      prev_last_row  = Date.new(from_d.year, from_d.month, -1).day + 2
+    end
+
     data = [
       Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!A34", values: [ [ "T合計" ] ]),
       Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!A35", values: [ [ "L合計" ] ])
     ]
+
     %w[西野 川村].each do |person|
       status_col = person_columns[person]
       next if status_col.nil?
       letter = column_letter(status_col)
-      range = "#{letter}3:#{letter}33"
-      # タマ: 全エントリ - リビング含む - 休み・定休 を 8h 換算
-      tama_formula = %(=(COUNTA(#{range}) - COUNTIF(#{range},"*リビング*") - COUNTIF(#{range},"*休み*") - COUNTIF(#{range},"*定休*")) * 8)
-      # リビング: リビング含むセル × 8h
-      living_formula = %(=COUNTIF(#{range},"*リビング*") * 8)
+      curr_range = "#{letter}#{curr_first_row}:#{letter}#{curr_last_row}"
+      prev_range = prev_sheet ? "'#{prev_sheet}'!#{letter}#{prev_first_row}:#{letter}#{prev_last_row}" : nil
+      ranges = [ curr_range, prev_range ].compact
+
+      tama_terms = ranges.map { |r| "(COUNTA(#{r}) - COUNTIF(#{r},\"*リビング*\") - COUNTIF(#{r},\"*休み*\") - COUNTIF(#{r},\"*定休*\"))" }
+      living_terms = ranges.map { |r| "COUNTIF(#{r},\"*リビング*\")" }
+
+      tama_formula = "=(" + tama_terms.join(" + ") + ") * 8"
+      living_formula = "=(" + living_terms.join(" + ") + ") * 8"
+
       data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ tama_formula ] ])
       data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ living_formula ] ])
     end
+
     request = Google::Apis::SheetsV4::BatchUpdateValuesRequest.new(
       value_input_option: "USER_ENTERED",
       data: data

@@ -19,8 +19,24 @@ module Api
 
       def import
         year, month = parse_month_param
-        result = TeamScheduleImporter.new(user: current_user, year: year, month: month).call
-        render json: result
+        # 当月 + 翌月の 2 シート分を処理（5月分カレンダー時に 5/26〜6/25 期間も網羅するため）
+        targets = [ [ year, month ] ]
+        next_y = month == 12 ? year + 1 : year
+        next_m = month == 12 ? 1 : month + 1
+        targets << [ next_y, next_m ]
+
+        results = []
+        total_imported = 0
+        targets.each do |y, m|
+          begin
+            r = TeamScheduleImporter.new(user: current_user, year: y, month: m).call
+            results << r
+            total_imported += r[:imported].to_i
+          rescue => e
+            results << { sheet: format("%04d%02d", y, m), error: e.message }
+          end
+        end
+        render json: { imported: total_imported, persons: TeamScheduleImporter::PERSONS, sheets: results }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end

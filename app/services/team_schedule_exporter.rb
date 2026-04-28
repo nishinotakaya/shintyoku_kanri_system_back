@@ -10,13 +10,23 @@ class TeamScheduleExporter
     @user = user
     @year = year
     @month = month
+    # URL/トークンが無いユーザー (川村など) は admin (西野) の認証情報にフォールバック
+    @credentials_user = pick_credentials_user(user)
+    # 大隅は書き戻し不可。admin (西野) は全員、それ以外は自分の苗字の行のみ
+    @restrict_to_persons = if user.admin?
+      nil
+    elsif user.display_name.to_s.include?("大隅")
+      raise "大隅ユーザーは書き戻しできません"
+    else
+      [ user.display_name.to_s.split(/[\s　]/).first ].compact_blank
+    end
   end
 
   def call
-    raise "勤怠スケジュール URL が未登録です" if @user.attendance_schedule_url.blank?
-    raise "Google アクセストークンがありません。Google ログインしてください" if @user.google_access_token.blank?
+    raise "勤怠スケジュール URL が未登録です" if @credentials_user.attendance_schedule_url.blank?
+    raise "Google アクセストークンがありません。Google ログインしてください" if @credentials_user.google_access_token.blank?
 
-    spreadsheet_id = extract_id(@user.attendance_schedule_url)
+    spreadsheet_id = extract_id(@credentials_user.attendance_schedule_url)
     sheet_title = format("%04d%02d", @year, @month)
 
     service = Google::Apis::SheetsV4::SheetsService.new
@@ -40,6 +50,8 @@ class TeamScheduleExporter
     update_value_ranges = []
     person_columns.each do |person_name, status_column|
       next if status_column.nil?
+      # 制限ユーザーは指定された人物の行のみ
+      next if @restrict_to_persons && !@restrict_to_persons.any? { |p| person_name.include?(p) || p.include?(person_name) }
 
       (2..rows.size - 1).each do |row_index|
         row = rows[row_index] || []
@@ -77,6 +89,13 @@ class TeamScheduleExporter
 
   private
 
+  def pick_credentials_user(user)
+    return user if user.attendance_schedule_url.present? && user.google_access_token.present?
+    User.where("display_name LIKE ?", "%西野%").find do |candidate|
+      candidate.attendance_schedule_url.present? && candidate.google_access_token.present?
+    end || user
+  end
+
   def extract_id(url)
     matched = url.match(%r{/spreadsheets/d/([a-zA-Z0-9_-]+)})
     raise "スプレッドシート URL が不正です" unless matched
@@ -95,17 +114,18 @@ class TeamScheduleExporter
   end
 
   def build_auth
+    cu = @credentials_user
     auth = Signet::OAuth2::Client.new(
       token_credential_uri: "https://oauth2.googleapis.com/token",
       client_id: ENV["GOOGLE_CLIENT_ID"],
       client_secret: ENV["GOOGLE_CLIENT_SECRET"],
-      access_token: @user.google_access_token,
-      refresh_token: @user.google_refresh_token
+      access_token: cu.google_access_token,
+      refresh_token: cu.google_refresh_token
     )
-    if @user.google_token_expires_at.nil? || @user.google_token_expires_at < Time.current
-      if @user.google_refresh_token.present?
+    if cu.google_token_expires_at.nil? || cu.google_token_expires_at < Time.current
+      if cu.google_refresh_token.present?
         auth.fetch_access_token!
-        @user.update!(google_access_token: auth.access_token, google_token_expires_at: Time.current + 3600)
+        cu.update!(google_access_token: auth.access_token, google_token_expires_at: Time.current + 3600)
       end
     end
     auth
