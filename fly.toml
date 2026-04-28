@@ -9,6 +9,11 @@ console_command = '/rails/bin/rails console'
 
 [build]
 
+# 本番デプロイ前に DB migration を自動適用（[processes] 起動経路で
+# docker-entrypoint の db:prepare がバイパスされる対策）
+[deploy]
+  release_command = "/rails/bin/rails db:migrate"
+
 [env]
   DATABASE_URL = 'sqlite3:///data/production.sqlite3'
   PORT = '8080'

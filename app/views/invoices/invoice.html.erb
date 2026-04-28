@@ -126,8 +126,9 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
   <div class="head">
     <div class="left">
       <div class="client"><%= (defined?(client_name) && client_name.presence) || setting.client_name %> <%= setting.honorific.presence || "御中" %></div>
-      <% if setting.subject.to_s.strip.present? %>
-      <div class="subject">件名 : <%= setting.subject %></div>
+      <% _subject = (defined?(subject_text) && subject_text.presence) || setting.subject.to_s %>
+      <% if _subject.to_s.strip.present? %>
+      <div class="subject">件名 : <%= _subject %></div>
       <% end %>
       <div>下記のとおりご請求申し上げます。</div>
       <div class="amount-box">
@@ -197,7 +198,7 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
 
   <div class="bank">
     <div class="lbl">お振込先：</div>
-    <div><%= setting.bank_info %></div>
+    <div><%= _issuer_setting.bank_info %></div>
   </div>
 </body>
 </html>

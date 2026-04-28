@@ -9,7 +9,8 @@ class InvoicePdfRenderer
   SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
 
   def initialize(user, year:, month:, category: nil, application_date: nil,
-                 client_name_override: nil, issuer_user_override: nil, total_override: nil)
+                 client_name_override: nil, issuer_user_override: nil,
+                 total_override: nil, item_label_override: nil, subject_override: nil)
     @user = user
     @year = year
     @month = month
@@ -18,6 +19,8 @@ class InvoicePdfRenderer
     @client_name_override = client_name_override.presence
     @issuer_user = issuer_user_override || user
     @total_override = total_override.to_i if total_override.present?
+    @item_label_override = item_label_override.to_s.presence
+    @subject_override = subject_override.to_s.presence
     @setting = user.invoice_setting_for(@category || "wings")
     @issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
   end
@@ -61,8 +64,9 @@ class InvoicePdfRenderer
     # 消費税は 10% 内税で逆算（subtotal = round(total/1.1), tax = total - subtotal）。
     if labop_mode?
       surname = @user.display_name.to_s.split(/[\s　]/).first.to_s
-      label = "#{surname} 開発業務".strip
-      label = "開発業務" if label == "開発業務"
+      default_label = "#{surname} 開発業務".strip
+      default_label = "開発業務" if default_label == "開発業務"
+      label = @item_label_override || default_label
       total = @total_override || total                      # 税込合計
       subtotal = (total / 1.1).round                        # 税抜小計
       tax = total - subtotal                                # 内税
@@ -100,6 +104,7 @@ class InvoicePdfRenderer
     issuer_user = @issuer_user
     issuer_setting = @issuer_setting
     client_name = @client_name_override || setting.client_name
+    subject_text = @subject_override || setting.subject.to_s
 
     html_body = ERB.new(File.read(TEMPLATE)).result(binding)
 

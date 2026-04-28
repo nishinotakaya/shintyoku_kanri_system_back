@@ -32,18 +32,34 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
-      # 承認/却下は admin のみ
+      # admin のみ:
+      # - status を渡せば承認/却下、
+      # - total_override だけ渡せば「ラボップ宛 税込合計」の保存（status は据え置き）
       def update
         return render(json: { error: "承認権限がありません" }, status: :forbidden) unless current_user.admin?
         record = InvoiceSubmission.find(params[:id])
-        new_status = params[:status].to_s
-        return render(json: { error: "不正なステータス" }, status: :unprocessable_entity) unless InvoiceSubmission::STATUSES.include?(new_status)
-        record.update!(
-          status: new_status,
-          reviewer_id: current_user.id,
-          reviewed_at: Time.current,
-          note: params[:note].present? ? params[:note].to_s : record.note
-        )
+        attrs = {}
+
+        if params.key?(:status)
+          new_status = params[:status].to_s
+          return render(json: { error: "不正なステータス" }, status: :unprocessable_entity) unless InvoiceSubmission::STATUSES.include?(new_status)
+          attrs[:status] = new_status
+          attrs[:reviewer_id] = current_user.id
+          attrs[:reviewed_at] = Time.current
+        end
+        attrs[:note] = params[:note].to_s if params[:note].present?
+        if params.key?(:total_override)
+          raw = params[:total_override].to_s.gsub(",", "")
+          attrs[:total_override] = raw.present? ? raw.to_i : nil
+        end
+        if params.key?(:item_label_override)
+          attrs[:item_label_override] = params[:item_label_override].to_s.presence
+        end
+        if params.key?(:subject_override)
+          attrs[:subject_override] = params[:subject_override].to_s.presence
+        end
+
+        record.update!(attrs) if attrs.any?
         render json: serialize(record)
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -52,6 +68,7 @@ module Api
       private
 
       def serialize(record)
+        defaults = approved_defaults_for(record)
         {
           id: record.id,
           user_id: record.user_id,
@@ -65,8 +82,33 @@ module Api
           reviewed_at: record.reviewed_at&.iso8601,
           reviewer_id: record.reviewer_id,
           reviewer_display_name: record.reviewer&.display_name,
-          note: record.note
+          note: record.note,
+          total_override: record.total_override,
+          item_label_override: record.item_label_override,
+          subject_override: record.subject_override,
+          default_total: defaults[:total],
+          default_item_label: defaults[:item_label],
+          default_subject: defaults[:subject]
         }
+      end
+
+      # approved の時のみ、ラボップモーダル初期表示用に元の請求書計算値を返す
+      def approved_defaults_for(record)
+        return {} unless record.approved?
+        calc = InvoicePdfRenderer.new(
+          record.user,
+          year: record.year, month: record.month, category: record.category
+        ).calculation
+        surname = record.user.display_name.to_s.split(/[\s　]/).first.to_s
+        item_label = "#{surname} 開発業務".strip
+        item_label = "開発業務" if item_label == "開発業務"
+        {
+          total: calc[:total],
+          item_label: item_label,
+          subject: record.user.invoice_setting_for(record.category || "wings").subject.to_s
+        }
+      rescue
+        {}
       end
     end
   end
