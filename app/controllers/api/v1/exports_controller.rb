@@ -36,12 +36,17 @@ module Api
       def invoice
         year, month = parse_month
         cat = params[:category].presence
-        target_user, override = resolve_invoice_target(year: year, month: month, category: cat)
+        # admin が as_user_id で他ユーザとして閲覧している時は、その user 視点の請求書を素で出す
+        viewer = viewing_user
+        target_user, client_override, issuer_override = resolve_invoice_target(viewer: viewer, year: year, month: month, category: cat)
+        total_override = params[:total_override].to_s.gsub(",", "").presence
         path = InvoicePdfRenderer.new(
           target_user,
           year: year, month: month, category: cat,
           application_date: parse_application_date,
-          client_name_override: override
+          client_name_override: client_override,
+          issuer_user_override: issuer_override,
+          total_override: total_override
         ).call
         filename = with_name_prefix("請求書_#{year}年_#{month}月分.pdf", user: target_user)
         return respond_save_local(:invoice, path, filename, cat, year, month) if save_local?
@@ -158,19 +163,20 @@ module Api
       end
 
       # 承認済の InvoiceSubmission を指定して admin (西野) が DL する場合、
-      # 請求元ユーザー (例: 川村) の請求書を「株式会社ラボップ」宛で生成する。
-      # それ以外のケースは現行通り current_user の請求書。
-      def resolve_invoice_target(year:, month:, category:)
+      # 請求元ユーザー (例: 川村) の請求書を「株式会社ラボップ」宛 / 西野発行で生成する。
+      # それ以外のケースは viewer (= as_user_id 反映済み current_user 相当) の請求書を素で出す。
+      # 戻り値: [target_user, client_name_override, issuer_user_override]
+      def resolve_invoice_target(viewer:, year:, month:, category:)
         submission_id = params[:invoice_submission_id]
-        return [ current_user, nil ] if submission_id.blank?
-        return [ current_user, nil ] unless current_user.admin?
+        return [ viewer, nil, nil ] if submission_id.blank?
+        return [ viewer, nil, nil ] unless current_user.admin?
 
         submission = InvoiceSubmission.find_by(id: submission_id)
-        return [ current_user, nil ] unless submission&.approved?
-        return [ current_user, nil ] unless submission.year == year && submission.month == month
-        return [ current_user, nil ] if category.present? && submission.category != category
+        return [ viewer, nil, nil ] unless submission&.approved?
+        return [ viewer, nil, nil ] unless submission.year == year && submission.month == month
+        return [ viewer, nil, nil ] if category.present? && submission.category != category
 
-        [ submission.user, "株式会社ラボップ" ]
+        [ submission.user, "株式会社ラボップ", current_user ]
       end
 
       def parse_application_date

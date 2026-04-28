@@ -5,7 +5,10 @@
   neg ? "-#{s}" : s
 end
 require "base64"
-_issuer_surname = (setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || user.display_name.to_s.split(/[\s　]/).first.to_s
+# issuer_setting / issuer_user が渡された場合はそちらを使い、未指定なら従来通り setting / user を使う
+_issuer_setting = (defined?(issuer_setting) && issuer_setting) || setting
+_issuer_user    = (defined?(issuer_user) && issuer_user) || user
+_issuer_surname = (_issuer_setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || _issuer_user.display_name.to_s.split(/[\s　]/).first.to_s
 _hanko_map = { "西野" => "hanko_nishino.png", "川村" => "hanko_kawamura.svg" }
 _hanko_file = _hanko_map[_issuer_surname]
 _hanko_path = _hanko_file ? "#{Rails.root}/public/#{_hanko_file}" : nil
@@ -137,15 +140,15 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
       <% if hanko_src %>
       <img class="hanko-img" src="<%= hanko_src %>" />
       <% end %>
-      <div class="issuer-name"><%= setting.issuer_name %></div>
+      <div class="issuer-name"><%= _issuer_setting.issuer_name %></div>
       <div>適格請求書発行事業者登録番号</div>
-      <div><%= setting.registration_no %></div>
+      <div><%= _issuer_setting.registration_no %></div>
       <br>
-      <div>〒<%= setting.postal_code %></div>
-      <div><%= setting.address %></div>
+      <div>〒<%= _issuer_setting.postal_code %></div>
+      <div><%= _issuer_setting.address %></div>
       <br>
-      <div>TEL: <%= setting.tel %></div>
-      <div><%= setting.email %></div>
+      <div>TEL: <%= _issuer_setting.tel %></div>
+      <div><%= _issuer_setting.email %></div>
     </div>
   </div>
 

@@ -8,14 +8,18 @@ class InvoicePdfRenderer
   TEMPLATE = Rails.root.join("app/views/invoices/invoice.html.erb")
   SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
 
-  def initialize(user, year:, month:, category: nil, application_date: nil, client_name_override: nil)
+  def initialize(user, year:, month:, category: nil, application_date: nil,
+                 client_name_override: nil, issuer_user_override: nil, total_override: nil)
     @user = user
     @year = year
     @month = month
     @category = category
     @application_date = application_date
     @client_name_override = client_name_override.presence
+    @issuer_user = issuer_user_override || user
+    @total_override = total_override.to_i if total_override.present?
     @setting = user.invoice_setting_for(@category || "wings")
+    @issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
   end
 
   # データ計算結果をハッシュで返す（JSON プレビュー API でも使用）
@@ -52,6 +56,19 @@ class InvoicePdfRenderer
     tax = (subtotal * @setting.tax_rate / 100.0).round
     total = subtotal + tax
 
+    # ラボップ宛 (issuer override) モード:
+    # 明細を「{申請者の姓} 開発業務 1式」1行に置換し、ご請求金額は税込入力値、
+    # 消費税は 10% 内税で逆算（subtotal = round(total/1.1), tax = total - subtotal）。
+    if labop_mode?
+      surname = @user.display_name.to_s.split(/[\s　]/).first.to_s
+      label = "#{surname} 開発業務".strip
+      label = "開発業務" if label == "開発業務"
+      total = @total_override || total                      # 税込合計
+      subtotal = (total / 1.1).round                        # 税抜小計
+      tax = total - subtotal                                # 内税
+      items = [ { label: label, qty: 1, unit: "式", unit_price: subtotal, amount: subtotal } ]
+    end
+
     issue_date = period.last
     due_date = calc_due_date(issue_date)
     invoice_no = "#{issue_date.strftime('%Y%m%d')}#{format('%04d', @user.id)}"
@@ -62,7 +79,7 @@ class InvoicePdfRenderer
       hours: hours,
       items: items,
       subtotal: subtotal,
-      tax_rate: @setting.tax_rate,
+      tax_rate: labop_mode? ? 10 : @setting.tax_rate,
       tax: tax,
       total: total,
       issue_date: issue_date,
@@ -72,10 +89,16 @@ class InvoicePdfRenderer
     }
   end
 
+  def labop_mode?
+    @issuer_user && @issuer_user != @user
+  end
+
   def call
     data = calculation
     setting = @setting
     user = @user
+    issuer_user = @issuer_user
+    issuer_setting = @issuer_setting
     client_name = @client_name_override || setting.client_name
 
     html_body = ERB.new(File.read(TEMPLATE)).result(binding)
