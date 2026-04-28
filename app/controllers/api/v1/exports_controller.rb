@@ -86,7 +86,13 @@ module Api
       # macOS 限定: osascript で「フォルダを選択」ダイアログを開いて POSIX パスを返す
       # default_path を渡すとそのフォルダを初期表示
       def pick_local_dir
+        # 本番(Linux) ではダイアログ自体不要・osascript も無いので 404 で塞ぐ
+        return render(json: { error: "macOS only" }, status: :not_implemented) unless Rails.env.development?
+
+        # AppleScript injection 防止: ダブルクォート / バックスラッシュ / 制御文字を含む path は拒否
         default_path = params[:default_path].to_s
+        return render(json: { error: "invalid path" }, status: :unprocessable_entity) if default_path.match?(/["\\\x00-\x1f]/)
+
         # default_path が存在しない場合は親をたどって存在する先頭まで戻す
         while default_path.present? && !File.directory?(default_path)
           parent = File.dirname(default_path)

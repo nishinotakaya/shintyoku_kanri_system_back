@@ -1,0 +1,42 @@
+{
+  "ignored_warnings": [
+    {
+      "fingerprint": "668afbe5ab5e001dfd8b6241e2aa61596b7e4a908a53d6e50b71e77ab2a1b11b",
+      "note": "pick_local_dir: development 環境のみで動作（本番は 501 で塞ぐ）+ default_path の制御文字/quote/backslash は事前に reject 済み。AppleScript injection リスク無し"
+    },
+    {
+      "fingerprint": "4f5375c2a7264d2170411332be0aacd1f6c7e12113a1e6547fc57d30d4b0130c",
+      "note": "InvoicePdfRenderer: Open3.capture3 を配列引数で呼び shell 解釈なし。html_path/pdf_path は SecureRandom 生成の固定パターン。偽陽性"
+    },
+    {
+      "fingerprint": "c09a2c5be20e831c396b16dfd4017a6d8b5fb2d9432aec222f78fecf96a144f0",
+      "note": "ExpensePdfRenderer: 同上、配列引数 + SecureRandom。偽陽性"
+    },
+    {
+      "fingerprint": "3faa89a868eebac43f086a688b3ac478e9be003093cd7f2e169cc1611490140e",
+      "note": "PurchaseOrderPdfRenderer: 同上、配列引数 + SecureRandom。偽陽性"
+    },
+    {
+      "fingerprint": "3673433e13289bd0cba4ccd68ea0dd036667ecf283440f9ef1127648383b24d4",
+      "note": "exports#work_report の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
+    },
+    {
+      "fingerprint": "845acb8d8a0d210a4955f25697883a92b41709634f02ac2ea90b77fdcf14f168",
+      "note": "exports#expense の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
+    },
+    {
+      "fingerprint": "64cb8bab57e9894f7805bbae09b02cddc0f04307b1f10be6336d9f41744e751c",
+      "note": "exports#invoice の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
+    },
+    {
+      "fingerprint": "a95ea1e4e8a6fff096287dc6faf6544db9ff8d7d3135845283c7f1f2bed4f08b",
+      "note": "exports#purchase_order の send_file filename: order_no は permit + フォーム固定値 想定。偽陽性"
+    },
+    {
+      "fingerprint": "07340b7af8628534665d6e60268982e46e996d13b014200f8ce6424d2ad0f5e6",
+      "note": "exports#expense_pdf の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
+    }
+  ],
+  "updated": "2026-04-29 00:00:00 +0900",
+  "brakeman_version": "8.0.4"
+}
