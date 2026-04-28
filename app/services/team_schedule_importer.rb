@@ -110,22 +110,26 @@ class TeamScheduleImporter
       Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!A35", values: [ [ "L合計" ] ])
     ]
 
-    %w[西野 川村].each do |person|
-      status_col = person_columns[person]
+    # 西野・川村は formula、それ以外（大隅・土倉等）は空にする
+    target_persons = %w[西野 川村]
+    person_columns.each do |person, status_col|
       next if status_col.nil?
       letter = column_letter(status_col)
-      curr_range = "#{letter}#{curr_first_row}:#{letter}#{curr_last_row}"
-      prev_range = prev_sheet ? "'#{prev_sheet}'!#{letter}#{prev_first_row}:#{letter}#{prev_last_row}" : nil
-      ranges = [ curr_range, prev_range ].compact
-
-      tama_terms = ranges.map { |r| "(COUNTA(#{r}) - COUNTIF(#{r},\"*リビング*\") - COUNTIF(#{r},\"*休み*\") - COUNTIF(#{r},\"*定休*\"))" }
-      living_terms = ranges.map { |r| "COUNTIF(#{r},\"*リビング*\")" }
-
-      tama_formula = "=(" + tama_terms.join(" + ") + ") * 8"
-      living_formula = "=(" + living_terms.join(" + ") + ") * 8"
-
-      data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ tama_formula ] ])
-      data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ living_formula ] ])
+      if target_persons.include?(person)
+        curr_range = "#{letter}#{curr_first_row}:#{letter}#{curr_last_row}"
+        prev_range = prev_sheet ? "'#{prev_sheet}'!#{letter}#{prev_first_row}:#{letter}#{prev_last_row}" : nil
+        ranges = [ curr_range, prev_range ].compact
+        tama_terms = ranges.map { |r| "(COUNTA(#{r}) - COUNTIF(#{r},\"*リビング*\") - COUNTIF(#{r},\"*休み*\") - COUNTIF(#{r},\"*定休*\"))" }
+        living_terms = ranges.map { |r| "COUNTIF(#{r},\"*リビング*\")" }
+        tama_formula = "=(" + tama_terms.join(" + ") + ") * 8"
+        living_formula = "=(" + living_terms.join(" + ") + ") * 8"
+        data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ tama_formula ] ])
+        data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ living_formula ] ])
+      else
+        # 対象外は空文字で上書き（古い値が残らないように）
+        data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ "" ] ])
+        data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ "" ] ])
+      end
     end
 
     request = Google::Apis::SheetsV4::BatchUpdateValuesRequest.new(
