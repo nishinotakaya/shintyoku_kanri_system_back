@@ -18,17 +18,10 @@ module Api
       end
 
       def import
-        year, month = parse_month_param
-        # カレンダーの締日期間 (5月分=4/26〜5/25) を網羅するため、前月+当月+翌月の 3 シートを処理
-        prev_y = month == 1 ? year - 1 : year
-        prev_m = month == 1 ? 12 : month - 1
-        next_y = month == 12 ? year + 1 : year
-        next_m = month == 12 ? 1 : month + 1
-        targets = [ [ prev_y, prev_m ], [ year, month ], [ next_y, next_m ] ]
-
+        # 今日基準で前月・当月・翌月の 3 シートを処理
         results = []
         total_imported = 0
-        targets.each do |y, m|
+        target_year_months.each do |y, m|
           begin
             r = TeamScheduleImporter.new(user: current_user, year: y, month: m).call
             results << r
@@ -43,9 +36,18 @@ module Api
       end
 
       def export
-        year, month = parse_month_param
-        result = TeamScheduleExporter.new(user: current_user, year: year, month: month).call
-        render json: result
+        results = []
+        total_updated = 0
+        target_year_months.each do |y, m|
+          begin
+            r = TeamScheduleExporter.new(user: current_user, year: y, month: m).call
+            results << r
+            total_updated += r[:updated].to_i
+          rescue => e
+            results << { sheet: format("%04d%02d", y, m), error: e.message }
+          end
+        end
+        render json: { updated: total_updated, sheets: results }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -88,6 +90,18 @@ module Api
         month_str = params[:month].presence || Date.current.strftime("%Y-%m")
         year_str, month_part = month_str.split("-")
         [ year_str.to_i, month_part.to_i ]
+      end
+
+      # 今日基準で前月・当月・翌月の [年, 月] を返す
+      def target_year_months
+        today = Date.current
+        prev_d = today.prev_month
+        next_d = today.next_month
+        [
+          [ prev_d.year, prev_d.month ],
+          [ today.year,  today.month ],
+          [ next_d.year, next_d.month ]
+        ]
       end
     end
   end
