@@ -100,7 +100,8 @@ module Api
       def notify_admin_on_create(record)
         kind_label = record.kind == "expense" ? "立替金" : "請求書"
         cat_label = { "wings" => "Wings", "living" => "リビング", "techleaders" => "テックリーダーズ", "resystems" => "REシステムズ" }[record.category] || record.category
-        text = "📨 #{kind_label}の申請が届きました\n申請者: #{record.user&.display_name}\n対象: #{record.year}年#{record.month}月（#{cat_label}）"
+        approve_url = ENV.fetch("FRONTEND_APPROVE_URL", "https://react-frontend-beige.vercel.app/attendance")
+        text = "📨 #{kind_label}の申請が届きました\n申請者: #{record.user&.display_name}\n対象: #{record.year}年#{record.month}月（#{cat_label}）\n\n👉 承認はこちら:\n#{approve_url}"
         LineNotifier.push(text)
       rescue => e
         Rails.logger.warn("[InvoiceSubmissions] notify failed: #{e.class}: #{e.message}")

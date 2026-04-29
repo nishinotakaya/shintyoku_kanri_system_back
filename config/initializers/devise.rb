@@ -284,7 +284,7 @@ Devise.setup do |config|
   config.omniauth :google_oauth2,
     ENV["GOOGLE_CLIENT_ID"],
     ENV["GOOGLE_CLIENT_SECRET"],
-    scope: "email,profile,https://www.googleapis.com/auth/spreadsheets",
+    scope: "email,profile,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/gmail.send",
     access_type: "offline",
     prompt: "select_account",
     callback_url: ENV.fetch("GOOGLE_CALLBACK_URL", "http://localhost:3001/api/v1/auth/auth/google_oauth2/callback")

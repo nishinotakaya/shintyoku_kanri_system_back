@@ -36,6 +36,12 @@ Rails.application.routes.draw do
 
       resources :invoice_submissions, only: [ :index, :create, :update ]
 
+      # メール送付 (Gmail API 経由)
+      post "emails/labop_draft",          to: "emails#labop_draft"
+      post "emails/labop_send",           to: "emails#labop_send"
+      post "emails/purchase_order_draft", to: "emails#purchase_order_draft"
+      post "emails/purchase_order_send",  to: "emails#purchase_order_send"
+
       get "exports/work_report.xlsx", to: "exports#work_report"
       get "exports/expense.xlsx",     to: "exports#expense"
       get "exports/expense.pdf",      to: "exports#expense_pdf"
