@@ -110,8 +110,10 @@ module Api
         result = GoogleSheetsExporter.new(user: current_user, spreadsheet_url: url).call
         render json: { success: true, active: result[:active], completed: result[:completed] }
       rescue => e
-        Rails.logger.error("[backlog#export_sheet] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join("\n")}")
-        render json: { error: "#{e.class}: #{e.message}" }, status: :unprocessable_entity
+        body = e.respond_to?(:body) ? e.body.to_s : ""
+        app_trace = (e.backtrace || []).select { |l| l.include?("/app/") }.first(15)
+        Rails.logger.error("[backlog#export_sheet] #{e.class}: #{e.message}\nBODY: #{body}\nAPP TRACE:\n#{app_trace.join("\n")}")
+        render json: { error: "#{e.class}: #{e.message}\n#{body}" }, status: :unprocessable_entity
       end
 
       def sheet_tabs
