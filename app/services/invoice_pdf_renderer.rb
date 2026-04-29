@@ -10,7 +10,8 @@ class InvoicePdfRenderer
 
   def initialize(user, year:, month:, category: nil, application_date: nil,
                  client_name_override: nil, issuer_user_override: nil,
-                 total_override: nil, item_label_override: nil, subject_override: nil)
+                 total_override: nil, item_label_override: nil, subject_override: nil,
+                 items_override: nil)
     @user = user
     @year = year
     @month = month
@@ -21,6 +22,7 @@ class InvoicePdfRenderer
     @total_override = total_override.to_i if total_override.present?
     @item_label_override = item_label_override.to_s.presence
     @subject_override = subject_override.to_s.presence
+    @items_override = items_override if items_override.is_a?(Array) && items_override.any?
     @setting = user.invoice_setting_for(@category || "wings")
     @issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
   end
@@ -60,17 +62,33 @@ class InvoicePdfRenderer
     total = subtotal + tax
 
     # ラボップ宛 (issuer override) モード:
-    # 明細を「{申請者の姓} 開発業務 1式」1行に置換し、ご請求金額は税込入力値、
-    # 消費税は 10% 内税で逆算（subtotal = round(total/1.1), tax = total - subtotal）。
+    # items_override が指定されていればその明細をそのまま使い、合計は明細から自動算出。
+    # 指定が無ければ「{申請者の姓} 開発業務 1式」1行を生成して total_override で上書き。
+    # 消費税は 10% 内税扱い (subtotal = round(total/1.1), tax = total - subtotal)。
     if labop_mode?
-      surname = @user.display_name.to_s.split(/[\s　]/).first.to_s
-      default_label = "#{surname} 開発業務".strip
-      default_label = "開発業務" if default_label == "開発業務"
-      label = @item_label_override || default_label
-      total = @total_override || total                      # 税込合計
-      subtotal = (total / 1.1).round                        # 税抜小計
-      tax = total - subtotal                                # 内税
-      items = [ { label: label, qty: 1, unit: "式", unit_price: subtotal, amount: subtotal } ]
+      if @items_override
+        items = @items_override.map do |it|
+          h = it.respond_to?(:to_h) ? it.to_h : it
+          {
+            label: (h[:label] || h["label"]).to_s,
+            qty: (h[:qty] || h["qty"]).to_f,
+            unit: (h[:unit] || h["unit"]).to_s.presence || "式",
+            unit_price: (h[:unit_price] || h["unit_price"]).to_i,
+            amount: (h[:amount] || h["amount"]).to_i
+          }
+        end
+        total = @total_override || items.sum { |i| i[:amount] }
+      else
+        surname = @user.display_name.to_s.split(/[\s　]/).first.to_s
+        default_label = "#{surname} 開発業務".strip
+        default_label = "開発業務" if default_label == "開発業務"
+        label = @item_label_override || default_label
+        total = @total_override || total
+        subtotal_tmp = (total / 1.1).round
+        items = [ { label: label, qty: 1, unit: "式", unit_price: subtotal_tmp, amount: subtotal_tmp } ]
+      end
+      subtotal = (total / 1.1).round
+      tax = total - subtotal
     end
 
     issue_date = period.last

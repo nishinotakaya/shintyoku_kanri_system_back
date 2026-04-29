@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_04_29_014404) do
+ActiveRecord::Schema[8.0].define(version: 2026_04_29_015844) do
   create_table "backlog_settings", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "backlog_url"
@@ -111,6 +111,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_29_014404) do
     t.integer "total_override"
     t.string "item_label_override"
     t.string "subject_override"
+    t.string "kind", default: "invoice", null: false
+    t.text "items_override"
+    t.date "application_date_override"
+    t.index ["kind"], name: "index_invoice_submissions_on_kind"
     t.index ["user_id"], name: "index_invoice_submissions_on_user_id"
   end
 

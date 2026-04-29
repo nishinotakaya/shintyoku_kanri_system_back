@@ -39,15 +39,17 @@ module Api
         # admin が as_user_id で他ユーザとして閲覧している時は、その user 視点の請求書を素で出す
         viewer = viewing_user
         target_user, client_override, issuer_override, submission = resolve_invoice_target(viewer: viewer, year: year, month: month, category: cat)
+        application_date = submission&.application_date_override || parse_application_date
         path = InvoicePdfRenderer.new(
           target_user,
           year: year, month: month, category: cat,
-          application_date: parse_application_date,
+          application_date: application_date,
           client_name_override: client_override,
           issuer_user_override: issuer_override,
           total_override: submission&.total_override,
           item_label_override: submission&.item_label_override,
-          subject_override: submission&.subject_override
+          subject_override: submission&.subject_override,
+          items_override: submission&.items_override
         ).call
         filename = with_name_prefix("請求書_#{year}年_#{month}月分.pdf", user: target_user)
         return respond_save_local(:invoice, path, filename, cat, year, month) if save_local?
