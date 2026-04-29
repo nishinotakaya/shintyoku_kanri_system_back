@@ -52,7 +52,7 @@ class User < ApplicationRecord
   # 別 email でログインしても同じ User レコードに紐付けたいエイリアス。
   # 値(primary email) のユーザに合流する。例: 会社用と個人用で別 Google アカウント運用するケース。
   EMAIL_ALIASES = {
-    "taka-nishino@tamahome.jp" => "takaya314boxing@gmail.com",
+    "taka-nishino@tamahome.jp" => "takaya314boxing@gmail.com"
   }.freeze
 
   # Google OAuth でユーザーを検索 or 作成
