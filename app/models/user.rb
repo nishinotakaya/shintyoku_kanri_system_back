@@ -17,9 +17,10 @@ class User < ApplicationRecord
     monthly_settings.find_by(year: year, month: month)&.application_date || Date.current
   end
 
-  # 管理者判定（暫定: 表示名に「西野」を含む）
+  # 管理者判定: 表示名に「西野」を含む、または email が ADMIN_EMAILS に含まれる
+  ADMIN_EMAILS = %w[takaya314boxing@gmail.com].freeze
   def admin?
-    display_name.to_s.include?("西野")
+    display_name.to_s.include?("西野") || ADMIN_EMAILS.include?(email.to_s.downcase)
   end
 
   def invoice_setting_for(category = "wings")
