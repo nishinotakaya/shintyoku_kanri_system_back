@@ -9,12 +9,15 @@ module Api
         expense_ids = Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
         invoices = InvoiceSubmission.where(id: invoice_ids).where(kind: "invoice").approved.includes(:user)
         expenses = InvoiceSubmission.where(id: expense_ids).where(kind: "expense").approved.includes(:user)
-        total = invoices.sum { |i| i.total_override || invoice_calc_total(i) }
+        invoice_total = invoices.sum { |i| i.total_override || invoice_calc_total(i) }
+        expense_total = expenses.sum { |e| expense_calc_total(e) }
         ctx = {
           recipient_name: params[:recipient_name].presence || "大隅",
           year: invoices.first&.year || expenses.first&.year,
           month: invoices.first&.month || expenses.first&.month,
-          total: total,
+          total: invoice_total,
+          expense_total: expense_total,
+          grand_total: invoice_total + expense_total,
           applicant_name: (invoices + expenses).map { |s| s.user&.display_name }.compact.uniq.join("、"),
           sender_name: current_user.display_name,
           extra_attachments: params[:extra_count].to_i > 0,
@@ -26,6 +29,13 @@ module Api
 
       def invoice_calc_total(invoice)
         InvoicePdfRenderer.new(invoice.user, year: invoice.year, month: invoice.month, category: invoice.category).calculation[:total]
+      rescue
+        0
+      end
+
+      def expense_calc_total(submission)
+        period = submission.user.period_for(submission.year, submission.month)
+        submission.user.expenses.in_range(period).where(category: submission.category).sum(:amount).to_i
       rescue
         0
       end

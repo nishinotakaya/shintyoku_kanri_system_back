@@ -47,14 +47,20 @@ class EmailDrafter
     case @kind
     when :labop_invoice, :labop_expense
       kind_label = @kind == :labop_expense ? "立替金" : "請求書"
+      invoice_total = @context[:total].to_i
+      expense_total = @context[:expense_total].to_i
+      grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
       <<~PROMPT
         以下情報で、株式会社ラボップ (#{ @context[:recipient_name] || "ご担当者" }様) 宛に
         #{kind_label}と立替金資料を送付するメール下書きを作って。
         - 対象: #{@context[:year]}年#{@context[:month]}月分
         - 添付: ラボップ宛 請求書 PDF / 立替金 PDF / 立替金 Excel#{ @context[:extra_attachments] ? "（領収書ほか）" : "" }
-        - 合計: ¥#{@context[:total].to_i}
+        - 請求書合計（税込）: ¥#{invoice_total}
+        - 立替金合計: ¥#{expense_total}
+        - 総額: ¥#{grand_total}
         - 申請者: #{@context[:applicant_name]}
-        本文には添付ファイルがあること、ご確認お願いしたい旨、何かあれば連絡ください、を含めて。
+        本文には添付ファイルがあること、請求書合計と立替金合計を分けて記載しご確認お願いしたい旨、
+        何かあれば連絡ください、を含めて。金額は ¥X,XXX,XXX のようにカンマ区切りで。
       PROMPT
     when :purchase_order
       <<~PROMPT
@@ -109,6 +115,10 @@ class EmailDrafter
     when :labop_invoice, :labop_expense
       kind_label = @kind == :labop_expense ? "立替金" : "請求書"
       sender = @context[:sender_name].to_s
+      invoice_total = @context[:total].to_i
+      expense_total = @context[:expense_total].to_i
+      grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
+      fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
       {
         subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{kind_label}送付",
         body: <<~BODY
@@ -117,6 +127,10 @@ class EmailDrafter
 
           いつもお世話になっております。#{sender}でございます。
           #{@context[:year]}年#{@context[:month]}月分の#{kind_label}関連資料を送付いたします。
+
+          ・請求書合計（税込）: #{fmt.call(invoice_total)}
+          ・立替金合計        : #{fmt.call(expense_total)}
+          ・総額              : #{fmt.call(grand_total)}
 
           添付ファイル:
             ・ラボップ宛 請求書 PDF
