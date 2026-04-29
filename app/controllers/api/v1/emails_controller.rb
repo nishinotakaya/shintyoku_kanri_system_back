@@ -1,8 +1,10 @@
 module Api
   module V1
     class EmailsController < BaseController
+      # メール件名・本文・添付ファイル名 用のカテゴリラベル
+      # 「wings」→ 社内的には「Tama」と呼ぶ運用なのでメール表示は「Tama」
       CATEGORY_LABELS = {
-        "wings" => "Wings",
+        "wings" => "Tama",
         "living" => "リビング",
         "techleaders" => "テックリーダーズ",
         "resystems" => "REシステムズ"
