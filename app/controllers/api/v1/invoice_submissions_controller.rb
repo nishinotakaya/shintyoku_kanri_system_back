@@ -103,14 +103,81 @@ module Api
 
       private
 
+      KIND_LABELS = { "invoice" => "請求書", "expense" => "立替金", "work_report" => "業務報告書" }.freeze
+      CAT_LABELS = { "wings" => "Tama", "living" => "リビング", "techleaders" => "テックリーダーズ", "resystems" => "REシステムズ" }.freeze
+
       def notify_admin_on_create(record)
-        kind_label = record.kind == "expense" ? "立替金" : "請求書"
-        cat_label = { "wings" => "Wings", "living" => "リビング", "techleaders" => "テックリーダーズ", "resystems" => "REシステムズ" }[record.category] || record.category
+        kind_label = KIND_LABELS[record.kind] || record.kind
+        cat_label = CAT_LABELS[record.category] || record.category
         approve_url = ENV.fetch("FRONTEND_APPROVE_URL", "https://react-frontend-beige.vercel.app/attendance")
         text = "📨 #{kind_label}の申請が届きました\n申請者: #{record.user&.display_name}\n対象: #{record.year}年#{record.month}月（#{cat_label}）\n\n👉 承認はこちら:\n#{approve_url}"
         LineNotifier.push(text)
+
+        # 添付付きでも admin にメール送信 (admin 自身の OAuth トークンを使う)
+        notify_admin_by_email(record, kind_label, cat_label, approve_url)
       rescue => e
         Rails.logger.warn("[InvoiceSubmissions] notify failed: #{e.class}: #{e.message}")
+      end
+
+      def notify_admin_by_email(record, kind_label, cat_label, approve_url)
+        admin = User.where("email = ? OR display_name LIKE ?", "takaya314boxing@gmail.com", "%西野%").first
+        return unless admin&.google_access_token.present?
+
+        applicant = record.user
+        surname = applicant.display_name.to_s.split(/[\s　]/).first.to_s
+        attachments = []
+
+        # 請求書 PDF (オリジナル宛先・発行者)
+        invoice_pdf = InvoicePdfRenderer.new(applicant, year: record.year, month: record.month, category: record.category).call
+        attachments << { filename: "#{surname}_#{cat_label}_請求書_#{record.year}年_#{record.month}月分.pdf",
+                         content_type: "application/pdf", body: File.binread(invoice_pdf) }
+        invoice_total = InvoicePdfRenderer.new(applicant, year: record.year, month: record.month, category: record.category).calculation[:total]
+
+        # 立替金 PDF + Excel
+        exp_pdf = ExpensePdfRenderer.new(applicant, year: record.year, month: record.month, category: record.category).call
+        attachments << { filename: "#{surname}_#{cat_label}_立替金_#{record.year}年_#{record.month}月分.pdf",
+                         content_type: "application/pdf", body: File.binread(exp_pdf) }
+        exp_xlsx = ExpenseExporter.new(applicant, year: record.year, month: record.month, category: record.category).call
+        attachments << { filename: "#{surname}_#{cat_label}_立替金_#{record.year}年_#{record.month}月分.xlsx",
+                         content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
+        period = applicant.period_for(record.year, record.month)
+        expense_total = applicant.expenses.in_range(period).where(category: record.category).sum(:amount).to_i
+
+        # 業務報告 xlsx
+        wr = WorkReportExporter.new(applicant, year: record.year, month: record.month, category: record.category).call
+        attachments << { filename: "#{surname}_#{cat_label}_業務報告書_#{record.year}年_#{record.month}月分.xlsx",
+                         content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(wr) }
+
+        grand_total = invoice_total + expense_total
+        fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
+        body = <<~BODY
+          西野様
+
+          #{applicant.display_name} さんから #{kind_label} の申請が届きました。
+
+          対象: #{record.year}年#{record.month}月（#{cat_label}）
+          ・請求書合計（税込）: #{fmt.call(invoice_total)}
+          ・立替金合計        : #{fmt.call(expense_total)}
+          ・総額              : #{fmt.call(grand_total)}
+
+          添付ファイル:
+            ・請求書 PDF
+            ・立替金 PDF
+            ・立替金 Excel
+            ・業務報告書 Excel
+
+          👉 承認はこちら: #{approve_url}
+        BODY
+
+        GmailSender.new(user: admin).send_mail(
+          to: admin.email,
+          subject: "📨 [#{kind_label}申請] #{applicant.display_name} #{record.year}年#{record.month}月分 #{cat_label}",
+          body: body,
+          attachments: attachments,
+          from_name: "勤怠アプリ通知"
+        )
+      rescue => e
+        Rails.logger.warn("[InvoiceSubmissions] mail notify failed: #{e.class}: #{e.message}")
       end
 
       def serialize(record)
