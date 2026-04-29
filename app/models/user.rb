@@ -12,6 +12,7 @@ class User < ApplicationRecord
   has_many :todos, dependent: :destroy
   has_many :monthly_settings, dependent: :destroy
   has_many :purchase_order_settings, dependent: :destroy
+  has_many :purchase_order_histories, dependent: :destroy
 
   def application_date_for(year, month)
     monthly_settings.find_by(year: year, month: month)&.application_date || Date.current

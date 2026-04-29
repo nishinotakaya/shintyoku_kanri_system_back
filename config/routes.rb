@@ -61,6 +61,13 @@ Rails.application.routes.draw do
       patch "purchase_order_setting",      to: "purchase_order_settings#update"
       delete "purchase_order_setting",     to: "purchase_order_settings#destroy"
 
+      # 発注書 発行履歴
+      resources :purchase_order_histories, only: [ :index, :create, :destroy ] do
+        member do
+          get :regenerate, defaults: { format: :pdf }
+        end
+      end
+
       get   "monthly_setting", to: "monthly_settings#show"
       patch "monthly_setting", to: "monthly_settings#update"
 

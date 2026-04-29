@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_04_29_015844) do
+ActiveRecord::Schema[8.0].define(version: 2026_04_29_104529) do
   create_table "backlog_settings", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "backlog_url"
@@ -136,6 +136,23 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_29_015844) do
     t.index ["user_id", "year", "month"], name: "index_monthly_settings_on_user_id_and_year_and_month", unique: true
   end
 
+  create_table "purchase_order_histories", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "category"
+    t.integer "position"
+    t.string "order_no"
+    t.string "subject"
+    t.string "recipient_name"
+    t.date "period_start"
+    t.date "period_end"
+    t.integer "total_amount"
+    t.text "payload"
+    t.datetime "issued_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_purchase_order_histories_on_user_id"
+  end
+
   create_table "purchase_order_settings", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "category"
@@ -250,6 +267,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_29_015844) do
   add_foreign_key "expenses", "users"
   add_foreign_key "invoice_settings", "users"
   add_foreign_key "invoice_submissions", "users"
+  add_foreign_key "purchase_order_histories", "users"
   add_foreign_key "purchase_order_settings", "users"
   add_foreign_key "todos", "users"
   add_foreign_key "work_reports", "users"

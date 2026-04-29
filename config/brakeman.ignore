@@ -37,6 +37,10 @@
       "note": "exports#invoice の send_file filename (items_override + application_date_override 追加版): year/month は to_i 済み、category は fixed list 想定。偽陽性"
     },
     {
+      "fingerprint": "5a988c46082fee27cfbc065ed92756db11dc1e76dc40852e5418c3810357c147",
+      "note": "purchase_order_histories#regenerate の send_file filename: order_no は履歴 DB から取得 (params 由来ではない)。偽陽性"
+    },
+    {
       "fingerprint": "0646280de99068b4feb4a29cde9364d4c990c12b838c9c1bcb619fdef178c970",
       "note": "exports#expense の send_file filename (resolve_expense_target で issuer_user_override / client_name_override 追加版): year/month は to_i 済み、category は fixed list 想定。偽陽性"
     },
