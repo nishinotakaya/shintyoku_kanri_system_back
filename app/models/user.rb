@@ -19,7 +19,7 @@ class User < ApplicationRecord
   end
 
   # 管理者判定: 表示名に「西野」を含む、または email が ADMIN_EMAILS に含まれる
-  ADMIN_EMAILS = %w[takaya314boxing@gmail.com].freeze
+  ADMIN_EMAILS = %w[takaya314boxing@gmail.com taka-nishino@tamahome.jp].freeze
   def admin?
     display_name.to_s.include?("西野") || ADMIN_EMAILS.include?(email.to_s.downcase)
   end
