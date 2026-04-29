@@ -22,6 +22,9 @@ module Api
       def create
         kind = params[:kind].to_s.presence || "invoice"
         kind = "invoice" unless InvoiceSubmission::KINDS.include?(kind)
+        # admin (西野) が自分の申請を出した場合は即座に approved にする (自己承認)
+        # → 一括送付モーダルにそのまま含められる
+        auto_approve = current_user.admin?
         record = InvoiceSubmission.new(
           user: current_user,
           year: params[:year].to_i,
@@ -29,12 +32,15 @@ module Api
           category: params[:category].to_s.presence || "wings",
           kind: kind,
           note: params[:note].to_s.presence,
-          status: "pending"
+          status: auto_approve ? "approved" : "pending",
+          reviewer_id: auto_approve ? current_user.id : nil,
+          reviewed_at: auto_approve ? Time.current : nil
         )
         record.save!
 
         # 申請通知 (LINE Messaging API → 西野)。失敗してもレスポンスには影響させない。
-        notify_admin_on_create(record)
+        # 自己承認時 (admin) は通知不要なのでスキップ。
+        notify_admin_on_create(record) unless auto_approve
 
         render json: serialize(record)
       rescue => e
