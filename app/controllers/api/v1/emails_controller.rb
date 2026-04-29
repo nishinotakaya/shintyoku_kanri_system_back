@@ -105,6 +105,49 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/emails/self_invoice_draft
+      # ログイン中ユーザ自身の請求書を任意宛先に送付するメール下書き
+      def self_invoice_draft
+        year, month = parse_month
+        cat = params[:category].presence || "wings"
+        calc = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat).calculation
+        ctx = {
+          recipient_name: params[:recipient_name].presence || "ご担当者",
+          year: year, month: month,
+          total: calc[:total],
+          sender_name: current_user.display_name
+        }
+        render json: EmailDrafter.draft(kind: :self_invoice, context: ctx)
+      end
+
+      # POST /api/v1/emails/self_invoice_send
+      # ログイン中ユーザ自身の請求書 PDF を任意宛先に送付
+      def self_invoice_send
+        year, month = parse_month
+        cat = params[:category].presence || "wings"
+        return render(json: { error: "宛先が空です" }, status: :unprocessable_entity) if params[:to].to_s.strip.empty?
+
+        invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
+          application_date: parse_application_date).call
+        surname = current_user.display_name.to_s.split(/[\s　]/).first
+        attachments = [ { filename: "#{surname}_請求書_#{year}年_#{month}月分.pdf",
+                          content_type: "application/pdf", body: File.binread(invoice_pdf) } ]
+
+        Array(params[:extra_files]).each do |f|
+          next unless f.respond_to?(:read)
+          attachments << { filename: f.original_filename, content_type: f.content_type, body: f.read }
+        end
+
+        msg_id = GmailSender.new(user: current_user).send_mail(
+          to: params[:to], subject: params[:subject].to_s, body: params[:body].to_s,
+          attachments: attachments, from_name: current_user.display_name
+        )
+        render json: { ok: true, message_id: msg_id, sent_to: params[:to], attachments: attachments.map { |a| a[:filename] } }
+      rescue => e
+        Rails.logger.error("[self_invoice_send] #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       # POST /api/v1/emails/purchase_order_draft
       def purchase_order_draft
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?

@@ -70,6 +70,16 @@ class EmailDrafter
         - 添付: 発注書 PDF
         本文には添付ファイル確認のお願いと、何かあれば連絡ください、を含めて。
       PROMPT
+    when :self_invoice
+      <<~PROMPT
+        以下情報で、#{@context[:recipient_name] || "ご担当者"}様 宛に
+        請求書を送付するメール下書きを作って。
+        - 対象: #{@context[:year]}年#{@context[:month]}月分
+        - 添付: 請求書 PDF
+        - 請求金額（税込）: ¥#{@context[:total].to_i}
+        - 差出人: #{@context[:sender_name]}
+        本文には添付ファイル確認のお願い + 請求金額（カンマ区切り）+ ご不明点あればご連絡ください、を含めて。
+      PROMPT
     else
       "宛先 #{@context[:recipient_name]} に対する送付メール下書きを作って。本文は丁寧に。"
     end
@@ -155,6 +165,29 @@ class EmailDrafter
           表題の件、発注書 (#{@context[:order_no]}) を添付にて送付いたします。
 
           ご確認のほどよろしくお願いいたします。
+
+          敬具
+          #{sender}
+        BODY
+      }
+    when :self_invoice
+      sender = @context[:sender_name].to_s
+      total = @context[:total].to_i
+      fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
+      {
+        subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 請求書送付",
+        body: <<~BODY
+          #{ @context[:recipient_name] || "ご担当者" } 様
+
+          いつもお世話になっております。#{sender}でございます。
+          #{@context[:year]}年#{@context[:month]}月分の請求書を送付いたします。
+
+          ・請求金額（税込）: #{fmt.call(total)}
+
+          添付ファイル: 請求書 PDF
+
+          ご確認のほどよろしくお願いいたします。
+          ご不明点ございましたら、ご連絡ください。
 
           敬具
           #{sender}

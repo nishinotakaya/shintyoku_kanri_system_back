@@ -41,6 +41,8 @@ Rails.application.routes.draw do
       post "emails/labop_send",           to: "emails#labop_send"
       post "emails/purchase_order_draft", to: "emails#purchase_order_draft"
       post "emails/purchase_order_send",  to: "emails#purchase_order_send"
+      post "emails/self_invoice_draft",   to: "emails#self_invoice_draft"
+      post "emails/self_invoice_send",    to: "emails#self_invoice_send"
 
       get "exports/work_report.xlsx", to: "exports#work_report"
       get "exports/expense.xlsx",     to: "exports#expense"
