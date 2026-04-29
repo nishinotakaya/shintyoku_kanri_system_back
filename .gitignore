@@ -34,6 +34,5 @@
 .env.seed
 /db/seeds.rb
 /tmp/dump_seeds.rb
-/public/hanko_*.png
 /node_modules
 /vendor/bundle
