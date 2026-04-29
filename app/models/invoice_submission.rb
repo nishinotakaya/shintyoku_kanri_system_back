@@ -1,6 +1,6 @@
 class InvoiceSubmission < ApplicationRecord
   STATUSES = %w[pending approved rejected].freeze
-  KINDS = %w[invoice expense].freeze
+  KINDS = %w[invoice expense work_report].freeze
 
   belongs_to :user
   belongs_to :reviewer, class_name: "User", optional: true

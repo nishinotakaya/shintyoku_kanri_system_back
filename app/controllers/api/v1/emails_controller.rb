@@ -56,6 +56,10 @@ module Api
             application_date: invoice.application_date_override
           ).call
           attachments << { filename: invoice_filename(invoice), content_type: "application/pdf", body: File.binread(invoice_pdf) }
+
+          # 業務報告 Excel (申請者データそのまま) も別添付として同梱
+          wr_path = WorkReportExporter.new(invoice.user, year: invoice.year, month: invoice.month, category: invoice.category).call
+          attachments << { filename: work_report_filename(invoice), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(wr_path) }
         end
         expenses.each do |expense|
           exp_pdf = ExpensePdfRenderer.new(
@@ -143,6 +147,11 @@ module Api
       def expense_xlsx_filename(s)
         surname = s.user.display_name.to_s.split(/[\s　]/).first
         "#{surname}_立替金_#{s.year}年_#{s.month}月分_株式会社ラボップ.xlsx"
+      end
+      def work_report_filename(s)
+        surname = s.user.display_name.to_s.split(/[\s　]/).first
+        cat_label = { "wings" => "Wings", "living" => "リビング", "techleaders" => "テックリーダーズ", "resystems" => "REシステムズ" }[s.category] || s.category.to_s
+        "#{surname}_#{cat_label}_業務報告書_#{s.year}年_#{s.month}月分.xlsx"
       end
     end
   end
