@@ -79,13 +79,16 @@ class InvoicePdfRenderer
         end
         total = @total_override || items.sum { |i| i[:amount] }
       else
-        surname = @user.display_name.to_s.split(/[\s　]/).first.to_s
-        default_label = "#{surname} 開発業務".strip
-        default_label = "開発業務" if default_label == "開発業務"
+        full_name = @user.display_name.to_s.strip
+        default_label = full_name.empty? ? "開発業務" : "#{full_name} 開発業務"
         label = @item_label_override || default_label
         total = @total_override || total
         subtotal_tmp = (total / 1.1).round
-        items = [ { label: label, qty: 1, unit: "式", unit_price: subtotal_tmp, amount: subtotal_tmp } ]
+        # 単価 3,750 円/時間 で割って数量を出す。割り切れない場合は小数 1 桁。
+        unit_price = 3_750
+        qty = subtotal_tmp.to_f / unit_price
+        qty = qty == qty.to_i ? qty.to_i : qty.round(1)
+        items = [ { label: label, qty: qty, unit: "時間", unit_price: unit_price, amount: subtotal_tmp } ]
       end
       subtotal = (total / 1.1).round
       tax = total - subtotal
