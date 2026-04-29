@@ -19,7 +19,13 @@ class GmailSender
   # to: 文字列 or 配列
   # attachments: [{ filename:, content_type:, body: <String binary> }]
   def send_mail(to:, subject:, body:, attachments: [], from_name: nil)
-    actual_to = Array(MailRecipientGuard.actual_to(to)).flatten.compact.uniq
+    # 宛先は呼び出し元 (Frontend) が指定したものをそのまま使う。
+    # OUTBOUND_TEST_RECIPIENT は to が空のときのみフォールバックとして利用。
+    actual_to = Array(to).flatten.map { |t| t.to_s.strip }.reject(&:empty?).uniq
+    if actual_to.empty?
+      fallback = ENV["OUTBOUND_TEST_RECIPIENT"].to_s.strip
+      actual_to = [ fallback ] if fallback.present?
+    end
     raise "送信先がありません" if actual_to.empty?
 
     mail = Mail.new
