@@ -286,7 +286,9 @@ Devise.setup do |config|
     ENV["GOOGLE_CLIENT_SECRET"],
     scope: "email,profile,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/gmail.send",
     access_type: "offline",
-    prompt: "select_account",
+    # 「アカウント選択 + 同意画面」を強制 → 新しいスコープ (gmail.send) を追加同意してもらう
+    prompt: "select_account consent",
+    include_granted_scopes: true,
     callback_url: ENV.fetch("GOOGLE_CALLBACK_URL", "http://localhost:3001/api/v1/auth/auth/google_oauth2/callback")
 
   # SPA (API モード) から利用するため CSRF チェックを無効化
