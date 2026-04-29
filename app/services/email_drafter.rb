@@ -76,8 +76,9 @@ class EmailDrafter
       invoice_total = @context[:total].to_i
       expense_total = @context[:expense_total].to_i
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
+      recipient = @context[:recipient_name].to_s.presence || "ご担当者"
       <<~PROMPT
-        以下情報で、#{@context[:recipient_name] || "ご担当者"}様 宛に
+        以下情報で、#{recipient}様 宛に
         #{cat_label}案件の請求書#{include_expense ? "・立替金資料" : ""}を送付するメール下書きを作って。
         - 対象: #{@context[:year]}年#{@context[:month]}月分（#{cat_label}）
         - 添付: 請求書 PDF#{include_expense ? " / 立替金 PDF / 立替金 Excel" : ""}
@@ -86,6 +87,7 @@ class EmailDrafter
         #{include_expense ? "- 総額: ¥#{grand_total}" : ""}
         - 差出人: #{@context[:sender_name]}
         件名は「【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{cat_label}案件 請求書送付の件」のような形式で。
+        本文の宛名行は必ず「#{recipient}様」で始めること。
         本文には添付ファイル確認のお願い + 金額（カンマ区切り）+ ご不明点あればご連絡ください、を含めて。
       PROMPT
     else
