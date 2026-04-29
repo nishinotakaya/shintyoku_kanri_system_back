@@ -50,6 +50,7 @@ class EmailDrafter
       invoice_total = @context[:total].to_i
       expense_total = @context[:expense_total].to_i
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
+      sender_name = @context[:sender_name].to_s
       <<~PROMPT
         以下情報で、株式会社ラボップ (#{ @context[:recipient_name] || "ご担当者" }様) 宛に
         #{kind_label}と立替金資料を送付するメール下書きを作って。
@@ -58,7 +59,10 @@ class EmailDrafter
         - 請求書合計（税込）: ¥#{invoice_total}
         - 立替金合計: ¥#{expense_total}
         - 総額: ¥#{grand_total}
-        - 申請者: #{@context[:applicant_name]}
+        - 申請者(資料の作成元): #{@context[:applicant_name]}
+        - 差出人(メール送信者): #{sender_name}
+        ★重要: 本文の自己紹介と署名は必ず「#{sender_name}」で書くこと。
+        申請者名(#{@context[:applicant_name]})を自己紹介・署名に使ってはいけない。
         本文には添付ファイルがあること、請求書合計と立替金合計を分けて記載しご確認お願いしたい旨、
         何かあれば連絡ください、を含めて。金額は ¥X,XXX,XXX のようにカンマ区切りで。
       PROMPT
