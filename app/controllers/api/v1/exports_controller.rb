@@ -211,10 +211,6 @@ module Api
 
         [ submission.user, "株式会社ラボップ", current_user, submission ]
       end
-
-      def parse_application_date
-        Date.iso8601(params[:application_date]) if params[:application_date].present?
-      end
     end
   end
 end

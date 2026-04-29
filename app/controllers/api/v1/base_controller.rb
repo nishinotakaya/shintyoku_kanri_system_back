@@ -15,6 +15,10 @@ module Api
         end
       end
 
+      def parse_application_date
+        Date.iso8601(params[:application_date]) if params[:application_date].present?
+      end
+
       # 管理者は params[:as_user_id] で他ユーザーとして閲覧可能。
       # それ以外は常に current_user。
       def viewing_user

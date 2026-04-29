@@ -71,14 +71,22 @@ class EmailDrafter
         本文には添付ファイル確認のお願いと、何かあれば連絡ください、を含めて。
       PROMPT
     when :self_invoice
+      cat_label = @context[:category_label].to_s
+      include_expense = @context[:include_expense]
+      invoice_total = @context[:total].to_i
+      expense_total = @context[:expense_total].to_i
+      grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
       <<~PROMPT
         以下情報で、#{@context[:recipient_name] || "ご担当者"}様 宛に
-        請求書を送付するメール下書きを作って。
-        - 対象: #{@context[:year]}年#{@context[:month]}月分
-        - 添付: 請求書 PDF
-        - 請求金額（税込）: ¥#{@context[:total].to_i}
+        #{cat_label}案件の請求書#{include_expense ? "・立替金資料" : ""}を送付するメール下書きを作って。
+        - 対象: #{@context[:year]}年#{@context[:month]}月分（#{cat_label}）
+        - 添付: 請求書 PDF#{include_expense ? " / 立替金 PDF / 立替金 Excel" : ""}
+        - 請求金額（税込）: ¥#{invoice_total}
+        #{include_expense ? "- 立替金合計: ¥#{expense_total}" : ""}
+        #{include_expense ? "- 総額: ¥#{grand_total}" : ""}
         - 差出人: #{@context[:sender_name]}
-        本文には添付ファイル確認のお願い + 請求金額（カンマ区切り）+ ご不明点あればご連絡ください、を含めて。
+        件名は「【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{cat_label}案件 請求書送付の件」のような形式で。
+        本文には添付ファイル確認のお願い + 金額（カンマ区切り）+ ご不明点あればご連絡ください、を含めて。
       PROMPT
     else
       "宛先 #{@context[:recipient_name]} に対する送付メール下書きを作って。本文は丁寧に。"
@@ -172,19 +180,34 @@ class EmailDrafter
       }
     when :self_invoice
       sender = @context[:sender_name].to_s
-      total = @context[:total].to_i
+      cat_label = @context[:category_label].to_s
+      include_expense = @context[:include_expense]
+      invoice_total = @context[:total].to_i
+      expense_total = @context[:expense_total].to_i
+      grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
       fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
+      kind_phrase = include_expense ? "請求書および立替金資料" : "請求書"
+      attachments_block = if include_expense
+        "添付ファイル:\n  ・請求書 PDF\n  ・立替金 PDF\n  ・立替金 Excel"
+      else
+        "添付ファイル: 請求書 PDF"
+      end
+      amount_block = if include_expense
+        "・請求金額（税込）: #{fmt.call(invoice_total)}\n・立替金合計        : #{fmt.call(expense_total)}\n・総額              : #{fmt.call(grand_total)}"
+      else
+        "・請求金額（税込）: #{fmt.call(invoice_total)}"
+      end
       {
-        subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 請求書送付",
+        subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{cat_label}案件 #{kind_phrase}送付の件",
         body: <<~BODY
           #{ @context[:recipient_name] || "ご担当者" } 様
 
           いつもお世話になっております。#{sender}でございます。
-          #{@context[:year]}年#{@context[:month]}月分の請求書を送付いたします。
+          #{@context[:year]}年#{@context[:month]}月分（#{cat_label}）の#{kind_phrase}を送付いたします。
 
-          ・請求金額（税込）: #{fmt.call(total)}
+          #{amount_block}
 
-          添付ファイル: 請求書 PDF
+          #{attachments_block}
 
           ご確認のほどよろしくお願いいたします。
           ご不明点ございましたら、ご連絡ください。

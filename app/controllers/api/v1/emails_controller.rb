@@ -1,6 +1,13 @@
 module Api
   module V1
     class EmailsController < BaseController
+      CATEGORY_LABELS = {
+        "wings" => "Wings",
+        "living" => "リビング",
+        "techleaders" => "テックリーダーズ",
+        "resystems" => "REシステムズ"
+      }.freeze
+
       # POST /api/v1/emails/labop_draft
       # 複数の承認済 invoice + expense をまとめて送付するメールの件名/本文 下書き
       def labop_draft
@@ -106,32 +113,52 @@ module Api
       end
 
       # POST /api/v1/emails/self_invoice_draft
-      # ログイン中ユーザ自身の請求書を任意宛先に送付するメール下書き
+      # ログイン中ユーザ自身の請求書 + (任意で立替金) を任意宛先に送付するメール下書き
       def self_invoice_draft
         year, month = parse_month
         cat = params[:category].presence || "wings"
-        calc = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat).calculation
+        include_expense = ActiveModel::Type::Boolean.new.cast(params[:include_expense])
+        invoice_total = invoice_calc_total_for(current_user, year, month, cat)
+        expense_total = include_expense ? expense_calc_total_for(current_user, year, month, cat) : 0
         ctx = {
           recipient_name: params[:recipient_name].presence || "ご担当者",
           year: year, month: month,
-          total: calc[:total],
+          category_label: CATEGORY_LABELS[cat] || cat,
+          total: invoice_total,
+          expense_total: expense_total,
+          grand_total: invoice_total + expense_total,
+          include_expense: include_expense,
           sender_name: current_user.display_name
         }
         render json: EmailDrafter.draft(kind: :self_invoice, context: ctx)
       end
 
       # POST /api/v1/emails/self_invoice_send
-      # ログイン中ユーザ自身の請求書 PDF を任意宛先に送付
+      # ログイン中ユーザ自身の請求書 PDF + (任意で立替金 PDF/Excel) を任意宛先に送付
       def self_invoice_send
         year, month = parse_month
         cat = params[:category].presence || "wings"
+        include_expense = ActiveModel::Type::Boolean.new.cast(params[:include_expense])
         return render(json: { error: "宛先が空です" }, status: :unprocessable_entity) if params[:to].to_s.strip.empty?
 
         invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
           application_date: parse_application_date).call
         surname = current_user.display_name.to_s.split(/[\s　]/).first
-        attachments = [ { filename: "#{surname}_請求書_#{year}年_#{month}月分.pdf",
+        cat_label = CATEGORY_LABELS[cat] || cat
+        attachments = [ { filename: "#{surname}_#{cat_label}_請求書_#{year}年_#{month}月分.pdf",
                           content_type: "application/pdf", body: File.binread(invoice_pdf) } ]
+
+        if include_expense
+          exp_pdf = ExpensePdfRenderer.new(current_user, year: year, month: month, category: cat,
+            application_date: parse_application_date).call
+          attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.pdf",
+                           content_type: "application/pdf", body: File.binread(exp_pdf) }
+          exp_xlsx = ExpenseExporter.new(current_user, year: year, month: month, category: cat,
+            application_date: parse_application_date).call
+          attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.xlsx",
+                           content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           body: File.binread(exp_xlsx) }
+        end
 
         Array(params[:extra_files]).each do |f|
           next unless f.respond_to?(:read)
@@ -146,6 +173,18 @@ module Api
       rescue => e
         Rails.logger.error("[self_invoice_send] #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
         render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      def invoice_calc_total_for(user, year, month, cat)
+        InvoicePdfRenderer.new(user, year: year, month: month, category: cat).calculation[:total]
+      rescue
+        0
+      end
+      def expense_calc_total_for(user, year, month, cat)
+        period = user.period_for(year, month)
+        user.expenses.in_range(period).where(category: cat).sum(:amount).to_i
+      rescue
+        0
       end
 
       # POST /api/v1/emails/purchase_order_draft
