@@ -53,6 +53,17 @@ class User < ApplicationRecord
     user = where(provider: auth.provider, uid: auth.uid).first
     return user if user
 
+    # 同じ email の既存ユーザがいれば、provider/uid を紐付け直して返す
+    # (再同意 / OAuth クライアント変更などで uid が変わった場合のリカバリ)
+    if (existing = where(email: auth.info.email).first)
+      existing.update!(
+        provider: auth.provider,
+        uid: auth.uid,
+        google_access_token: nil # トークンは callback 側で改めて入る
+      )
+      return existing
+    end
+
     user = create! do |new_user|
       new_user.provider = auth.provider
       new_user.uid = auth.uid
