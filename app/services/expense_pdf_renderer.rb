@@ -9,18 +9,24 @@ class ExpensePdfRenderer
   TEMPLATE = Rails.root.join("app/views/invoices/expense_invoice.html.erb")
   SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
 
-  def initialize(user, year:, month:, application_date: nil, category: nil)
+  def initialize(user, year:, month:, application_date: nil, category: nil,
+                 client_name_override: nil, issuer_user_override: nil)
     @user = user
     @year = year
     @month = month
     @application_date = application_date
     @category = category.presence
+    @client_name_override = client_name_override.presence
+    @issuer_user = issuer_user_override || user
   end
 
   def call
     period = @user.period_for(@year, @month)
     application_date = @application_date || @user.application_date_for(@year, @month)
     setting = @user.invoice_setting_for(@category || "wings")
+    issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
+    issuer_user = @issuer_user
+    client_name = @client_name_override || setting.client_name
     scope = @user.expenses.in_range(period)
     scope = scope.where(category: @category) if @category
     expenses = scope.to_a

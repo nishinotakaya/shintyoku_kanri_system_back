@@ -24,9 +24,13 @@ module Api
       def expense
         year, month = parse_month
         cat = params[:category].presence
-        path = ExpenseExporter.new(current_user, year: year, month: month, application_date: parse_application_date, category: cat).call
+        viewer = viewing_user
+        target_user, client_override, issuer_override, _submission = resolve_expense_target(viewer: viewer, year: year, month: month, category: cat)
+        path = ExpenseExporter.new(target_user, year: year, month: month,
+          application_date: parse_application_date, category: cat,
+          client_name_override: client_override, issuer_user_override: issuer_override).call
         prefix = CATEGORY_LABELS[cat] ? "立替金_#{CATEGORY_LABELS[cat]}" : "立替金"
-        filename = with_name_prefix("#{prefix}_#{year}年_#{month}月分.xlsx")
+        filename = with_name_prefix("#{prefix}_#{year}年_#{month}月分.xlsx", user: target_user)
         return respond_save_local(:expense, path, filename, cat, year, month) if save_local?
         send_file path,
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -79,9 +83,13 @@ module Api
       def expense_pdf
         year, month = parse_month
         cat = params[:category].presence
-        path = ExpensePdfRenderer.new(current_user, year: year, month: month, application_date: parse_application_date, category: cat).call
+        viewer = viewing_user
+        target_user, client_override, issuer_override, _submission = resolve_expense_target(viewer: viewer, year: year, month: month, category: cat)
+        path = ExpensePdfRenderer.new(target_user, year: year, month: month,
+          application_date: parse_application_date, category: cat,
+          client_name_override: client_override, issuer_user_override: issuer_override).call
         prefix = CATEGORY_LABELS[cat] ? "立替金_#{CATEGORY_LABELS[cat]}" : "立替金"
-        filename = with_name_prefix("#{prefix}_#{year}年_#{month}月分.pdf")
+        filename = with_name_prefix("#{prefix}_#{year}年_#{month}月分.pdf", user: target_user)
         return respond_save_local(:expense, path, filename, cat, year, month) if save_local?
         send_file path, type: "application/pdf", filename: filename, disposition: "attachment"
       end
@@ -182,6 +190,22 @@ module Api
 
         submission = InvoiceSubmission.find_by(id: submission_id)
         return [ viewer, nil, nil, nil ] unless submission&.approved?
+        return [ viewer, nil, nil, nil ] unless submission.year == year && submission.month == month
+        return [ viewer, nil, nil, nil ] if category.present? && submission.category != category
+
+        [ submission.user, "株式会社ラボップ", current_user, submission ]
+      end
+
+      # 立替金 (expense) 用: 承認済 expense submission を指定された場合、
+      # 申請者ユーザの立替金を「株式会社ラボップ」宛 / 西野発行で生成。
+      def resolve_expense_target(viewer:, year:, month:, category:)
+        submission_id = params[:invoice_submission_id]
+        return [ viewer, nil, nil, nil ] if submission_id.blank?
+        return [ viewer, nil, nil, nil ] unless current_user.admin?
+
+        submission = InvoiceSubmission.find_by(id: submission_id)
+        return [ viewer, nil, nil, nil ] unless submission&.approved?
+        return [ viewer, nil, nil, nil ] unless submission.kind == "expense"
         return [ viewer, nil, nil, nil ] unless submission.year == year && submission.month == month
         return [ viewer, nil, nil, nil ] if category.present? && submission.category != category
 

@@ -32,6 +32,10 @@ module Api
           status: "pending"
         )
         record.save!
+
+        # 申請通知 (LINE Messaging API → 西野)。失敗してもレスポンスには影響させない。
+        notify_admin_on_create(record)
+
         render json: serialize(record)
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -92,6 +96,15 @@ module Api
       end
 
       private
+
+      def notify_admin_on_create(record)
+        kind_label = record.kind == "expense" ? "立替金" : "請求書"
+        cat_label = { "wings" => "Wings", "living" => "リビング", "techleaders" => "テックリーダーズ", "resystems" => "REシステムズ" }[record.category] || record.category
+        text = "📨 #{kind_label}の申請が届きました\n申請者: #{record.user&.display_name}\n対象: #{record.year}年#{record.month}月（#{cat_label}）"
+        LineNotifier.push(text)
+      rescue => e
+        Rails.logger.warn("[InvoiceSubmissions] notify failed: #{e.class}: #{e.message}")
+      end
 
       def serialize(record)
         defaults = approved_defaults_for(record)

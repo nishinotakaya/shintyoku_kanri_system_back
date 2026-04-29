@@ -38,21 +38,27 @@ class ExpenseExporter
     "flight"     => COL_FLIGHT
   }.freeze
 
-  def initialize(user, year:, month:, application_date: nil, category: nil)
+  def initialize(user, year:, month:, application_date: nil, category: nil,
+                 client_name_override: nil, issuer_user_override: nil)
     @user = user
     @year = year
     @month = month
     @application_date = application_date
     @category = category.presence
+    @client_name_override = client_name_override.presence
+    @issuer_user = issuer_user_override || user
   end
 
   DATA_END_ROW = 26 # テンプレのサンプルデータが入っている最終データ行
 
   def call
     cells = []
-    # A4: 申請者の会社名（テンプレは "Wings株式会社" 固定なので上書き）
-    cells << { row: 4, col: 1, value: @user.company_name } if @user.company_name.present?
-    cells << { row: HEADER_AUTHOR_ROW, col: HEADER_AUTHOR_COL, value: @user.display_name } if @user.display_name.present?
+    # A4: 宛名 (override が指定されたらそちら、なければ申請者の会社名)
+    a4_value = @client_name_override.presence || @user.company_name
+    cells << { row: 4, col: 1, value: a4_value } if a4_value.present?
+    # N5: 申請者氏名 (issuer override が居るならそちら、それ以外は申請者本人)
+    author = @issuer_user.display_name
+    cells << { row: HEADER_AUTHOR_ROW, col: HEADER_AUTHOR_COL, value: author } if author.present?
     period = @user.period_for(@year, @month)
     app_date = @application_date || @user.application_date_for(@year, @month)
     cells << { row: HEADER_PERIOD_ROW, col: HEADER_PERIOD_LABEL_COL, value: "申請日" }
