@@ -137,17 +137,20 @@ module Api
         }
       end
 
-      # approved の時のみ、ラボップモーダル初期表示用に元の請求書計算値を返す
+      # approved の時のみ、ラボップモーダル初期表示用に
+      # ラボップ宛 PDF と同じ「{氏名} 開発業務 1行 (qty=時間 / 単価=3,750)」の明細を返す
       def approved_defaults_for(record)
         return {} unless record.approved?
         return {} unless record.kind == "invoice"
+        # issuer_user_override に reviewer (=admin) を渡すと labop_mode? が true になり、
+        # 1 行明細の自動生成 + 内税 10% 逆算が走る → PDF と同じ初期値になる
         calc = InvoicePdfRenderer.new(
           record.user,
-          year: record.year, month: record.month, category: record.category
+          year: record.year, month: record.month, category: record.category,
+          issuer_user_override: record.reviewer || record.user
         ).calculation
-        surname = record.user.display_name.to_s.split(/[\s　]/).first.to_s
-        item_label = "#{surname} 開発業務".strip
-        item_label = "開発業務" if item_label == "開発業務"
+        full_name = record.user.display_name.to_s.strip
+        item_label = full_name.empty? ? "開発業務" : "#{full_name} 開発業務"
         {
           total: calc[:total],
           item_label: item_label,
