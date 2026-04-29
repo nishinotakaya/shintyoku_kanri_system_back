@@ -49,14 +49,24 @@ class User < ApplicationRecord
     "calmdownyourlife@gmail.com" => "kawamura@gmail.com"
   }.freeze
 
+  # 別 email でログインしても同じ User レコードに紐付けたいエイリアス。
+  # 値(primary email) のユーザに合流する。例: 会社用と個人用で別 Google アカウント運用するケース。
+  EMAIL_ALIASES = {
+    "taka-nishino@tamahome.jp" => "takaya314boxing@gmail.com",
+  }.freeze
+
   # Google OAuth でユーザーを検索 or 作成
   def self.from_google_oauth(auth)
     user = where(provider: auth.provider, uid: auth.uid).first
     return user if user
 
-    # 同じ email の既存ユーザがいれば、provider/uid を紐付け直して返す
-    # (再同意 / OAuth クライアント変更などで uid が変わった場合のリカバリ)
-    if (existing = where(email: auth.info.email).first)
+    # email alias がある場合は primary email に解決して既存ユーザに合流
+    incoming_email = auth.info.email.to_s.downcase
+    primary_email = EMAIL_ALIASES[incoming_email] || incoming_email
+
+    # primary email の既存ユーザがいれば、provider/uid を紐付け直して返す
+    # (再同意 / OAuth クライアント変更で uid が変わった場合のリカバリも兼ねる)
+    if (existing = where(email: primary_email).first)
       existing.update!(
         provider: auth.provider,
         uid: auth.uid,
