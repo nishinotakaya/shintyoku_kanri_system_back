@@ -1,5 +1,6 @@
 require "base64"
 require "mail"
+require "stringio"
 require "google/apis/gmail_v1"
 require "signet/oauth_2/client"
 
@@ -46,12 +47,20 @@ class GmailSender
 
     raw_body = mail.to_s
     raise "メールの To ヘッダが生成されませんでした" unless raw_body.include?("To: ")
-    raw = Base64.urlsafe_encode64(raw_body)
+    Rails.logger.info("[GmailSender] raw size=#{raw_body.bytesize} bytes")
 
     service = Google::Apis::GmailV1::GmailService.new
     service.authorization = build_auth
-    msg = Google::Apis::GmailV1::Message.new(raw: raw)
-    res = service.send_user_message("me", msg)
+
+    # multipart/related (RFC822 アップロード) で送信。
+    # JSON + base64(raw) 方式は ~5MB 上限・添付込みでパース失敗しやすい。
+    # upload_source + content_type='message/rfc822' なら ~35MB 程度まで OK。
+    res = service.send_user_message(
+      "me",
+      Google::Apis::GmailV1::Message.new,
+      upload_source: StringIO.new(raw_body),
+      content_type: "message/rfc822"
+    )
     res.id
   end
 
