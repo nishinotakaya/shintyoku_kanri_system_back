@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_04_28_152124) do
+ActiveRecord::Schema[8.0].define(version: 2026_04_29_014404) do
   create_table "backlog_settings", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "backlog_url"
@@ -50,6 +50,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_28_152124) do
     t.string "assignee_name"
     t.integer "assignee_id"
     t.string "url"
+    t.boolean "did_previous", default: false, null: false
+    t.boolean "do_today", default: false, null: false
     t.index ["user_id"], name: "index_backlog_tasks_on_user_id"
   end
 

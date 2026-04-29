@@ -12,6 +12,10 @@ class GoogleSheetsExporter
     section_wip:  { red: 0.6, green: 0.8, blue: 1.0 },     # 青（処理中）
     section_todo: { red: 1.0, green: 0.88, blue: 0.55 },   # オレンジ（未対応）
     completed:    { red: 0.5, green: 0.85, blue: 0.5 },    # 濃い緑（完了）
+    # 行マーキング: 「本日行う」「前回行った」「両方」
+    flag_today:    { red: 1.00, green: 0.95, blue: 0.40 }, # 鮮やかな黄（本日行う）
+    flag_previous: { red: 0.70, green: 0.85, blue: 1.00 }, # 水色（前回行った）
+    flag_both:     { red: 0.85, green: 0.70, blue: 1.00 }, # 紫（両方）
     white:        { red: 1.0, green: 1.0, blue: 1.0 }
   }.freeze
 
@@ -83,6 +87,15 @@ class GoogleSheetsExporter
 
   def write_active_sheet(sheet_name, done_tasks, wip_tasks, todo_tasks)
     rows = []
+    flag_rows = [] # [row_index, color_key]
+    legend_rows = [] # 凡例ハイライト [row_index, color_key]
+
+    # 凡例 2 行（最上部）
+    legend_rows << [ rows.size, :flag_today ]
+    rows << [ "", "■ 本日行うタスク（チェック済み）", "", "", "", "", "", "", "" ]
+    legend_rows << [ rows.size, :flag_previous ]
+    rows << [ "", "■ 前回行ったタスク（チェック済み） / ■ 両方=紫", "", "", "", "", "", "", "" ]
+    rows << []
 
     # ヘッダ
     rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
@@ -91,54 +104,62 @@ class GoogleSheetsExporter
 
     section_rows = [] # セクション行の位置を記録 [row_index, color_key]
 
+    push_section = lambda do |label, color_key, tasks|
+      next unless tasks.any?
+      section_rows << [ rows.size, color_key ]
+      rows << [ "", label ]
+      tasks.each do |t|
+        flag = task_flag_color(t)
+        flag_rows << [ rows.size, flag ] if flag
+        rows << task_row(t)
+      end
+      rows << []
+    end
+
     # 完了2日以内セクション（最近完了したもの）
     recent = @user.backlog_tasks.where(status_id: 4)
       .where("completed_on >= ?", Date.current - 2).order(completed_on: :desc)
-    if recent.any?
-      section_rows << [ rows.size, :completed ]
-      rows << [ "", "【完了（2日以内）】" ]
-      recent.each { |t| rows << task_row(t) }
-      rows << []
-    end
+    push_section.call("【完了（2日以内）】", :completed, recent)
+    push_section.call("【処理済】", :section_done, done_tasks)
+    push_section.call("【処理中】", :section_wip, wip_tasks)
+    push_section.call("【未対応】", :section_todo, todo_tasks)
 
-    # 処理済セクション
-    if done_tasks.any?
-      section_rows << [ rows.size, :section_done ]
-      rows << [ "", "【処理済】" ]
-      done_tasks.each { |t| rows << task_row(t) }
-      rows << []
-    end
-
-    # 処理中セクション
-    if wip_tasks.any?
-      section_rows << [ rows.size, :section_wip ]
-      rows << [ "", "【処理中】" ]
-      wip_tasks.each { |t| rows << task_row(t) }
-      rows << []
-    end
-
-    # 未対応セクション
-    if todo_tasks.any?
-      section_rows << [ rows.size, :section_todo ]
-      rows << [ "", "【未対応】" ]
-      todo_tasks.each { |t| rows << task_row(t) }
-      rows << []
-    end
-
-    write_and_format(sheet_name, rows, section_rows)
+    write_and_format(sheet_name, rows, section_rows, header_row_offset: 3, flag_rows: flag_rows, legend_rows: legend_rows)
   end
 
   def write_completed_sheet(sheet_name, tasks)
     rows = []
+    flag_rows = []
+    legend_rows = []
+
+    legend_rows << [ rows.size, :flag_today ]
+    rows << [ "", "■ 本日行うタスク（チェック済み）", "", "", "", "", "", "", "" ]
+    legend_rows << [ rows.size, :flag_previous ]
+    rows << [ "", "■ 前回行ったタスク（チェック済み） / ■ 両方=紫", "", "", "", "", "", "", "" ]
+    rows << []
+
     rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
     rows << [ "", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", "" ]
     rows << []
 
     section_rows = [ [ rows.size, :completed ] ]
     rows << [ "", "【完了】" ]
-    tasks.each { |t| rows << task_row(t) }
+    tasks.each do |t|
+      flag = task_flag_color(t)
+      flag_rows << [ rows.size, flag ] if flag
+      rows << task_row(t)
+    end
 
-    write_and_format(sheet_name, rows, section_rows)
+    write_and_format(sheet_name, rows, section_rows, header_row_offset: 3, flag_rows: flag_rows, legend_rows: legend_rows)
+  end
+
+  # 「本日 + 前回」 → 紫、「本日のみ」 → 黄、「前回のみ」 → 水色、なし → nil
+  def task_flag_color(t)
+    case [ t.do_today, t.did_previous ]
+    when [ true, true ]  then :flag_both
+    when [ true, false ] then :flag_today
+    when [ false, true ] then :flag_previous
+    end
   end
 
   def task_row(t)
@@ -161,7 +182,7 @@ class GoogleSheetsExporter
     ]
   end
 
-  def write_and_format(sheet_name, rows, section_rows)
+  def write_and_format(sheet_name, rows, section_rows, header_row_offset: 0, flag_rows: [], legend_rows: [])
     # クリア
     @service.clear_values(@spreadsheet_id, "#{sheet_name}!A:I")
 
@@ -179,8 +200,13 @@ class GoogleSheetsExporter
     # 書式リクエスト
     requests = []
 
-    # ヘッダ行に背景色
-    requests << format_rows(sheet_id, 0, 2, COLORS[:header_bg], true)
+    # 凡例行に背景色（最上部 2 行）
+    legend_rows.each do |(row_idx, color_key)|
+      requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[color_key], true)
+    end
+
+    # ヘッダ行に背景色（凡例の下）
+    requests << format_rows(sheet_id, header_row_offset, header_row_offset + 2, COLORS[:header_bg], true)
 
     # 既存フィルタをクリア
     if sheet.basic_filter
@@ -219,6 +245,25 @@ class GoogleSheetsExporter
       end
     end
 
+    # フラグ行を上塗り（本日 / 前回 / 両方）
+    flag_rows.each do |(row_idx, color_key)|
+      requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[color_key], false)
+      # A列のid非表示も維持（背景=文字色）
+      requests << {
+        repeat_cell: {
+          range: {
+            sheet_id: sheet_id,
+            start_row_index: row_idx,
+            end_row_index: row_idx + 1,
+            start_column_index: 0,
+            end_column_index: 1
+          },
+          cell: { user_entered_format: { background_color: COLORS[color_key], text_format: { foreground_color: COLORS[color_key] } } },
+          fields: "userEnteredFormat(backgroundColor,textFormat)"
+        }
+      }
+    end
+
     # B列の幅を広げる
     requests << {
       update_dimension_properties: {
@@ -254,7 +299,7 @@ class GoogleSheetsExporter
     filter_requests << {
       set_basic_filter: {
         filter: {
-          range: { sheet_id: sheet_id, start_row_index: 2, start_column_index: 0, end_column_index: 9 }
+          range: { sheet_id: sheet_id, start_row_index: header_row_offset + 2, start_column_index: 0, end_column_index: 9 }
         }
       }
     }

@@ -42,7 +42,7 @@ module Api
 
       def update_task
         task = current_user.backlog_tasks.find(params[:id])
-        permitted = params.permit(:memo, :summary, :start_date, :end_date, :status_id, :progress_value, :deploy_date, :deploy_note, :url, :assignee_name)
+        permitted = params.permit(:memo, :summary, :start_date, :end_date, :status_id, :progress_value, :deploy_date, :deploy_note, :url, :assignee_name, :did_previous, :do_today)
         if permitted[:status_id].present?
           permitted[:status_name] = BacklogTask::STATUS_NAMES[permitted[:status_id].to_i]
           if permitted[:status_id].to_i == 4 && task.completed_on.nil?
@@ -207,7 +207,8 @@ module Api
           memo: t.memo, position: t.position,
           deploy_date: t.deploy_date, deploy_note: t.deploy_note,
           source: t.source, assignee_name: t.assignee_name, assignee_id: t.assignee_id,
-          url: t.url
+          url: t.url,
+          did_previous: t.did_previous, do_today: t.do_today
         }
       end
     end
