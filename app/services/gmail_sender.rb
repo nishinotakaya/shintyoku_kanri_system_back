@@ -28,9 +28,13 @@ class GmailSender
     end
     raise "送信先がありません" if actual_to.empty?
 
+    # Mail gem に文字列で To を渡すと RFC822 ヘッダが確実に作られる
+    to_header = actual_to.join(", ")
+    Rails.logger.info("[GmailSender] to=#{to_header} from=#{@user.email} attachments=#{attachments.size}")
+
     mail = Mail.new
     mail.from    = from_name ? "#{from_name} <#{@user.email}>" : @user.email
-    mail.to      = actual_to
+    mail.to      = to_header
     mail.subject = subject
     mail.body    = body.to_s
     mail.charset = "UTF-8"
@@ -40,7 +44,9 @@ class GmailSender
       mail.attachments[att[:filename]].content_type = att[:content_type] if att[:content_type]
     end
 
-    raw = Base64.urlsafe_encode64(mail.to_s)
+    raw_body = mail.to_s
+    raise "メールの To ヘッダが生成されませんでした" unless raw_body.include?("To: ")
+    raw = Base64.urlsafe_encode64(raw_body)
 
     service = Google::Apis::GmailV1::GmailService.new
     service.authorization = build_auth
