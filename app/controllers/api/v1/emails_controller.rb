@@ -52,11 +52,16 @@ module Api
       # 宛先は params[:to] をそのまま使用 (Frontend が選んだ送り先を尊重)。
       def labop_send
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
-        invoice_ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
-        expense_ids = Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
-        invoices = InvoiceSubmission.where(id: invoice_ids).where(kind: "invoice").approved
-        expenses = InvoiceSubmission.where(id: expense_ids).where(kind: "expense").approved
-        return render(json: { error: "送付対象が空です" }, status: :unprocessable_entity) if invoices.empty? && expenses.empty?
+        # 添付タイプ別に id 配列を受ける（旧 invoice_submission_ids/expense_submission_ids も後方互換で受理）
+        invoice_pdf_ids = Array(params[:invoice_pdf_submission_ids].presence || params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
+        expense_pdf_ids = Array(params[:expense_pdf_submission_ids].presence || params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
+        expense_xlsx_ids = Array(params[:expense_xlsx_submission_ids].presence || params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
+        invoices = InvoiceSubmission.where(id: invoice_pdf_ids).where(kind: "invoice").approved
+        expense_pdfs = InvoiceSubmission.where(id: expense_pdf_ids).where(kind: "expense").approved
+        expense_xlsxs = InvoiceSubmission.where(id: expense_xlsx_ids).where(kind: "expense").approved
+        if invoices.empty? && expense_pdfs.empty? && expense_xlsxs.empty?
+          return render(json: { error: "送付対象が空です" }, status: :unprocessable_entity)
+        end
 
         attachments = []
         invoices.each do |invoice|
@@ -77,13 +82,15 @@ module Api
           wr_path = WorkReportExporter.new(invoice.user, year: invoice.year, month: invoice.month, category: invoice.category).call
           attachments << { filename: work_report_filename(invoice), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(wr_path) }
         end
-        expenses.each do |expense|
+        expense_pdfs.each do |expense|
           exp_pdf = ExpensePdfRenderer.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
             application_date: expense.application_date_override
           ).call
           attachments << { filename: expense_pdf_filename(expense), content_type: "application/pdf", body: File.binread(exp_pdf) }
+        end
+        expense_xlsxs.each do |expense|
           exp_xlsx = ExpenseExporter.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
@@ -141,31 +148,49 @@ module Api
       def self_invoice_send
         year, month = parse_month
         cat = params[:category].presence || "wings"
-        include_expense_raw = ActiveModel::Type::Boolean.new.cast(params[:include_expense])
         return render(json: { error: "宛先が空です" }, status: :unprocessable_entity) if params[:to].to_s.strip.empty?
 
-        # 立替金が 0 円なら強制的に同梱しない（PDF/Excel どちらも添付しない）
-        expense_total = expense_calc_total_for(current_user, year, month, cat)
-        include_expense = include_expense_raw && expense_total > 0
+        # 添付タイプ別フラグ（後方互換: include_expense=true なら expense_pdf/xlsx 両方デフォルト on）
+        cast_bool = ->(v, default) { v.nil? ? default : ActiveModel::Type::Boolean.new.cast(v) }
+        legacy_include_expense = ActiveModel::Type::Boolean.new.cast(params[:include_expense])
+        include_invoice_pdf = cast_bool.call(params[:include_invoice_pdf], true)
+        include_expense_pdf = cast_bool.call(params[:include_expense_pdf], legacy_include_expense)
+        include_expense_xlsx = cast_bool.call(params[:include_expense_xlsx], legacy_include_expense)
 
-        # 自身の請求書 → ラボップ宛で送付するので宛先は「株式会社ラボップ」固定
-        invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
-          application_date: parse_application_date,
-          client_name_override: I18n.t("companies.labop.name")).call
+        # 立替金が 0 円なら強制的に同梱しない
+        expense_total = expense_calc_total_for(current_user, year, month, cat)
+        include_expense_pdf = false if expense_total <= 0
+        include_expense_xlsx = false if expense_total <= 0
+
+        if !include_invoice_pdf && !include_expense_pdf && !include_expense_xlsx
+          return render(json: { error: "送付対象の添付が選択されていません" }, status: :unprocessable_entity)
+        end
+
         surname = current_user.display_name.to_s.split(/[\s　]/).first
         cat_label = CATEGORY_LABELS[cat] || cat
-        attachments = [ { filename: "#{surname}_#{cat_label}_請求書_#{year}年_#{month}月分.pdf",
-                          content_type: "application/pdf", body: File.binread(invoice_pdf) } ]
+        attachments = []
+        labop_name = I18n.t("companies.labop.name")
 
-        if include_expense
+        if include_invoice_pdf
+          invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
+            application_date: parse_application_date,
+            client_name_override: labop_name).call
+          attachments << { filename: "#{surname}_#{cat_label}_請求書_#{year}年_#{month}月分.pdf",
+                           content_type: "application/pdf", body: File.binread(invoice_pdf) }
+        end
+
+        if include_expense_pdf
           exp_pdf = ExpensePdfRenderer.new(current_user, year: year, month: month, category: cat,
             application_date: parse_application_date,
-            client_name_override: I18n.t("companies.labop.name")).call
+            client_name_override: labop_name).call
           attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.pdf",
                            content_type: "application/pdf", body: File.binread(exp_pdf) }
+        end
+
+        if include_expense_xlsx
           exp_xlsx = ExpenseExporter.new(current_user, year: year, month: month, category: cat,
             application_date: parse_application_date,
-            client_name_override: I18n.t("companies.labop.name")).call
+            client_name_override: labop_name).call
           attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.xlsx",
                            content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                            body: File.binread(exp_xlsx) }
