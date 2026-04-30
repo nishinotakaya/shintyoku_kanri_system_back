@@ -33,12 +33,15 @@ class ExpensePdfRenderer
     expenses = scope.to_a
 
     # 区間ごとにグルーピング
+    # ラベルは「{申請者氏名} 交通費_往復(蘇我駅〜品川駅)」形式（請求書の「{氏名} 開発業務」と統一）
+    full_name = @user.display_name.to_s.strip
+    name_prefix = full_name.empty? ? "" : "#{full_name} "
     grouped = expenses.group_by { |e| "#{e.from_station}〜#{e.to_station}" }
     items = grouped.map do |section, exps|
       unit_price = exps.first.amount
       qty = exps.size
       {
-        label: "交通費_往復(#{exps.first.from_station}駅〜#{exps.first.to_station}駅)",
+        label: "#{name_prefix}交通費_往復(#{exps.first.from_station}駅〜#{exps.first.to_station}駅)",
         qty: qty,
         unit: "回",
         unit_price: unit_price,

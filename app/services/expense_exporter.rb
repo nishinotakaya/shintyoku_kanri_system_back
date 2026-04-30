@@ -7,7 +7,9 @@ class ExpenseExporter
   TEMPLATE = Rails.root.join("app/templates/expense_template.xlsx")
 
   HEADER_AUTHOR_ROW = 5
-  HEADER_AUTHOR_COL = 14 # N
+  HEADER_AUTHOR_COL = 14 # N5: 作成者（申請者本人）
+  HEADER_ASSIGNEE_ROW = 7
+  HEADER_ASSIGNEE_COL = 14 # N7: 担当者（発行者・admin）
   HEADER_PERIOD_ROW = 7
   HEADER_PERIOD_LABEL_COL = 1  # A
   HEADER_PERIOD_COL = 3  # C
@@ -56,9 +58,12 @@ class ExpenseExporter
     # A4: 宛名 (override が指定されたらそちら、なければ申請者の会社名)
     a4_value = @client_name_override.presence || @user.company_name
     cells << { row: 4, col: 1, value: a4_value } if a4_value.present?
-    # N5: 申請者氏名 (issuer override が居るならそちら、それ以外は申請者本人)
-    author = @issuer_user.display_name
+    # N5: 作成者 = 申請者本人（@user）
+    # N7: 担当者 = 発行者（@issuer_user。例: 西野が川村のExcelを発行する場合は西野）
+    author = @user.display_name
     cells << { row: HEADER_AUTHOR_ROW, col: HEADER_AUTHOR_COL, value: author } if author.present?
+    assignee = @issuer_user.display_name
+    cells << { row: HEADER_ASSIGNEE_ROW, col: HEADER_ASSIGNEE_COL, value: assignee } if assignee.present?
     period = @user.period_for(@year, @month)
     # 申請日: 発行者(issuer)の monthly_settings を優先（西野が川村の Excel を発行する場合は西野の末日設定を使う）
     app_date = @application_date || @issuer_user.application_date_for(@year, @month) || @user.application_date_for(@year, @month)
