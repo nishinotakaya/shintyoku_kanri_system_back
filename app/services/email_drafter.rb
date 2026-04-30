@@ -51,9 +51,12 @@ class EmailDrafter
       expense_total = @context[:expense_total].to_i
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
       sender_name = @context[:sender_name].to_s
+      labop_recipient_raw = (@context[:recipient_name].to_s.presence || "御中")
+      labop_recipient = labop_recipient_raw.end_with?("御中") ? "株式会社ラボップ #{labop_recipient_raw}" : "株式会社ラボップ #{labop_recipient_raw}様"
       <<~PROMPT
-        以下情報で、株式会社ラボップ (#{ @context[:recipient_name] || "ご担当者" }様) 宛に
+        以下情報で、#{labop_recipient} 宛に
         #{kind_label}と立替金資料を送付するメール下書きを作って。
+        宛名行は必ず「#{labop_recipient}」で始めること（御中の場合は「様」を付けない）。件名に「ご担当者」「担当者」は含めないこと。
         - 対象: #{@context[:year]}年#{@context[:month]}月分
         - 添付: ラボップ宛 請求書 PDF / 立替金 PDF / 立替金 Excel#{ @context[:extra_attachments] ? "（領収書ほか）" : "" }
         - 請求書合計（税込）: ¥#{invoice_total}
@@ -80,10 +83,12 @@ class EmailDrafter
       invoice_total = @context[:total].to_i
       expense_total = @context[:expense_total].to_i
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
-      recipient = @context[:recipient_name].to_s.presence || "ご担当者"
+      recipient = @context[:recipient_name].to_s.presence || "御中"
+      # recipient が「御中」で終わるなら様付けしない（会社宛）、それ以外は様付け（個人宛）
+      recipient_with_honorific = recipient.end_with?("御中") ? recipient : "#{recipient}様"
       sender_surname = @context[:sender_name].to_s.split(/[\s　]/).first.to_s
       <<~PROMPT
-        以下情報で、#{recipient}様 宛に
+        以下情報で、#{recipient_with_honorific} 宛に
         #{cat_label}案件の請求書#{include_expense ? "・立替金資料" : ""}を送付するメール下書きを作って。
         - 対象: #{@context[:year]}年#{@context[:month]}月分（#{cat_label}）
         - 添付: 請求書 PDF#{include_expense ? " / 立替金 PDF / 立替金 Excel" : ""}
@@ -91,8 +96,8 @@ class EmailDrafter
         #{include_expense ? "- 立替金合計: ¥#{expense_total}" : ""}
         #{include_expense ? "- 総額: ¥#{grand_total}" : ""}
         - 差出人: #{@context[:sender_name]}
-        件名は「【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{sender_surname}#{cat_label}案件 #{include_expense ? "請求書および立替金資料" : "請求書"}送付の件」の形式で必ず作ること。
-        本文の宛名行は必ず「#{recipient}様」で始めること。
+        件名は「【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{sender_surname}#{cat_label}案件 #{include_expense ? "請求書および立替金資料" : "請求書"}送付の件」の形式で必ず作ること。件名に「ご担当者」「担当者」は含めないこと。
+        本文の宛名行は必ず「#{recipient_with_honorific}」で始めること（御中の場合は「様」を付けない）。
         本文には添付ファイル確認のお願い + 金額（カンマ区切り）+ ご不明点あればご連絡ください、を含めて。
       PROMPT
     else
@@ -144,11 +149,12 @@ class EmailDrafter
       expense_total = @context[:expense_total].to_i
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
       fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
+      recipient_raw = (@context[:recipient_name].to_s.presence || "御中")
+      recipient_line = recipient_raw.end_with?("御中") ? recipient_raw : "#{recipient_raw} 様"
       {
         subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{kind_label}送付",
         body: <<~BODY
-          株式会社ラボップ
-          #{ @context[:recipient_name] || "ご担当者" } 様
+          株式会社ラボップ #{recipient_line}
 
           いつもお世話になっております。#{sender}でございます。
           #{@context[:year]}年#{@context[:month]}月分の#{kind_label}関連資料を送付いたします。
@@ -205,10 +211,12 @@ class EmailDrafter
       else
         "・請求金額（税込）: #{fmt.call(invoice_total)}"
       end
+      recipient = (@context[:recipient_name].to_s.presence || "御中")
+      recipient_with_honorific = recipient.end_with?("御中") ? recipient : "#{recipient} 様"
       {
         subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{sender_surname}#{cat_label}案件 #{kind_phrase}送付の件",
         body: <<~BODY
-          #{ @context[:recipient_name] || "ご担当者" } 様
+          #{recipient_with_honorific}
 
           いつもお世話になっております。#{sender}でございます。
           #{@context[:year]}年#{@context[:month]}月分（#{cat_label}）の#{kind_phrase}を送付いたします。

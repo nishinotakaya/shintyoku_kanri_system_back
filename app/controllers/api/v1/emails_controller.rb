@@ -126,7 +126,7 @@ module Api
         include_expense = include_expense_raw && available_expense_total > 0
         expense_total = include_expense ? available_expense_total : 0
         ctx = {
-          recipient_name: params[:recipient_name].presence || "ご担当者",
+          recipient_name: params[:recipient_name].presence || "御中",
           year: year, month: month,
           category_label: CATEGORY_LABELS[cat] || cat,
           total: invoice_total,
