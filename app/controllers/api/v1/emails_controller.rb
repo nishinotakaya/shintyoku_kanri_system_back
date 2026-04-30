@@ -152,8 +152,10 @@ module Api
         expense_total = expense_calc_total_for(current_user, year, month, cat)
         include_expense = include_expense_raw && expense_total > 0
 
+        # 自身の請求書 → ラボップ宛で送付するので宛先は「株式会社ラボップ」固定
         invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
-          application_date: parse_application_date).call
+          application_date: parse_application_date,
+          client_name_override: "株式会社ラボップ").call
         surname = current_user.display_name.to_s.split(/[\s　]/).first
         cat_label = CATEGORY_LABELS[cat] || cat
         attachments = [ { filename: "#{surname}_#{cat_label}_請求書_#{year}年_#{month}月分.pdf",
@@ -161,11 +163,13 @@ module Api
 
         if include_expense
           exp_pdf = ExpensePdfRenderer.new(current_user, year: year, month: month, category: cat,
-            application_date: parse_application_date).call
+            application_date: parse_application_date,
+            client_name_override: "株式会社ラボップ").call
           attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.pdf",
                            content_type: "application/pdf", body: File.binread(exp_pdf) }
           exp_xlsx = ExpenseExporter.new(current_user, year: year, month: month, category: cat,
-            application_date: parse_application_date).call
+            application_date: parse_application_date,
+            client_name_override: "株式会社ラボップ").call
           attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.xlsx",
                            content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                            body: File.binread(exp_xlsx) }
