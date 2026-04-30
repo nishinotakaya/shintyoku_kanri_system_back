@@ -12,10 +12,10 @@ class GoogleSheetsExporter
     section_wip:  { red: 0.6, green: 0.8, blue: 1.0 },     # 青（処理中）
     section_todo: { red: 1.0, green: 0.88, blue: 0.55 },   # オレンジ（未対応）
     completed:    { red: 0.5, green: 0.85, blue: 0.5 },    # 濃い緑（完了）
-    # 行マーキング: 「本日行う」「前回行った」「両方」
-    flag_today:    { red: 1.00, green: 0.95, blue: 0.40 }, # 鮮やかな黄（本日行う）
-    flag_previous: { red: 1.00, green: 0.72, blue: 0.85 }, # ピンク（前回行った）— 処理済の緑と被らないよう変更
-    flag_both:     { red: 0.78, green: 0.55, blue: 1.00 }, # はっきりした紫（両方）
+    # 行マーキング: 「本日行う」「前回行った」「両方」 — 淡めにして見づらくしない
+    flag_today:    { red: 1.00, green: 0.97, blue: 0.70 }, # 淡い黄（本日行う）
+    flag_previous: { red: 1.00, green: 0.85, blue: 0.92 }, # 淡いピンク（前回行った）— 緑系セクションと被らない
+    flag_both:     { red: 0.85, green: 0.72, blue: 1.00 }, # 紫（両方）
     white:        { red: 1.0, green: 1.0, blue: 1.0 }
   }.freeze
 
@@ -91,8 +91,12 @@ class GoogleSheetsExporter
     legend_rows = [] # 凡例ハイライト [row_index, color_key]
 
     # 凡例（最上部）: 両方チェック時のみ紫
+    legend_rows << [ rows.size, :flag_today ]
+    rows << [ "", "■ 黄 = 本日行う", "", "", "", "", "", "", "" ]
+    legend_rows << [ rows.size, :flag_previous ]
+    rows << [ "", "■ ピンク = 前回行った", "", "", "", "", "", "", "" ]
     legend_rows << [ rows.size, :flag_both ]
-    rows << [ "", "■ 紫 = 「本日行う」+「前回行った」両方チェック", "", "", "", "", "", "", "" ]
+    rows << [ "", "■ 紫 = 本日行う + 前回行った（両方）", "", "", "", "", "", "", "" ]
     rows << []
 
     # ヘッダ
@@ -122,7 +126,7 @@ class GoogleSheetsExporter
     push_section.call("【処理中】", :section_wip, wip_tasks)
     push_section.call("【未対応】", :section_todo, todo_tasks)
 
-    write_and_format(sheet_name, rows, section_rows, header_row_offset: 2, flag_rows: flag_rows, legend_rows: legend_rows)
+    write_and_format(sheet_name, rows, section_rows, header_row_offset: 4, flag_rows: flag_rows, legend_rows: legend_rows)
   end
 
   def write_completed_sheet(sheet_name, tasks)
@@ -130,8 +134,12 @@ class GoogleSheetsExporter
     flag_rows = []
     legend_rows = []
 
+    legend_rows << [ rows.size, :flag_today ]
+    rows << [ "", "■ 黄 = 本日行う", "", "", "", "", "", "", "" ]
+    legend_rows << [ rows.size, :flag_previous ]
+    rows << [ "", "■ ピンク = 前回行った", "", "", "", "", "", "", "" ]
     legend_rows << [ rows.size, :flag_both ]
-    rows << [ "", "■ 紫 = 「本日行う」+「前回行った」両方チェック", "", "", "", "", "", "", "" ]
+    rows << [ "", "■ 紫 = 本日行う + 前回行った（両方）", "", "", "", "", "", "", "" ]
     rows << []
 
     rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
@@ -146,13 +154,16 @@ class GoogleSheetsExporter
       rows << task_row(t)
     end
 
-    write_and_format(sheet_name, rows, section_rows, header_row_offset: 2, flag_rows: flag_rows, legend_rows: legend_rows)
+    write_and_format(sheet_name, rows, section_rows, header_row_offset: 4, flag_rows: flag_rows, legend_rows: legend_rows)
   end
 
-  # 「本日 + 前回」両方チェック時のみ紫。それ以外は色を付けない（白）
+  # 「本日のみ」黄、「前回のみ」ピンク、「両方」紫、なし → nil(白)
   def task_flag_color(t)
-    return :flag_both if t.do_today && t.did_previous
-    nil
+    case [ t.do_today, t.did_previous ]
+    when [ true, true ]  then :flag_both
+    when [ true, false ] then :flag_today
+    when [ false, true ] then :flag_previous
+    end
   end
 
   def task_row(t)
