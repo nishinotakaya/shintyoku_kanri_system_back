@@ -213,22 +213,16 @@ class GoogleSheetsExporter
       requests << { clear_basic_filter: { sheet_id: sheet_id } }
     end
 
-    # セクション行 + その中のタスク行にも背景色
-    section_ranges = []
+    # セクション行は色付き太字、その中のタスク行はデフォルト白
     section_rows.each_with_index do |(row_idx, color_key), i|
-      # セクション行自体は太字
+      # セクション行自体は太字 + セクション色
       requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[color_key], true)
 
-      # 次のセクションまで or 末尾まで、タスク行にも薄い背景色
+      # 次のセクションまで or 末尾まで、タスク行は白背景
       next_start = (i + 1 < section_rows.size) ? section_rows[i + 1][0] : rows.size
       if next_start > row_idx + 1
-        light_color = {
-          red: [ COLORS[color_key][:red] * 0.3 + 0.7, 1.0 ].min,
-          green: [ COLORS[color_key][:green] * 0.3 + 0.7, 1.0 ].min,
-          blue: [ COLORS[color_key][:blue] * 0.3 + 0.7, 1.0 ].min
-        }
-        requests << format_rows(sheet_id, row_idx + 1, next_start, light_color, false)
-        # A列のidを非表示（文字色=背景色）
+        requests << format_rows(sheet_id, row_idx + 1, next_start, COLORS[:white], false)
+        # A列のidを非表示（文字色=背景色=白）
         requests << {
           repeat_cell: {
             range: {
@@ -238,7 +232,7 @@ class GoogleSheetsExporter
               start_column_index: 0,
               end_column_index: 1
             },
-            cell: { user_entered_format: { background_color: light_color, text_format: { foreground_color: light_color } } },
+            cell: { user_entered_format: { background_color: COLORS[:white], text_format: { foreground_color: COLORS[:white] } } },
             fields: "userEnteredFormat(backgroundColor,textFormat)"
           }
         }
