@@ -21,20 +21,8 @@
       "note": "exports#work_report の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
     },
     {
-      "fingerprint": "845acb8d8a0d210a4955f25697883a92b41709634f02ac2ea90b77fdcf14f168",
-      "note": "exports#expense の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
-    },
-    {
-      "fingerprint": "64cb8bab57e9894f7805bbae09b02cddc0f04307b1f10be6336d9f41744e751c",
-      "note": "exports#invoice の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
-    },
-    {
-      "fingerprint": "e62f73809193dc72a50c2196b72430269b7413cda856838c1d1bea6841df052c",
-      "note": "exports#invoice の send_file filename (override パラメータ追加版): year/month は to_i 済み、category は fixed list 想定。偽陽性"
-    },
-    {
-      "fingerprint": "a669cd3ef011ecfe7894f3bf373d27f7f19c3f94c3b21b8540b4b2a3eb2ea7f3",
-      "note": "exports#invoice の send_file filename (items_override + application_date_override 追加版): year/month は to_i 済み、category は fixed list 想定。偽陽性"
+      "fingerprint": "a1c5ced22231b4c9806d625cc4ccf0eed4ee235fd9e2584c856ef366d299adba",
+      "note": "exports#invoice の send_file filename (issuer_override 分岐 + 末日デフォルト版): year/month は to_i 済み、category は fixed list 想定。偽陽性"
     },
     {
       "fingerprint": "5a988c46082fee27cfbc065ed92756db11dc1e76dc40852e5418c3810357c147",
@@ -51,10 +39,6 @@
     {
       "fingerprint": "a95ea1e4e8a6fff096287dc6faf6544db9ff8d7d3135845283c7f1f2bed4f08b",
       "note": "exports#purchase_order の send_file filename: order_no は permit + フォーム固定値 想定。偽陽性"
-    },
-    {
-      "fingerprint": "07340b7af8628534665d6e60268982e46e996d13b014200f8ce6424d2ad0f5e6",
-      "note": "exports#expense_pdf の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
     }
   ],
   "updated": "2026-04-29 00:00:00 +0900",
