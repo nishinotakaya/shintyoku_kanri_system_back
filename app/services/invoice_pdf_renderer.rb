@@ -127,9 +127,11 @@ class InvoicePdfRenderer
     issuer_setting = @issuer_setting
     client_name = @client_name_override || setting.client_name
     subject_text = @subject_override || setting.subject.to_s
-    # category=living で件名に「リビング」が無い場合は補完
-    if @category == "living" && !subject_text.include?("リビング")
-      subject_text = subject_text.empty? ? "リビング システム保守・開発" : "リビング システム保守・開発 #{subject_text}".strip
+    # category=living で件名に「タマリビング」が含まれていない場合は補完
+    # （西野が自分のリビング請求書を出す場合も、川村→ラボップ宛の場合も両方）
+    if @category == "living" && !subject_text.include?("タマリビング")
+      living_prefix = "タマリビング様 システム保守・開発"
+      subject_text = subject_text.empty? ? living_prefix : "#{living_prefix} #{subject_text}".strip
     end
 
     html_body = ERB.new(File.read(TEMPLATE)).result(binding)
