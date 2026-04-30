@@ -200,6 +200,27 @@ class GoogleSheetsExporter
     # 書式リクエスト
     requests = []
 
+    # ★ まず全範囲(A:I, 0〜2000行)の書式を白でリセット
+    # clear_values は値しか消さないため、過去の背景色が残ってしまうのを防ぐ
+    requests << {
+      repeat_cell: {
+        range: {
+          sheet_id: sheet_id,
+          start_row_index: 0,
+          end_row_index: 2000,
+          start_column_index: 0,
+          end_column_index: 9
+        },
+        cell: {
+          user_entered_format: {
+            background_color: COLORS[:white],
+            text_format: { foreground_color: { red: 0, green: 0, blue: 0 }, bold: false }
+          }
+        },
+        fields: "userEnteredFormat(backgroundColor,textFormat)"
+      }
+    }
+
     # 凡例行に背景色（最上部 2 行）
     legend_rows.each do |(row_idx, color_key)|
       requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[color_key], true)
