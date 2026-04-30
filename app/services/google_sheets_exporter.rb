@@ -90,11 +90,9 @@ class GoogleSheetsExporter
     flag_rows = [] # [row_index, color_key]
     legend_rows = [] # 凡例ハイライト [row_index, color_key]
 
-    # 凡例 2 行（最上部）
-    legend_rows << [ rows.size, :flag_today ]
-    rows << [ "", "■ 本日行うタスク（チェック済み）", "", "", "", "", "", "", "" ]
-    legend_rows << [ rows.size, :flag_previous ]
-    rows << [ "", "■ 前回行ったタスク（チェック済み・ピンク） / ■ 両方=紫", "", "", "", "", "", "", "" ]
+    # 凡例（最上部）: 両方チェック時のみ紫
+    legend_rows << [ rows.size, :flag_both ]
+    rows << [ "", "■ 紫 = 「本日行う」+「前回行った」両方チェック", "", "", "", "", "", "", "" ]
     rows << []
 
     # ヘッダ
@@ -124,7 +122,7 @@ class GoogleSheetsExporter
     push_section.call("【処理中】", :section_wip, wip_tasks)
     push_section.call("【未対応】", :section_todo, todo_tasks)
 
-    write_and_format(sheet_name, rows, section_rows, header_row_offset: 3, flag_rows: flag_rows, legend_rows: legend_rows)
+    write_and_format(sheet_name, rows, section_rows, header_row_offset: 2, flag_rows: flag_rows, legend_rows: legend_rows)
   end
 
   def write_completed_sheet(sheet_name, tasks)
@@ -132,10 +130,8 @@ class GoogleSheetsExporter
     flag_rows = []
     legend_rows = []
 
-    legend_rows << [ rows.size, :flag_today ]
-    rows << [ "", "■ 本日行うタスク（チェック済み）", "", "", "", "", "", "", "" ]
-    legend_rows << [ rows.size, :flag_previous ]
-    rows << [ "", "■ 前回行ったタスク（チェック済み・ピンク） / ■ 両方=紫", "", "", "", "", "", "", "" ]
+    legend_rows << [ rows.size, :flag_both ]
+    rows << [ "", "■ 紫 = 「本日行う」+「前回行った」両方チェック", "", "", "", "", "", "", "" ]
     rows << []
 
     rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
@@ -150,16 +146,13 @@ class GoogleSheetsExporter
       rows << task_row(t)
     end
 
-    write_and_format(sheet_name, rows, section_rows, header_row_offset: 3, flag_rows: flag_rows, legend_rows: legend_rows)
+    write_and_format(sheet_name, rows, section_rows, header_row_offset: 2, flag_rows: flag_rows, legend_rows: legend_rows)
   end
 
-  # 「本日 + 前回」 → 紫、「本日のみ」 → 黄、「前回のみ」 → 水色、なし → nil
+  # 「本日 + 前回」両方チェック時のみ紫。それ以外は色を付けない（白）
   def task_flag_color(t)
-    case [ t.do_today, t.did_previous ]
-    when [ true, true ]  then :flag_both
-    when [ true, false ] then :flag_today
-    when [ false, true ] then :flag_previous
-    end
+    return :flag_both if t.do_today && t.did_previous
+    nil
   end
 
   def task_row(t)
