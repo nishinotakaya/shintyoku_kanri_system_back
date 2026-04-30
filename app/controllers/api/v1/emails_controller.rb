@@ -66,6 +66,8 @@ module Api
         end
 
         attachments = []
+        # 申請日: 申請者の application_date_override は申請者が「申請した日」が入りがちなので
+        # ラボップ宛発行時は override を使わず、発行者(西野)の月別設定（無ければ末日）を採用する
         invoices_for_pdf.each do |invoice|
           invoice_pdf = InvoicePdfRenderer.new(
             invoice.user,
@@ -75,8 +77,7 @@ module Api
             total_override: invoice.total_override,
             item_label_override: invoice.item_label_override,
             subject_override: invoice.subject_override,
-            items_override: invoice.items_override,
-            application_date: invoice.application_date_override
+            items_override: invoice.items_override
           ).call
           attachments << { filename: invoice_filename(invoice), content_type: "application/pdf", body: File.binread(invoice_pdf) }
         end
@@ -88,16 +89,14 @@ module Api
         expense_pdfs.each do |expense|
           exp_pdf = ExpensePdfRenderer.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
-            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
-            application_date: expense.application_date_override
+            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user
           ).call
           attachments << { filename: expense_pdf_filename(expense), content_type: "application/pdf", body: File.binread(exp_pdf) }
         end
         expense_xlsxs.each do |expense|
           exp_xlsx = ExpenseExporter.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
-            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
-            application_date: expense.application_date_override
+            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user
           ).call
           attachments << { filename: expense_xlsx_filename(expense), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
         end

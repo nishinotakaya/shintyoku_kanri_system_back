@@ -43,7 +43,13 @@ module Api
         # admin が as_user_id で他ユーザとして閲覧している時は、その user 視点の請求書を素で出す
         viewer = viewing_user
         target_user, client_override, issuer_override, submission = resolve_invoice_target(viewer: viewer, year: year, month: month, category: cat)
-        application_date = submission&.application_date_override || parse_application_date
+        # ラボップ宛 (issuer_override) のときは submission.application_date_override（川村が申請した日が入りがち）
+        # を使わず、明示パラメータ or 発行者(西野)の設定 → 末日 を採用する
+        application_date = if issuer_override
+                             parse_application_date
+        else
+                             submission&.application_date_override || parse_application_date
+        end
         path = InvoicePdfRenderer.new(
           target_user,
           year: year, month: month, category: cat,
