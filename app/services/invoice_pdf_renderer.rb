@@ -127,9 +127,9 @@ class InvoicePdfRenderer
     issuer_setting = @issuer_setting
     client_name = @client_name_override || setting.client_name
     subject_text = @subject_override || setting.subject.to_s
-    # category=living で件名に「タマリビング」が含まれていない場合は固定文言で置き換え
-    # （西野自身のリビング請求書も、川村→ラボップ宛も両方）
-    if @category == "living" && !subject_text.include?("タマリビング")
+    # category=living は件名を固定: 「タマリビング様 システム保守・開発」
+    # （DB に重複文字が保存されていても、新規生成時に必ず正しい形にする）
+    if @category == "living"
       subject_text = "タマリビング様 システム保守・開発"
     end
 
