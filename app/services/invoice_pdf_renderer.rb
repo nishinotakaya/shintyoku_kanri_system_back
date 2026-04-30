@@ -127,6 +127,10 @@ class InvoicePdfRenderer
     issuer_setting = @issuer_setting
     client_name = @client_name_override || setting.client_name
     subject_text = @subject_override || setting.subject.to_s
+    # category=living で件名に「リビング」が無い場合は補完
+    if @category == "living" && !subject_text.include?("リビング")
+      subject_text = subject_text.empty? ? "リビング システム保守・開発" : "リビング システム保守・開発 #{subject_text}".strip
+    end
 
     html_body = ERB.new(File.read(TEMPLATE)).result(binding)
 
