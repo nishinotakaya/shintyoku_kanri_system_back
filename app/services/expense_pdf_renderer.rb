@@ -22,7 +22,8 @@ class ExpensePdfRenderer
 
   def call
     period = @user.period_for(@year, @month)
-    application_date = @application_date || @user.application_date_for(@year, @month)
+    # 申請日: 発行者(issuer)の monthly_settings を優先（西野が川村の立替金 PDF を発行する場合は西野の末日設定）
+    application_date = @application_date || @issuer_user.application_date_for(@year, @month) || @user.application_date_for(@year, @month)
     setting = @user.invoice_setting_for(@category || "wings")
     issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
     issuer_user = @issuer_user

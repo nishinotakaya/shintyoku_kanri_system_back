@@ -60,7 +60,8 @@ class ExpenseExporter
     author = @issuer_user.display_name
     cells << { row: HEADER_AUTHOR_ROW, col: HEADER_AUTHOR_COL, value: author } if author.present?
     period = @user.period_for(@year, @month)
-    app_date = @application_date || @user.application_date_for(@year, @month)
+    # 申請日: 発行者(issuer)の monthly_settings を優先（西野が川村の Excel を発行する場合は西野の末日設定を使う）
+    app_date = @application_date || @issuer_user.application_date_for(@year, @month) || @user.application_date_for(@year, @month)
     cells << { row: HEADER_PERIOD_ROW, col: HEADER_PERIOD_LABEL_COL, value: "申請日" }
     cells << { row: HEADER_PERIOD_ROW, col: HEADER_PERIOD_COL, value: app_date.iso8601, type: "date" }
 

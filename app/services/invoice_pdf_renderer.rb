@@ -97,7 +97,8 @@ class InvoicePdfRenderer
     issue_date = period.last
     due_date = calc_due_date(issue_date)
     invoice_no = "#{issue_date.strftime('%Y%m%d')}#{format('%04d', @user.id)}"
-    application_date = @application_date || @user.application_date_for(@year, @month)
+    # 申請日: 発行者(issuer)の monthly_settings を優先（西野が川村の請求書を発行する場合は西野の末日設定）
+    application_date = @application_date || @issuer_user.application_date_for(@year, @month) || @user.application_date_for(@year, @month)
 
     {
       period: { from: period.first, to: period.last },
