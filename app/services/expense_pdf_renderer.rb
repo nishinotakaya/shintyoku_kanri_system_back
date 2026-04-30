@@ -50,7 +50,8 @@ class ExpensePdfRenderer
     total = subtotal # 税込み金額なので消費税行なし
 
     issue_date = period.last
-    due_date = calc_due_date(issue_date, setting)
+    # 発行者(issuer)の設定を優先（西野が川村の立替金 PDF を発行する場合は西野の設定）
+    due_date = calc_due_date(issue_date, issuer_setting || setting)
     invoice_no = "#{issue_date.strftime('%Y%m%d')}#{format('%04d', @user.id)}"
 
     user = @user
@@ -86,7 +87,12 @@ class ExpensePdfRenderer
     when /\Adays_(\d+)\z/
       issue_date + $1.to_i
     else
-      issue_date + (setting.payment_due_days || 35)
+      # デフォルトは翌月末日 (payment_due_days が指定されていればそれを優先)
+      if setting.respond_to?(:payment_due_days) && setting.payment_due_days.present?
+        issue_date + setting.payment_due_days
+      else
+        m = issue_date >> 1; Date.new(m.year, m.month, -1)
+      end
     end
   end
 end

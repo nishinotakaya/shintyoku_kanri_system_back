@@ -154,24 +154,30 @@ class InvoicePdfRenderer
   #   "month_end"    → 当月末日
   #   nil/空         → 従来の payment_due_days で計算
   def calc_due_date(issue_date)
-    due_type = @setting.respond_to?(:payment_due_type) ? @setting.payment_due_type : nil
+    # 発行者(issuer)の設定を優先（西野が川村のラボップ宛を発行する場合は西野の設定）
+    setting = @issuer_setting || @setting
+    due_type = setting.respond_to?(:payment_due_type) ? setting.payment_due_type : nil
 
     case due_type
     when "next_month_end"
-      # 来月末日
       next_month = issue_date >> 1
       Date.new(next_month.year, next_month.month, -1)
     when "next_next_month_end"
-      # 再来月末日
       m = issue_date >> 2
       Date.new(m.year, m.month, -1)
     when "month_end"
-      # 当月末日
       Date.new(issue_date.year, issue_date.month, -1)
     when /\Adays_(\d+)\z/
       issue_date + $1.to_i
     else
-      issue_date + (@setting.payment_due_days || 35)
+      # デフォルトを「翌月末日」に変更（payment_due_days 35 だと末日にならないケース対策）
+      due_days = setting.respond_to?(:payment_due_days) ? setting.payment_due_days : nil
+      if due_days.present?
+        issue_date + due_days
+      else
+        next_month = issue_date >> 1
+        Date.new(next_month.year, next_month.month, -1)
+      end
     end
   end
 end

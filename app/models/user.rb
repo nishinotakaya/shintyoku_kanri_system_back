@@ -15,7 +15,8 @@ class User < ApplicationRecord
   has_many :purchase_order_histories, dependent: :destroy
 
   def application_date_for(year, month)
-    monthly_settings.find_by(year: year, month: month)&.application_date || Date.current
+    # 設定が無い場合は対象月の末日をデフォルトとする
+    monthly_settings.find_by(year: year, month: month)&.application_date || Date.new(year.to_i, month.to_i, -1)
   end
 
   # 管理者判定: 表示名に「西野」を含む、または email が ADMIN_EMAILS に含まれる
