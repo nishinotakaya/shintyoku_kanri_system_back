@@ -18,10 +18,20 @@ class EmailDrafter
     @context = context.symbolize_keys
   end
 
+  # 固定テンプレートを使う種別。AI には文章生成ではなく「誤字脱字校正」だけ依頼
+  FIXED_TEMPLATE_KINDS = %i[labop_invoice labop_expense self_invoice].freeze
+
   def draft
     api_key = ENV["OPENAI_API_KEY"].to_s
-    return fallback if api_key.blank?
 
+    # 請求書系メールは固定テンプレート → AI で誤字校正のみ
+    if FIXED_TEMPLATE_KINDS.include?(@kind)
+      fixed = fallback
+      return fixed if api_key.blank?
+      return proofread_typos(api_key, fixed) || fixed
+    end
+
+    return fallback if api_key.blank?
     sys = system_prompt
     usr = user_prompt
     body = call_openai(api_key, sys, usr)
@@ -29,6 +39,38 @@ class EmailDrafter
   rescue => e
     Rails.logger.warn("[EmailDrafter] error: #{e.class}: #{e.message}")
     fallback
+  end
+
+  # 固定テンプレートを AI に渡し、誤字脱字のみ修正させる。
+  # 構造・改行・記号・数字・宛名は変更不可。失敗 or 大幅改変は nil で fallback させる。
+  def proofread_typos(api_key, fixed)
+    sys = <<~SYS
+      あなたは厳格な日本語ビジネス文書の校正者です。与えられた件名・本文の誤字脱字・タイプミスのみ修正してください。
+      ★絶対に変えないルール:
+      - 文の構造・敬語表現・語順
+      - 改行と空行の位置
+      - 句読点の位置
+      - 数字、通貨記号「¥」、カンマ
+      - 宛名行・添付に関する記述・件名の固定句
+      誤字が無ければ入力をそのまま返してください。出力は厳密に JSON のみ:
+        {"subject": "件名", "body": "本文"}
+    SYS
+    usr = <<~USR
+      件名:
+      #{fixed[:subject]}
+
+      本文:
+      #{fixed[:body]}
+    USR
+    res = call_openai(api_key, sys, usr)
+    parsed = parse(res)
+    return nil unless parsed
+    # 安全策: 文字数が大幅に変わったら採用しない (±20% 以上ずれたら fallback)
+    return nil if parsed[:body].length > fixed[:body].length * 1.2 || parsed[:body].length < fixed[:body].length * 0.8
+    parsed
+  rescue => e
+    Rails.logger.warn("[EmailDrafter] proofread error: #{e.class}: #{e.message}")
+    nil
   end
 
   private
@@ -143,38 +185,15 @@ class EmailDrafter
   def fallback
     case @kind
     when :labop_invoice, :labop_expense
-      kind_label = @kind == :labop_expense ? "立替金" : "請求書"
-      sender = @context[:sender_name].to_s
+      # 一括送付: 申請者(applicant) ベースで件名生成（例: 川村Tama案件）
+      applicant_surname = @context[:applicant_name].to_s.split(/[、,\s　]/).reject(&:empty?).first.to_s
+      applicant_surname = "申請者" if applicant_surname.empty?
+      cat_label = @context[:category_label].to_s.presence || ""
       invoice_total = @context[:total].to_i
       expense_total = @context[:expense_total].to_i
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
-      fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
-      recipient_raw = (@context[:recipient_name].to_s.presence || "御中")
-      recipient_line = recipient_raw.end_with?("御中") ? recipient_raw : "#{recipient_raw} 様"
-      {
-        subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{kind_label}送付",
-        body: <<~BODY
-          株式会社ラボップ #{recipient_line}
-
-          いつもお世話になっております。#{sender}でございます。
-          #{@context[:year]}年#{@context[:month]}月分の#{kind_label}関連資料を送付いたします。
-
-          ・請求書合計（税込）: #{fmt.call(invoice_total)}
-          ・立替金合計        : #{fmt.call(expense_total)}
-          ・総額              : #{fmt.call(grand_total)}
-
-          添付ファイル:
-            ・ラボップ宛 請求書 PDF
-            ・立替金 PDF
-            ・立替金 Excel
-
-          ご確認のほどよろしくお願いいたします。
-          ご不明点ございましたら、ご連絡ください。
-
-          敬具
-          #{sender}
-        BODY
-      }
+      include_expense = @context[:expense_count].to_i > 0 && expense_total > 0
+      build_invoice_email(name_for_subject: applicant_surname, cat_label: cat_label, invoice_total: invoice_total, expense_total: expense_total, grand_total: grand_total, include_expense: include_expense)
     when :purchase_order
       sender = @context[:sender_name].to_s
       {
@@ -199,41 +218,57 @@ class EmailDrafter
       invoice_total = @context[:total].to_i
       expense_total = @context[:expense_total].to_i
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
-      fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
-      kind_phrase = include_expense ? "請求書および立替金資料" : "請求書"
-      attachments_block = if include_expense
-        "添付ファイル:\n  ・請求書 PDF\n  ・立替金 PDF\n  ・立替金 Excel"
-      else
-        "添付ファイル: 請求書 PDF"
-      end
-      amount_block = if include_expense
-        "・請求金額（税込）: #{fmt.call(invoice_total)}\n・立替金合計        : #{fmt.call(expense_total)}\n・総額              : #{fmt.call(grand_total)}"
-      else
-        "・請求金額（税込）: #{fmt.call(invoice_total)}"
-      end
-      recipient = (@context[:recipient_name].to_s.presence || "御中")
-      recipient_with_honorific = recipient.end_with?("御中") ? recipient : "#{recipient} 様"
-      {
-        subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{sender_surname}#{cat_label}案件 #{kind_phrase}送付の件",
-        body: <<~BODY
-          #{recipient_with_honorific}
-
-          いつもお世話になっております。#{sender}でございます。
-          #{@context[:year]}年#{@context[:month]}月分（#{cat_label}）の#{kind_phrase}を送付いたします。
-
-          #{amount_block}
-
-          #{attachments_block}
-
-          ご確認のほどよろしくお願いいたします。
-          ご不明点ございましたら、ご連絡ください。
-
-          敬具
-          #{sender}
-        BODY
-      }
+      build_invoice_email(name_for_subject: sender_surname, cat_label: cat_label, invoice_total: invoice_total, expense_total: expense_total, grand_total: grand_total, include_expense: include_expense)
     else
       { subject: "送付の件", body: "ご確認のほどよろしくお願いいたします。" }
     end
+  end
+
+  # 請求書送付メールの固定テンプレート (self_invoice / labop_invoice 共通)
+  # 件名: 【ご請求】{year}年{month}月分 {name}{cat}案件 ...送付の件
+  # 本文: 株式会社ラボップ 御中 〜 ご不明点がございましたら、ご連絡ください。
+  def build_invoice_email(name_for_subject:, cat_label:, invoice_total:, expense_total:, grand_total:, include_expense:)
+    fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
+
+    # 宛名行: 「株式会社ラボップ 御中」が無ければ補完して整形
+    recipient_raw = @context[:recipient_name].to_s.strip
+    recipient_raw = "株式会社ラボップ 御中" if recipient_raw.empty?
+    recipient_line = if recipient_raw.start_with?("株式会社")
+      recipient_raw.end_with?("御中") ? recipient_raw : "#{recipient_raw} 様"
+    else
+      recipient_raw.end_with?("御中") ? "株式会社ラボップ #{recipient_raw}" : "株式会社ラボップ #{recipient_raw} 様"
+    end
+
+    kind_phrase_subject = include_expense ? "請求書および立替金資料送付の件" : "請求書送付の件"
+    kind_phrase_body    = include_expense ? "請求書および立替金資料" : "請求書"
+
+    cat_block = cat_label.empty? ? "" : "#{cat_label}案件の"
+    subject_cat_block = cat_label.empty? ? "" : "#{cat_label}案件 "
+
+    amount_block = if include_expense
+      <<~AMT.strip
+        請求金額（税込）は #{fmt.call(invoice_total)}
+        立替金合計は #{fmt.call(expense_total)}、
+        総額は #{fmt.call(grand_total)} となります。
+      AMT
+    else
+      "請求金額（税込）は #{fmt.call(invoice_total)} となります。"
+    end
+
+    {
+      subject: "【ご請求】#{@context[:year]}年#{@context[:month]}月分 #{name_for_subject}#{subject_cat_block}#{kind_phrase_subject}",
+      body: <<~BODY
+        #{recipient_line}
+
+        お世話になっております。
+
+        #{cat_block}#{@context[:year]}年#{@context[:month]}月分の#{kind_phrase_body}を送付いたします。
+        添付ファイルをご確認ください。
+
+        #{amount_block}
+
+        ご不明点がございましたら、ご連絡ください。
+      BODY
+    }
   end
 end

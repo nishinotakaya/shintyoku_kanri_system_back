@@ -21,9 +21,10 @@ module Api
         invoice_total = invoices.sum { |i| i.total_override || invoice_calc_total(i) }
         expense_total = expenses.sum { |e| expense_calc_total(e) }
         ctx = {
-          recipient_name: params[:recipient_name].presence || "大隅",
+          recipient_name: params[:recipient_name].presence || "株式会社ラボップ 御中",
           year: invoices.first&.year || expenses.first&.year,
           month: invoices.first&.month || expenses.first&.month,
+          category_label: CATEGORY_LABELS[(invoices.first&.category || expenses.first&.category).to_s] || (invoices.first&.category || expenses.first&.category).to_s,
           total: invoice_total,
           expense_total: expense_total,
           grand_total: invoice_total + expense_total,
