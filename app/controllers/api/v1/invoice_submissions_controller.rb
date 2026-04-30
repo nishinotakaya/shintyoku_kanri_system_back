@@ -22,27 +22,31 @@ module Api
       def create
         kind = params[:kind].to_s.presence || "invoice"
         kind = "invoice" unless InvoiceSubmission::KINDS.include?(kind)
+        year = params[:year].to_i
+        month = params[:month].to_i
+        category = params[:category].to_s.presence || "wings"
         # admin (西野) が自分の申請を出した場合は即座に approved にする (自己承認)
-        # → 一括送付モーダルにそのまま含められる
         auto_approve = current_user.admin?
-        record = InvoiceSubmission.new(
-          user: current_user,
-          year: params[:year].to_i,
-          month: params[:month].to_i,
-          category: params[:category].to_s.presence || "wings",
-          kind: kind,
+
+        # 同一ユーザー × 年月 × カテゴリ × kind は一意。既に存在すれば「再申請」として上書き
+        record = InvoiceSubmission.find_or_initialize_by(
+          user: current_user, year: year, month: month, category: category, kind: kind
+        )
+        is_resubmit = record.persisted?
+        record.assign_attributes(
           note: params[:note].to_s.presence,
           status: auto_approve ? "approved" : "pending",
           reviewer_id: auto_approve ? current_user.id : nil,
-          reviewed_at: auto_approve ? Time.current : nil
+          reviewed_at: auto_approve ? Time.current : nil,
+          submitted_at: Time.current
         )
         record.save!
 
         # 申請通知 (LINE Messaging API → 西野)。失敗してもレスポンスには影響させない。
-        # 自己承認時 (admin) は通知不要なのでスキップ。
+        # 自己承認時 (admin) は通知不要、再申請も再通知（西野に再確認を促す）
         notify_admin_on_create(record) unless auto_approve
 
-        render json: serialize(record)
+        render json: serialize(record).merge(resubmitted: is_resubmit)
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
