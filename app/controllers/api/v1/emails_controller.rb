@@ -54,17 +54,19 @@ module Api
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
         # 添付タイプ別に id 配列を受ける（旧 invoice_submission_ids/expense_submission_ids も後方互換で受理）
         invoice_pdf_ids = Array(params[:invoice_pdf_submission_ids].presence || params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
+        wr_xlsx_ids = Array(params[:work_report_xlsx_submission_ids].presence || params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
         expense_pdf_ids = Array(params[:expense_pdf_submission_ids].presence || params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
         expense_xlsx_ids = Array(params[:expense_xlsx_submission_ids].presence || params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
-        invoices = InvoiceSubmission.where(id: invoice_pdf_ids).where(kind: "invoice").approved
+        invoices_for_pdf = InvoiceSubmission.where(id: invoice_pdf_ids).where(kind: "invoice").approved
+        invoices_for_wr = InvoiceSubmission.where(id: wr_xlsx_ids).where(kind: "invoice").approved
         expense_pdfs = InvoiceSubmission.where(id: expense_pdf_ids).where(kind: "expense").approved
         expense_xlsxs = InvoiceSubmission.where(id: expense_xlsx_ids).where(kind: "expense").approved
-        if invoices.empty? && expense_pdfs.empty? && expense_xlsxs.empty?
+        if invoices_for_pdf.empty? && invoices_for_wr.empty? && expense_pdfs.empty? && expense_xlsxs.empty?
           return render(json: { error: "送付対象が空です" }, status: :unprocessable_entity)
         end
 
         attachments = []
-        invoices.each do |invoice|
+        invoices_for_pdf.each do |invoice|
           invoice_pdf = InvoicePdfRenderer.new(
             invoice.user,
             year: invoice.year, month: invoice.month, category: invoice.category,
@@ -77,8 +79,9 @@ module Api
             application_date: invoice.application_date_override
           ).call
           attachments << { filename: invoice_filename(invoice), content_type: "application/pdf", body: File.binread(invoice_pdf) }
-
-          # 業務報告 Excel (申請者データそのまま) も別添付として同梱
+        end
+        invoices_for_wr.each do |invoice|
+          # 業務報告 Excel (申請者データそのまま) — checkbox で個別に選択可能
           wr_path = WorkReportExporter.new(invoice.user, year: invoice.year, month: invoice.month, category: invoice.category).call
           attachments << { filename: work_report_filename(invoice), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(wr_path) }
         end
