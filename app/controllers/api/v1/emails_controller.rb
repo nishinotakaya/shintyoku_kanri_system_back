@@ -119,9 +119,12 @@ module Api
       def self_invoice_draft
         year, month = parse_month
         cat = params[:category].presence || "wings"
-        include_expense = ActiveModel::Type::Boolean.new.cast(params[:include_expense])
+        include_expense_raw = ActiveModel::Type::Boolean.new.cast(params[:include_expense])
         invoice_total = invoice_calc_total_for(current_user, year, month, cat)
-        expense_total = include_expense ? expense_calc_total_for(current_user, year, month, cat) : 0
+        available_expense_total = expense_calc_total_for(current_user, year, month, cat)
+        # 立替金が 0 円なら強制的に同梱しない
+        include_expense = include_expense_raw && available_expense_total > 0
+        expense_total = include_expense ? available_expense_total : 0
         ctx = {
           recipient_name: params[:recipient_name].presence || "ご担当者",
           year: year, month: month,
@@ -132,7 +135,8 @@ module Api
           include_expense: include_expense,
           sender_name: current_user.display_name
         }
-        render json: EmailDrafter.draft(kind: :self_invoice, context: ctx)
+        drafted = EmailDrafter.draft(kind: :self_invoice, context: ctx)
+        render json: drafted.merge(available_expense_total: available_expense_total)
       end
 
       # POST /api/v1/emails/self_invoice_send
@@ -140,8 +144,12 @@ module Api
       def self_invoice_send
         year, month = parse_month
         cat = params[:category].presence || "wings"
-        include_expense = ActiveModel::Type::Boolean.new.cast(params[:include_expense])
+        include_expense_raw = ActiveModel::Type::Boolean.new.cast(params[:include_expense])
         return render(json: { error: "宛先が空です" }, status: :unprocessable_entity) if params[:to].to_s.strip.empty?
+
+        # 立替金が 0 円なら強制的に同梱しない（PDF/Excel どちらも添付しない）
+        expense_total = expense_calc_total_for(current_user, year, month, cat)
+        include_expense = include_expense_raw && expense_total > 0
 
         invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
           application_date: parse_application_date).call
