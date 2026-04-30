@@ -14,8 +14,8 @@ class GoogleSheetsExporter
     completed:    { red: 0.5, green: 0.85, blue: 0.5 },    # 濃い緑（完了）
     # 行マーキング: 「本日行う」「前回行った」「両方」
     flag_today:    { red: 1.00, green: 0.95, blue: 0.40 }, # 鮮やかな黄（本日行う）
-    flag_previous: { red: 0.70, green: 0.85, blue: 1.00 }, # 水色（前回行った）
-    flag_both:     { red: 0.85, green: 0.70, blue: 1.00 }, # 紫（両方）
+    flag_previous: { red: 1.00, green: 0.72, blue: 0.85 }, # ピンク（前回行った）— 処理済の緑と被らないよう変更
+    flag_both:     { red: 0.78, green: 0.55, blue: 1.00 }, # はっきりした紫（両方）
     white:        { red: 1.0, green: 1.0, blue: 1.0 }
   }.freeze
 
@@ -94,7 +94,7 @@ class GoogleSheetsExporter
     legend_rows << [ rows.size, :flag_today ]
     rows << [ "", "■ 本日行うタスク（チェック済み）", "", "", "", "", "", "", "" ]
     legend_rows << [ rows.size, :flag_previous ]
-    rows << [ "", "■ 前回行ったタスク（チェック済み） / ■ 両方=紫", "", "", "", "", "", "", "" ]
+    rows << [ "", "■ 前回行ったタスク（チェック済み・ピンク） / ■ 両方=紫", "", "", "", "", "", "", "" ]
     rows << []
 
     # ヘッダ
@@ -135,7 +135,7 @@ class GoogleSheetsExporter
     legend_rows << [ rows.size, :flag_today ]
     rows << [ "", "■ 本日行うタスク（チェック済み）", "", "", "", "", "", "", "" ]
     legend_rows << [ rows.size, :flag_previous ]
-    rows << [ "", "■ 前回行ったタスク（チェック済み） / ■ 両方=紫", "", "", "", "", "", "", "" ]
+    rows << [ "", "■ 前回行ったタスク（チェック済み・ピンク） / ■ 両方=紫", "", "", "", "", "", "", "" ]
     rows << []
 
     rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
