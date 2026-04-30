@@ -1,0 +1,6 @@
+ja:
+  companies:
+    labop:
+      name: "株式会社ラボップ"
+      honorific_default: "御中"
+      contact_default: "御中"

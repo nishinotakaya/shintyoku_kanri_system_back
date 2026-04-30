@@ -1,0 +1,11 @@
+ja:
+  invoice_submission:
+    categories:
+      wings: "Tama"
+      living: "リビング"
+      techleaders: "テックリーダーズ"
+      resystems: "REシステムズ"
+    kinds:
+      invoice: "請求書"
+      expense: "立替金"
+      work_report: "業務報告書"

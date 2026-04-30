@@ -3,12 +3,8 @@ module Api
     class EmailsController < BaseController
       # メール件名・本文・添付ファイル名 用のカテゴリラベル
       # 「wings」→ 社内的には「Tama」と呼ぶ運用なのでメール表示は「Tama」
-      CATEGORY_LABELS = {
-        "wings" => "Tama",
-        "living" => "リビング",
-        "techleaders" => "テックリーダーズ",
-        "resystems" => "REシステムズ"
-      }.freeze
+      # config/locales/invoice_submission/ja.yml に定義
+      CATEGORY_LABELS = I18n.t("invoice_submission.categories").stringify_keys.freeze
 
       # POST /api/v1/emails/labop_draft
       # 複数の承認済 invoice + expense をまとめて送付するメールの件名/本文 下書き
@@ -21,7 +17,7 @@ module Api
         invoice_total = invoices.sum { |i| i.total_override || invoice_calc_total(i) }
         expense_total = expenses.sum { |e| expense_calc_total(e) }
         ctx = {
-          recipient_name: params[:recipient_name].presence || "株式会社ラボップ 御中",
+          recipient_name: params[:recipient_name].presence || "#{I18n.t("companies.labop.name")} #{I18n.t("companies.labop.honorific_default")}",
           year: invoices.first&.year || expenses.first&.year,
           month: invoices.first&.month || expenses.first&.month,
           category_label: CATEGORY_LABELS[(invoices.first&.category || expenses.first&.category).to_s] || (invoices.first&.category || expenses.first&.category).to_s,
@@ -67,7 +63,7 @@ module Api
           invoice_pdf = InvoicePdfRenderer.new(
             invoice.user,
             year: invoice.year, month: invoice.month, category: invoice.category,
-            client_name_override: "株式会社ラボップ",
+            client_name_override: I18n.t("companies.labop.name"),
             issuer_user_override: current_user,
             total_override: invoice.total_override,
             item_label_override: invoice.item_label_override,
@@ -84,13 +80,13 @@ module Api
         expenses.each do |expense|
           exp_pdf = ExpensePdfRenderer.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
-            client_name_override: "株式会社ラボップ", issuer_user_override: current_user,
+            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
             application_date: expense.application_date_override
           ).call
           attachments << { filename: expense_pdf_filename(expense), content_type: "application/pdf", body: File.binread(exp_pdf) }
           exp_xlsx = ExpenseExporter.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
-            client_name_override: "株式会社ラボップ", issuer_user_override: current_user,
+            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
             application_date: expense.application_date_override
           ).call
           attachments << { filename: expense_xlsx_filename(expense), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
@@ -155,7 +151,7 @@ module Api
         # 自身の請求書 → ラボップ宛で送付するので宛先は「株式会社ラボップ」固定
         invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
           application_date: parse_application_date,
-          client_name_override: "株式会社ラボップ").call
+          client_name_override: I18n.t("companies.labop.name")).call
         surname = current_user.display_name.to_s.split(/[\s　]/).first
         cat_label = CATEGORY_LABELS[cat] || cat
         attachments = [ { filename: "#{surname}_#{cat_label}_請求書_#{year}年_#{month}月分.pdf",
@@ -164,12 +160,12 @@ module Api
         if include_expense
           exp_pdf = ExpensePdfRenderer.new(current_user, year: year, month: month, category: cat,
             application_date: parse_application_date,
-            client_name_override: "株式会社ラボップ").call
+            client_name_override: I18n.t("companies.labop.name")).call
           attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.pdf",
                            content_type: "application/pdf", body: File.binread(exp_pdf) }
           exp_xlsx = ExpenseExporter.new(current_user, year: year, month: month, category: cat,
             application_date: parse_application_date,
-            client_name_override: "株式会社ラボップ").call
+            client_name_override: I18n.t("companies.labop.name")).call
           attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.xlsx",
                            content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                            body: File.binread(exp_xlsx) }

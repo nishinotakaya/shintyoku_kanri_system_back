@@ -94,7 +94,7 @@ class EmailDrafter
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
       sender_name = @context[:sender_name].to_s
       labop_recipient_raw = (@context[:recipient_name].to_s.presence || "御中")
-      labop_recipient = labop_recipient_raw.end_with?("御中") ? "株式会社ラボップ #{labop_recipient_raw}" : "株式会社ラボップ #{labop_recipient_raw}様"
+      labop_recipient = labop_recipient_raw.end_with?("御中") ? "#{I18n.t("companies.labop.name")} #{labop_recipient_raw}" : "#{I18n.t("companies.labop.name")} #{labop_recipient_raw}様"
       <<~PROMPT
         以下情報で、#{labop_recipient} 宛に
         #{kind_label}と立替金資料を送付するメール下書きを作って。
@@ -232,11 +232,11 @@ class EmailDrafter
 
     # 宛名行: 「株式会社ラボップ 御中」が無ければ補完して整形
     recipient_raw = @context[:recipient_name].to_s.strip
-    recipient_raw = "株式会社ラボップ 御中" if recipient_raw.empty?
+    recipient_raw = "#{I18n.t("companies.labop.name")} #{I18n.t("companies.labop.honorific_default")}" if recipient_raw.empty?
     recipient_line = if recipient_raw.start_with?("株式会社")
       recipient_raw.end_with?("御中") ? recipient_raw : "#{recipient_raw} 様"
     else
-      recipient_raw.end_with?("御中") ? "株式会社ラボップ #{recipient_raw}" : "株式会社ラボップ #{recipient_raw} 様"
+      recipient_raw.end_with?("御中") ? "#{I18n.t("companies.labop.name")} #{recipient_raw}" : "#{I18n.t("companies.labop.name")} #{recipient_raw} 様"
     end
 
     kind_phrase_subject = include_expense ? "請求書および立替金資料送付の件" : "請求書送付の件"

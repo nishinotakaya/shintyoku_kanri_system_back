@@ -193,7 +193,7 @@ module Api
         return [ viewer, nil, nil, nil ] unless submission.year == year && submission.month == month
         return [ viewer, nil, nil, nil ] if category.present? && submission.category != category
 
-        [ submission.user, "株式会社ラボップ", current_user, submission ]
+        [ submission.user, I18n.t("companies.labop.name"), current_user, submission ]
       end
 
       # 立替金 (expense) 用: 承認済 expense submission を指定された場合、
@@ -209,7 +209,7 @@ module Api
         return [ viewer, nil, nil, nil ] unless submission.year == year && submission.month == month
         return [ viewer, nil, nil, nil ] if category.present? && submission.category != category
 
-        [ submission.user, "株式会社ラボップ", current_user, submission ]
+        [ submission.user, I18n.t("companies.labop.name"), current_user, submission ]
       end
     end
   end

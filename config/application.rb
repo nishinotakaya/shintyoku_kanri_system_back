@@ -34,6 +34,9 @@ module RailsBackend
     # in config/environments, which are processed later.
     #
     config.time_zone = "Asia/Tokyo"
+    config.i18n.default_locale = :ja
+    config.i18n.available_locales = [ :ja, :en ]
+    config.i18n.load_path += Dir[Rails.root.join("config/locales/**/*.yml")]
     # DB の DATETIME 解釈は UTC のまま（Rails 標準）。アプリ内の Time は JST で扱う
     # config.eager_load_paths << Rails.root.join("extras")
 
