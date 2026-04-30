@@ -86,7 +86,9 @@ module Api
           wr_path = WorkReportExporter.new(invoice.user, year: invoice.year, month: invoice.month, category: invoice.category).call
           attachments << { filename: work_report_filename(invoice), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(wr_path) }
         end
+        # 立替金合計 0 円の月は PDF/Excel どちらも添付しない（空の精算書を送らない）
         expense_pdfs.each do |expense|
+          next if expense_calc_total(expense) <= 0
           exp_pdf = ExpensePdfRenderer.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user
@@ -94,6 +96,7 @@ module Api
           attachments << { filename: expense_pdf_filename(expense), content_type: "application/pdf", body: File.binread(exp_pdf) }
         end
         expense_xlsxs.each do |expense|
+          next if expense_calc_total(expense) <= 0
           exp_xlsx = ExpenseExporter.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user
