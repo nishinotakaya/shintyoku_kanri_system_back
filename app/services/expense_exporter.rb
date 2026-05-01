@@ -41,7 +41,7 @@ class ExpenseExporter
   }.freeze
 
   def initialize(user, year:, month:, application_date: nil, category: nil,
-                 client_name_override: nil, issuer_user_override: nil)
+                 client_name_override: nil, issuer_user_override: nil, merged_users: nil)
     @user = user
     @year = year
     @month = month
@@ -49,6 +49,8 @@ class ExpenseExporter
     @category = category.presence
     @client_name_override = client_name_override.presence
     @issuer_user = issuer_user_override || user
+    # 集約モード: @user に加え @merged_users の expense もまとめる（案 A 通常立替金 1 通用）
+    @merged_users = Array(merged_users).reject { |u| u.id == user.id }
   end
 
   DATA_END_ROW = 26 # テンプレのサンプルデータが入っている最終データ行
@@ -77,16 +79,31 @@ class ExpenseExporter
       end
     end
 
-    scope = @user.expenses.in_range(period)
-    scope = scope.where(category: @category) if @category
-    # 会社負担対象のみ請求書 Excel に含める
-    scope = scope.where(company_burden: true)
-    scope.each_with_index do |e, i|
+    # 集約モード: @user + @merged_users の expense をまとめる
+    target_users = [ @user, *@merged_users ].uniq
+    multi_user = target_users.size > 1
+    user_expense_pairs = []
+    target_users.each do |u|
+      u_period = u.period_for(@year, @month)
+      u_scope = u.expenses.in_range(u_period)
+      u_scope = u_scope.where(category: @category) if @category
+      u_scope = u_scope.where(company_burden: true) # 会社負担対象のみ
+      u_scope.each { |e| user_expense_pairs << [ u, e ] }
+    end
+
+    user_expense_pairs.each_with_index do |(u, e), i|
       row = DATA_START_ROW + i
 
       cells << { row: row, col: COL_NO,      value: i + 1 }
       cells << { row: row, col: COL_DATE,    value: e.expense_date.iso8601, type: "date" }
-      cells << { row: row, col: COL_PURPOSE, value: e.purpose }
+      # 複数ユーザー集約時のみ purpose 先頭にユーザー名を付ける（行ごとに誰の expense か分かるように）
+      purpose_text = if multi_user && u.display_name.present?
+                       prefix = u.display_name.to_s.strip
+                       e.purpose.to_s.start_with?(prefix) ? e.purpose.to_s : "[#{prefix}] #{e.purpose}"
+      else
+                       e.purpose
+      end
+      cells << { row: row, col: COL_PURPOSE, value: purpose_text }
 
       TRANSPORT_COL.each_value { |c| cells << { row: row, col: c, value: nil } }
       if (col = TRANSPORT_COL[e.transport_type])

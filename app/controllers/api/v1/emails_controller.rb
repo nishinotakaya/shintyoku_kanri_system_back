@@ -90,8 +90,15 @@ module Api
           wr_path = WorkReportExporter.new(invoice.user, year: invoice.year, month: invoice.month, category: invoice.category).call
           attachments << { filename: work_report_filename(invoice), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(wr_path) }
         end
-        # 立替金合計 0 円の月は PDF/Excel どちらも添付しない（空の精算書を送らない）
-        expense_pdfs.each do |expense|
+        # 立替金 PDF/Excel の振り分け（案 A）:
+        # - シェアラウンジ系 (subject_override or note に "シェアラウンジ" 含む) → 個別 PDF/Excel
+        # - 通常 → year × month × category で集約して 1 通の PDF/Excel
+        share_lounge_check = ->(s) { s.subject_override.to_s.include?("シェアラウンジ") || s.note.to_s.include?("シェアラウンジ") }
+
+        # ----- 立替金 PDF -----
+        sl_pdf_subs, regular_pdf_subs = expense_pdfs.to_a.partition { |s| share_lounge_check.call(s) }
+        # シェアラウンジは個別（合計0でも宛名固定で送付したい場合があるため、0チェックは外す）
+        sl_pdf_subs.each do |expense|
           next if expense_calc_total(expense) <= 0
           exp_pdf = ExpensePdfRenderer.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
@@ -99,13 +106,54 @@ module Api
           ).call
           attachments << { filename: expense_pdf_filename(expense), content_type: "application/pdf", body: File.binread(exp_pdf) }
         end
-        expense_xlsxs.each do |expense|
+        # 通常は (year,month,category) で集約 → 1 通
+        regular_pdf_subs.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
+          users = subs.map(&:user).uniq
+          # 集約時は実 expense 合計が 0 なら skip
+          total = users.sum { |u|
+            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).sum(:amount).to_i
+          }
+          next if total <= 0
+          primary = users.first
+          others = users.drop(1)
+          exp_pdf = ExpensePdfRenderer.new(
+            primary, year: y, month: m, category: c,
+            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
+            merged_users: others
+          ).call
+          surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
+          cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
+          fname = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.pdf"
+          attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
+        end
+
+        # ----- 立替金 Excel -----
+        sl_xlsx_subs, regular_xlsx_subs = expense_xlsxs.to_a.partition { |s| share_lounge_check.call(s) }
+        sl_xlsx_subs.each do |expense|
           next if expense_calc_total(expense) <= 0
           exp_xlsx = ExpenseExporter.new(
             expense.user, year: expense.year, month: expense.month, category: expense.category,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user
           ).call
           attachments << { filename: expense_xlsx_filename(expense), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
+        end
+        regular_xlsx_subs.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
+          users = subs.map(&:user).uniq
+          total = users.sum { |u|
+            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).sum(:amount).to_i
+          }
+          next if total <= 0
+          primary = users.first
+          others = users.drop(1)
+          exp_xlsx = ExpenseExporter.new(
+            primary, year: y, month: m, category: c,
+            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
+            merged_users: others
+          ).call
+          surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
+          cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
+          fname = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.xlsx"
+          attachments << { filename: fname, content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
         end
 
         Array(params[:extra_files]).each do |f|

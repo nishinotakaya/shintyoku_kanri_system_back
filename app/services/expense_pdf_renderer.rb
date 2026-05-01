@@ -10,7 +10,7 @@ class ExpensePdfRenderer
   SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
 
   def initialize(user, year:, month:, application_date: nil, category: nil,
-                 client_name_override: nil, issuer_user_override: nil)
+                 client_name_override: nil, issuer_user_override: nil, merged_users: nil)
     @user = user
     @year = year
     @month = month
@@ -18,6 +18,8 @@ class ExpensePdfRenderer
     @category = category.presence
     @client_name_override = client_name_override.presence
     @issuer_user = issuer_user_override || user
+    # 立替金集約モード: @user に加えて他ユーザーの expense もまとめる（案 A 通常立替金 1 通用）
+    @merged_users = Array(merged_users).reject { |u| u.id == user.id }
   end
 
   def call
@@ -28,24 +30,33 @@ class ExpensePdfRenderer
     issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
     issuer_user = @issuer_user
     client_name = @client_name_override || setting.client_name
-    scope = @user.expenses.in_range(period)
-    scope = scope.where(category: @category) if @category
-    # 会社負担対象のみ請求書に含める (#4: 川村のシェアラウンジ押上 5 回分のみ true 等)
-    scope = scope.where(company_burden: true)
-    expenses = scope.to_a
+    # 集約モード: @user に加え @merged_users の expense も取り込む（複数ユーザー 1 通の通常立替金）
+    target_users = [ @user, *@merged_users ].uniq
+    user_expense_pairs = []
+    target_users.each do |u|
+      u_period = u.period_for(@year, @month)
+      u_scope = u.expenses.in_range(u_period)
+      u_scope = u_scope.where(category: @category) if @category
+      u_scope = u_scope.where(company_burden: true) # 会社負担対象のみ
+      u_scope.each { |e| user_expense_pairs << [ u, e ] }
+    end
+    expenses = user_expense_pairs.map { |(_, e)| e } # 後段の subtotal 計算等で使用
 
     # 区間ごとにグルーピング
-    # 川村→ラボップ等「発行者≠申請者」の labop モード時のみ、ラベル先頭に申請者名を付ける
-    # （西野が自分の請求書を送るときは付けない）
+    # 「発行者≠申請者」の labop モード or 複数ユーザー集約時は、ラベル先頭に申請者氏名を付ける
     labop_forwarding = @issuer_user && @issuer_user != @user
-    full_name = @user.display_name.to_s.strip
-    name_prefix = (labop_forwarding && !full_name.empty?) ? "#{full_name} " : ""
-    grouped = expenses.group_by { |e| "#{e.from_station}〜#{e.to_station}" }
-    items = grouped.map do |section, exps|
-      unit_price = exps.first.amount
-      qty = exps.size
+    multi_user = target_users.size > 1
+    should_prefix_name = labop_forwarding || multi_user
+    grouped_pairs = user_expense_pairs.group_by { |(u, e)| [ u.id, "#{e.from_station}〜#{e.to_station}" ] }
+    items = grouped_pairs.map do |(_uid, _route), pairs|
+      grp_user, _ = pairs.first
+      grp_exps = pairs.map { |(_, e)| e }
+      unit_price = grp_exps.first.amount
+      qty = grp_exps.size
+      user_label = grp_user.display_name.to_s.strip
+      prefix = (should_prefix_name && !user_label.empty?) ? "#{user_label} " : ""
       {
-        label: "#{name_prefix}交通費_往復(#{exps.first.from_station}駅〜#{exps.first.to_station}駅)",
+        label: "#{prefix}交通費_往復(#{grp_exps.first.from_station}駅〜#{grp_exps.first.to_station}駅)",
         qty: qty,
         unit: "回",
         unit_price: unit_price,
