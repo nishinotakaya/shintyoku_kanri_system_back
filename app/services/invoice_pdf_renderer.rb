@@ -11,7 +11,7 @@ class InvoicePdfRenderer
   def initialize(user, year:, month:, category: nil, application_date: nil,
                  client_name_override: nil, issuer_user_override: nil,
                  total_override: nil, item_label_override: nil, subject_override: nil,
-                 items_override: nil, note: nil)
+                 items_override: nil, note: nil, merged_users: nil)
     @user = user
     @year = year
     @month = month
@@ -26,6 +26,8 @@ class InvoicePdfRenderer
     @note = note.to_s.presence # 備考欄に出すテキスト（発注番号など）
     @setting = user.invoice_setting_for(@category || "wings")
     @issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
+    # 集約モード: 同じ PO の複数申請（例: ORD-010014 の西野+川村）を 1 PDF にまとめる
+    @merged_users = Array(merged_users).reject { |u| u.id == user.id }
   end
 
   # データ計算結果をハッシュで返す（JSON プレビュー API でも使用）
@@ -129,9 +131,10 @@ class InvoicePdfRenderer
 
   # 明細(items)構築。すべて **税抜単価** で返す。
   # - labop モード + items_override 指定時: その明細をそのまま使う
-  # - labop モード + items_override なし: total_override から逆算して single line を作るため、空配列を返す
+  # - labop モード + items_override なし & merged_users なし: total_override から逆算 → 空配列
+  # - merged_users あり: 各ユーザーの設定で行を生成して連結（ORD-010014 西野+川村 等）
   # - 通常モード: setting.unit_price (時間単価) + setting.default_items から組み立て
-  # 通常モードでは作業者名 (display_name) を品名先頭に付ける（2 名体制対応）
+  # 複数ユーザー集約 or 発行者≠申請者の labop モードでは、作業者名を品名先頭に付与
   def build_items(hours)
     if labop_mode? && @items_override
       return @items_override.map do |it|
@@ -146,36 +149,51 @@ class InvoicePdfRenderer
       end
     end
 
-    return [] if labop_mode? # items_override 無し → calculation 側で total_override から逆算する
+    # labop モード + items_override なし + merged_users なし → calculation 側で total_override から逆算
+    return [] if labop_mode? && @merged_users.empty?
 
-    # 通常モード: 作業者名を品名に prefix
-    name_prefix = @user.display_name.to_s.strip
-    name_prefix = name_prefix.empty? ? "" : "#{name_prefix} "
-
+    # 集約モード判定
+    target_users = [ @user, *@merged_users ].uniq
+    multi_user = target_users.size > 1
     items = []
-    if @setting.unit_price.to_i > 0
-      items << {
-        label: "#{name_prefix}#{@setting.item_label}(#{format('%.1f', hours)}hまで)",
-        qty: hours,
-        unit: "時間",
-        unit_price: @setting.unit_price,
-        amount: (hours * @setting.unit_price).to_i # 税抜
-      }
-    end
 
-    Array(@setting.default_items).each do |it|
-      qty = (it["qty"] || it[:qty] || 1).to_f
-      price = (it["price"] || it[:price] || 0).to_i # 税抜単価
-      raw_label = (it["label"] || it[:label]).to_s
-      # 既に作業者名が入っていれば二重 prefix を回避
-      label = raw_label.start_with?(name_prefix) ? raw_label : "#{name_prefix}#{raw_label}"
-      items << {
-        label: label,
-        qty: qty,
-        unit: it["unit"] || it[:unit] || "",
-        unit_price: price,
-        amount: (qty * price).to_i # 税抜
-      }
+    target_users.each do |u|
+      u_period = u.period_for(@year, @month)
+      u_scope = u.work_reports.in_range(u_period)
+      u_scope = u_scope.by_category(@category) if @category.present?
+      u_hours = u_scope.sum(:hours).to_f
+      u_setting = u.invoice_setting_for(@category || "wings")
+      name_prefix = u.display_name.to_s.strip
+      name_prefix = name_prefix.empty? ? "" : "#{name_prefix} "
+
+      if u_setting.unit_price.to_i > 0
+        items << {
+          label: "#{name_prefix}#{u_setting.item_label}(#{format('%.1f', u_hours)}hまで)",
+          qty: u_hours,
+          unit: "時間",
+          unit_price: u_setting.unit_price,
+          amount: (u_hours * u_setting.unit_price).to_i # 税抜
+        }
+      end
+
+      Array(u_setting.default_items).each do |it|
+        qty = (it["qty"] || it[:qty] || 1).to_f
+        price = (it["price"] || it[:price] || 0).to_i # 税抜単価
+        raw_label = (it["label"] || it[:label]).to_s
+        # multi_user 時は必ず prefix、単一ユーザーは既に入っていれば省略
+        label = if multi_user
+                  raw_label.start_with?(name_prefix) ? raw_label : "#{name_prefix}#{raw_label}"
+        else
+                  raw_label.start_with?(name_prefix) ? raw_label : "#{name_prefix}#{raw_label}"
+        end
+        items << {
+          label: label,
+          qty: qty,
+          unit: it["unit"] || it[:unit] || "",
+          unit_price: price,
+          amount: (qty * price).to_i # 税抜
+        }
+      end
     end
     items
   end

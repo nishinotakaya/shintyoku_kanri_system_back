@@ -68,22 +68,54 @@ module Api
         attachments = []
         # 申請日: 申請者の application_date_override は申請者が「申請した日」が入りがちなので
         # ラボップ宛発行時は override を使わず、発行者(西野)の月別設定（無ければ末日）を採用する
-        invoices_for_pdf.each do |invoice|
-          # PO がリンクされていれば、note に order_no を自動付与
-          po = invoice.received_purchase_order
-          composed_note = [ po&.order_no, invoice.note ].compact.reject(&:blank?).join(" / ")
-          invoice_pdf = InvoicePdfRenderer.new(
-            invoice.user,
-            year: invoice.year, month: invoice.month, category: invoice.category,
-            client_name_override: I18n.t("companies.labop.name"),
-            issuer_user_override: current_user,
-            total_override: invoice.total_override,
-            item_label_override: invoice.item_label_override,
-            subject_override: invoice.subject_override,
-            items_override: invoice.items_override,
-            note: composed_note.presence
-          ).call
-          attachments << { filename: invoice_filename(invoice), content_type: "application/pdf", body: File.binread(invoice_pdf) }
+
+        # PO ごとにグルーピング: 同じ PO に複数申請あり (ORD-010014 西野+川村 等) → 1 PDF にマージ
+        invoices_grouped = invoices_for_pdf.to_a.group_by(&:received_purchase_order_id)
+        invoices_grouped.each do |po_id, group|
+          if po_id.present? && group.size >= 2
+            # マージ請求書 (例: ORD-010014 西野+川村)
+            primary = group.first
+            others = group.drop(1).map(&:user)
+            po = primary.received_purchase_order
+            composed_note = [ po&.order_no, primary.note ].compact.reject(&:blank?).join(" / ")
+            # items_override 集約: 各 submission に items_override があれば連結、無ければ build_items に任せる
+            merged_items = group.flat_map { |s| s.items_override.is_a?(Array) ? s.items_override : [] }
+            merged_items = nil if merged_items.empty?
+            invoice_pdf = InvoicePdfRenderer.new(
+              primary.user,
+              year: primary.year, month: primary.month, category: primary.category,
+              client_name_override: I18n.t("companies.labop.name"),
+              issuer_user_override: current_user,
+              total_override: nil, # 集約時は明細から自動算出
+              item_label_override: primary.item_label_override,
+              subject_override: primary.subject_override,
+              items_override: merged_items,
+              note: composed_note.presence,
+              merged_users: others
+            ).call
+            surnames = group.map(&:user).map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
+            cat_label = CATEGORY_LABELS[primary.category.to_s] || primary.category.to_s
+            fname = "#{surnames.presence || '集約'}_請求書_#{cat_label}_#{primary.year}年_#{primary.month}月分.pdf"
+            attachments << { filename: fname, content_type: "application/pdf", body: File.binread(invoice_pdf) }
+          else
+            # 単一申請（PO なし or PO に1件）→ 個別 PDF
+            group.each do |invoice|
+              po = invoice.received_purchase_order
+              composed_note = [ po&.order_no, invoice.note ].compact.reject(&:blank?).join(" / ")
+              invoice_pdf = InvoicePdfRenderer.new(
+                invoice.user,
+                year: invoice.year, month: invoice.month, category: invoice.category,
+                client_name_override: I18n.t("companies.labop.name"),
+                issuer_user_override: current_user,
+                total_override: invoice.total_override,
+                item_label_override: invoice.item_label_override,
+                subject_override: invoice.subject_override,
+                items_override: invoice.items_override,
+                note: composed_note.presence
+              ).call
+              attachments << { filename: invoice_filename(invoice), content_type: "application/pdf", body: File.binread(invoice_pdf) }
+            end
+          end
         end
         invoices_for_wr.each do |invoice|
           # 業務報告 Excel (申請者データそのまま) — checkbox で個別に選択可能
