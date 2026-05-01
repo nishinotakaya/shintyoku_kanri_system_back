@@ -91,9 +91,13 @@ module Api
           attachments << { filename: work_report_filename(invoice), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(wr_path) }
         end
         # 立替金 PDF/Excel の振り分け（案 A）:
-        # - シェアラウンジ系 (subject_override or note に "シェアラウンジ" 含む) → 個別 PDF/Excel
-        # - 通常 → year × month × category で集約して 1 通の PDF/Excel
-        share_lounge_check = ->(s) { s.subject_override.to_s.include?("シェアラウンジ") || s.note.to_s.include?("シェアラウンジ") }
+        # - シェアラウンジ「相殺」(subject_override or note に "相殺" 含む) → 別建て PDF/Excel
+        #   = 西野が払ったシェアラウンジ代をラボップに補填してもらうケースだけ別建て
+        # - それ以外（川村の押上シェアラウンジ含む通常立替金）→ year × month × category で集約 1 通
+        share_lounge_check = ->(s) {
+          combined = "#{s.subject_override} #{s.note}"
+          combined.include?("相殺")
+        }
 
         # ----- 立替金 PDF -----
         sl_pdf_subs, regular_pdf_subs = expense_pdfs.to_a.partition { |s| share_lounge_check.call(s) }
