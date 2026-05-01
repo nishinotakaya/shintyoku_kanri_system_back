@@ -90,32 +90,15 @@ module Api
           wr_path = WorkReportExporter.new(invoice.user, year: invoice.year, month: invoice.month, category: invoice.category).call
           attachments << { filename: work_report_filename(invoice), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(wr_path) }
         end
-        # 立替金 PDF/Excel の振り分け（案 A）:
-        # - シェアラウンジ「相殺」(subject_override or note に "相殺" 含む) → 別建て PDF/Excel
-        #   = 西野が払ったシェアラウンジ代をラボップに補填してもらうケースだけ別建て
-        # - それ以外（川村の押上シェアラウンジ含む通常立替金）→ year × month × category で集約 1 通
-        share_lounge_check = ->(s) {
-          combined = "#{s.subject_override} #{s.note}"
-          combined.include?("相殺")
-        }
+        # 立替金 PDF/Excel の振り分け（案 A、金額マイナスベース判定）:
+        # - 各ユーザーの expense のうち amount < 0 のもの = 相殺（西野シェアラウンジ補填等）→ 別建て PDF/Excel
+        # - amount > 0 のもの = 通常立替金 → (year×month×category) で集約 1 通
 
-        # ----- 立替金 PDF -----
-        sl_pdf_subs, regular_pdf_subs = expense_pdfs.to_a.partition { |s| share_lounge_check.call(s) }
-        # シェアラウンジは個別（合計0でも宛名固定で送付したい場合があるため、0チェックは外す）
-        sl_pdf_subs.each do |expense|
-          next if expense_calc_total(expense) <= 0
-          exp_pdf = ExpensePdfRenderer.new(
-            expense.user, year: expense.year, month: expense.month, category: expense.category,
-            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user
-          ).call
-          attachments << { filename: expense_pdf_filename(expense), content_type: "application/pdf", body: File.binread(exp_pdf) }
-        end
-        # 通常は (year,month,category) で集約 → 1 通
-        regular_pdf_subs.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
+        # ----- 立替金 PDF（通常: amount > 0 を集約） -----
+        expense_pdfs.to_a.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
           users = subs.map(&:user).uniq
-          # 集約時は実 expense 合計が 0 なら skip
           total = users.sum { |u|
-            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).sum(:amount).to_i
+            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).where("amount > 0").sum(:amount).to_i
           }
           next if total <= 0
           primary = users.first
@@ -123,7 +106,7 @@ module Api
           exp_pdf = ExpensePdfRenderer.new(
             primary, year: y, month: m, category: c,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
-            merged_users: others
+            merged_users: others, mode: :positive
           ).call
           surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
           cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
@@ -131,20 +114,27 @@ module Api
           attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
         end
 
-        # ----- 立替金 Excel -----
-        sl_xlsx_subs, regular_xlsx_subs = expense_xlsxs.to_a.partition { |s| share_lounge_check.call(s) }
-        sl_xlsx_subs.each do |expense|
-          next if expense_calc_total(expense) <= 0
-          exp_xlsx = ExpenseExporter.new(
-            expense.user, year: expense.year, month: expense.month, category: expense.category,
-            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user
+        # ----- 立替金 PDF（相殺: amount < 0 を申請者ごとに別建て） -----
+        expense_pdfs.to_a.each do |s|
+          neg_total = s.user.expenses.in_range(s.user.period_for(s.year, s.month))
+            .where(category: s.category, company_burden: true).where("amount < 0").sum(:amount).to_i
+          next if neg_total >= 0
+          exp_pdf = ExpensePdfRenderer.new(
+            s.user, year: s.year, month: s.month, category: s.category,
+            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
+            mode: :negative
           ).call
-          attachments << { filename: expense_xlsx_filename(expense), content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
+          surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
+          cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
+          fname = "立替金_#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.pdf"
+          attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
         end
-        regular_xlsx_subs.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
+
+        # ----- 立替金 Excel（通常: 集約） -----
+        expense_xlsxs.to_a.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
           users = subs.map(&:user).uniq
           total = users.sum { |u|
-            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).sum(:amount).to_i
+            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).where("amount > 0").sum(:amount).to_i
           }
           next if total <= 0
           primary = users.first
@@ -152,11 +142,27 @@ module Api
           exp_xlsx = ExpenseExporter.new(
             primary, year: y, month: m, category: c,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
-            merged_users: others
+            merged_users: others, mode: :positive
           ).call
           surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
           cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
           fname = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.xlsx"
+          attachments << { filename: fname, content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
+        end
+
+        # ----- 立替金 Excel（相殺: 別建て） -----
+        expense_xlsxs.to_a.each do |s|
+          neg_total = s.user.expenses.in_range(s.user.period_for(s.year, s.month))
+            .where(category: s.category, company_burden: true).where("amount < 0").sum(:amount).to_i
+          next if neg_total >= 0
+          exp_xlsx = ExpenseExporter.new(
+            s.user, year: s.year, month: s.month, category: s.category,
+            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
+            mode: :negative
+          ).call
+          surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
+          cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
+          fname = "立替金_#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.xlsx"
           attachments << { filename: fname, content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
         end
 

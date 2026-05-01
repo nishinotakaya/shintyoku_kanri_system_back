@@ -41,7 +41,8 @@ class ExpenseExporter
   }.freeze
 
   def initialize(user, year:, month:, application_date: nil, category: nil,
-                 client_name_override: nil, issuer_user_override: nil, merged_users: nil)
+                 client_name_override: nil, issuer_user_override: nil,
+                 merged_users: nil, mode: :positive)
     @user = user
     @year = year
     @month = month
@@ -51,6 +52,8 @@ class ExpenseExporter
     @issuer_user = issuer_user_override || user
     # 集約モード: @user に加え @merged_users の expense もまとめる（案 A 通常立替金 1 通用）
     @merged_users = Array(merged_users).reject { |u| u.id == user.id }
+    # :positive (default) → amount > 0 / :negative → amount < 0（シェアラウンジ相殺等）
+    @mode = mode.to_sym
   end
 
   DATA_END_ROW = 26 # テンプレのサンプルデータが入っている最終データ行
@@ -88,6 +91,7 @@ class ExpenseExporter
       u_scope = u.expenses.in_range(u_period)
       u_scope = u_scope.where(category: @category) if @category
       u_scope = u_scope.where(company_burden: true) # 会社負担対象のみ
+      u_scope = (@mode == :negative) ? u_scope.where("amount < 0") : u_scope.where("amount > 0")
       u_scope.each { |e| user_expense_pairs << [ u, e ] }
     end
 

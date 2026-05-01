@@ -10,7 +10,8 @@ class ExpensePdfRenderer
   SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
 
   def initialize(user, year:, month:, application_date: nil, category: nil,
-                 client_name_override: nil, issuer_user_override: nil, merged_users: nil)
+                 client_name_override: nil, issuer_user_override: nil,
+                 merged_users: nil, mode: :positive)
     @user = user
     @year = year
     @month = month
@@ -20,6 +21,10 @@ class ExpensePdfRenderer
     @issuer_user = issuer_user_override || user
     # 立替金集約モード: @user に加えて他ユーザーの expense もまとめる（案 A 通常立替金 1 通用）
     @merged_users = Array(merged_users).reject { |u| u.id == user.id }
+    # mode:
+    #   :positive (default) → amount > 0 の expense（通常立替金）
+    #   :negative → amount < 0 の expense（シェアラウンジ相殺など）
+    @mode = mode.to_sym
   end
 
   def call
@@ -38,6 +43,8 @@ class ExpensePdfRenderer
       u_scope = u.expenses.in_range(u_period)
       u_scope = u_scope.where(category: @category) if @category
       u_scope = u_scope.where(company_burden: true) # 会社負担対象のみ
+      # 通常モード: 正額のみ / 相殺モード: 負額のみ
+      u_scope = (@mode == :negative) ? u_scope.where("amount < 0") : u_scope.where("amount > 0")
       u_scope.each { |e| user_expense_pairs << [ u, e ] }
     end
     expenses = user_expense_pairs.map { |(_, e)| e } # 後段の subtotal 計算等で使用
