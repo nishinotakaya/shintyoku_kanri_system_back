@@ -25,12 +25,15 @@ module Api
         year = params[:year].to_i
         month = params[:month].to_i
         category = params[:category].to_s.presence || "wings"
+        po_id = params[:received_purchase_order_id].presence
         # admin (西野) が自分の申請を出した場合は即座に approved にする (自己承認)
         auto_approve = current_user.admin?
 
-        # 同一ユーザー × 年月 × カテゴリ × kind は一意。既に存在すれば「再申請」として上書き
+        # 同一ユーザー × 年月 × カテゴリ × kind × 発注書 は一意。既に存在すれば「再申請」として上書き
+        # 発注書が異なれば別レコードを作る → 1 月内で複数請求書発行に対応
         record = InvoiceSubmission.find_or_initialize_by(
-          user: current_user, year: year, month: month, category: category, kind: kind
+          user: current_user, year: year, month: month, category: category, kind: kind,
+          received_purchase_order_id: po_id
         )
         is_resubmit = record.persisted?
         record.assign_attributes(
@@ -67,6 +70,9 @@ module Api
           attrs[:reviewed_at] = Time.current
         end
         attrs[:note] = params[:note].to_s if params[:note].present?
+        if params.key?(:received_purchase_order_id)
+          attrs[:received_purchase_order_id] = params[:received_purchase_order_id].presence
+        end
         if params.key?(:total_override)
           raw = params[:total_override].to_s.gsub(",", "")
           attrs[:total_override] = raw.present? ? raw.to_i : nil
@@ -210,7 +216,10 @@ module Api
           default_item_label: defaults[:item_label],
           default_subject: defaults[:subject],
           default_items: defaults[:items],
-          default_application_date: defaults[:application_date]
+          default_application_date: defaults[:application_date],
+          received_purchase_order_id: record.received_purchase_order_id,
+          received_purchase_order_no: record.received_purchase_order&.order_no,
+          received_purchase_order_subject: record.received_purchase_order&.subject
         }
       end
 

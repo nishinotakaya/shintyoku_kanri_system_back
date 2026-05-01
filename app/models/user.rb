@@ -13,6 +13,7 @@ class User < ApplicationRecord
   has_many :monthly_settings, dependent: :destroy
   has_many :purchase_order_settings, dependent: :destroy
   has_many :purchase_order_histories, dependent: :destroy
+  has_many :received_purchase_orders, dependent: :destroy
 
   def application_date_for(year, month)
     # 設定が無い場合は対象月の末日をデフォルトとする

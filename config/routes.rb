@@ -35,6 +35,7 @@ Rails.application.routes.draw do
       resources :expenses, only: [ :index, :create, :update, :destroy ]
 
       resources :invoice_submissions, only: [ :index, :create, :update ]
+      resources :received_purchase_orders, only: [ :index, :show, :create, :update, :destroy ]
 
       # メール送付 (Gmail API 経由)
       post "emails/labop_draft",          to: "emails#labop_draft"

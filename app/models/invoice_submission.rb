@@ -4,6 +4,7 @@ class InvoiceSubmission < ApplicationRecord
 
   belongs_to :user
   belongs_to :reviewer, class_name: "User", optional: true
+  belongs_to :received_purchase_order, optional: true
 
   serialize :items_override, coder: JSON
 

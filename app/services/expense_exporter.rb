@@ -79,6 +79,8 @@ class ExpenseExporter
 
     scope = @user.expenses.in_range(period)
     scope = scope.where(category: @category) if @category
+    # 会社負担対象のみ請求書 Excel に含める
+    scope = scope.where(company_burden: true)
     scope.each_with_index do |e, i|
       row = DATA_START_ROW + i
 

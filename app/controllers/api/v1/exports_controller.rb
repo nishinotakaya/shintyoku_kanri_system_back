@@ -50,6 +50,9 @@ module Api
         else
                              submission&.application_date_override || parse_application_date
         end
+        # PO がリンクされていれば note に order_no を自動付与
+        po_no_for_note = submission&.received_purchase_order&.order_no
+        composed_note = [ po_no_for_note, submission&.note ].compact.reject(&:blank?).join(" / ").presence
         path = InvoicePdfRenderer.new(
           target_user,
           year: year, month: month, category: cat,
@@ -58,7 +61,7 @@ module Api
           issuer_user_override: issuer_override,
           total_override: submission&.total_override,
           item_label_override: submission&.item_label_override,
-          note: submission&.note,
+          note: composed_note,
           subject_override: submission&.subject_override,
           items_override: submission&.items_override
         ).call

@@ -41,7 +41,7 @@ module Api
 
       def expense_calc_total(submission)
         period = submission.user.period_for(submission.year, submission.month)
-        submission.user.expenses.in_range(period).where(category: submission.category).sum(:amount).to_i
+        submission.user.expenses.in_range(period).where(category: submission.category, company_burden: true).sum(:amount).to_i
       rescue
         0
       end
@@ -69,6 +69,9 @@ module Api
         # 申請日: 申請者の application_date_override は申請者が「申請した日」が入りがちなので
         # ラボップ宛発行時は override を使わず、発行者(西野)の月別設定（無ければ末日）を採用する
         invoices_for_pdf.each do |invoice|
+          # PO がリンクされていれば、note に order_no を自動付与
+          po = invoice.received_purchase_order
+          composed_note = [ po&.order_no, invoice.note ].compact.reject(&:blank?).join(" / ")
           invoice_pdf = InvoicePdfRenderer.new(
             invoice.user,
             year: invoice.year, month: invoice.month, category: invoice.category,
@@ -78,7 +81,7 @@ module Api
             item_label_override: invoice.item_label_override,
             subject_override: invoice.subject_override,
             items_override: invoice.items_override,
-            note: invoice.note
+            note: composed_note.presence
           ).call
           attachments << { filename: invoice_filename(invoice), content_type: "application/pdf", body: File.binread(invoice_pdf) }
         end
@@ -224,7 +227,7 @@ module Api
       end
       def expense_calc_total_for(user, year, month, cat)
         period = user.period_for(year, month)
-        user.expenses.in_range(period).where(category: cat).sum(:amount).to_i
+        user.expenses.in_range(period).where(category: cat, company_burden: true).sum(:amount).to_i
       rescue
         0
       end

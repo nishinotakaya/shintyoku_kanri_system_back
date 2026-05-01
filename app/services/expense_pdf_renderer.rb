@@ -30,6 +30,8 @@ class ExpensePdfRenderer
     client_name = @client_name_override || setting.client_name
     scope = @user.expenses.in_range(period)
     scope = scope.where(category: @category) if @category
+    # 会社負担対象のみ請求書に含める (#4: 川村のシェアラウンジ押上 5 回分のみ true 等)
+    scope = scope.where(company_burden: true)
     expenses = scope.to_a
 
     # 区間ごとにグルーピング

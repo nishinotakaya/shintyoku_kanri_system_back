@@ -36,7 +36,8 @@ module Api
 
       def expense_params
         params.permit(:expense_date, :purpose, :transport_type, :from_station,
-                      :to_station, :round_trip, :receipt_no, :amount, :payee_or_line, :category)
+                      :to_station, :round_trip, :receipt_no, :amount, :payee_or_line, :category,
+                      :company_burden)
       end
 
       def serialize(e)
@@ -45,7 +46,7 @@ module Api
           transport_type: e.transport_type, from_station: e.from_station,
           to_station: e.to_station, round_trip: e.round_trip,
           receipt_no: e.receipt_no, amount: e.amount, payee_or_line: e.payee_or_line,
-          category: e.category
+          category: e.category, company_burden: e.company_burden
         }
       end
     end
