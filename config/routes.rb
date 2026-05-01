@@ -49,6 +49,10 @@ Rails.application.routes.draw do
       get "exports/expense.xlsx",     to: "exports#expense"
       get "exports/expense.pdf",      to: "exports#expense_pdf"
       get "exports/invoice.pdf",      to: "exports#invoice"
+      # 集約版: 複数 submission を 1 PDF にマージ
+      post "exports/merged_invoice.pdf", to: "exports#merged_invoice"
+      post "exports/merged_expense.pdf", to: "exports#merged_expense"
+      post "exports/merged_expense.xlsx", to: "exports#merged_expense_xlsx"
       post "exports/purchase_order.pdf", to: "exports#purchase_order"
       post "exports/pick_dir",            to: "exports#pick_local_dir"
       get  "exports/list_dirs",           to: "exports#list_local_dirs"

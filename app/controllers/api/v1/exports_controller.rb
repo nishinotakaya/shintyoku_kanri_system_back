@@ -105,6 +105,50 @@ module Api
         send_file path, type: "application/pdf", filename: filename, disposition: "attachment"
       end
 
+      # 集約版: 複数の InvoiceSubmission をマージして 1 PDF を返す（admin のみ）
+      # POST /exports/merged_invoice.pdf  with invoice_submission_ids[]
+      def merged_invoice
+        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
+        subs = InvoiceSubmission.where(id: ids).where(kind: "invoice").approved.includes(:user, :received_purchase_order)
+        return render(json: { error: "対象なし" }, status: :unprocessable_entity) if subs.empty?
+
+        primary = subs.first
+        others = subs.drop(1).map(&:user)
+        po = primary.received_purchase_order
+        po_line = po&.order_no.present? ? "注文番号: #{po.order_no}" : nil
+        composed_note = [ po_line, primary.note ].compact.reject(&:blank?).join("\n").presence
+        merged_items = subs.flat_map { |s| s.items_override.is_a?(Array) ? s.items_override : [] }
+        merged_items = nil if merged_items.empty?
+
+        path = InvoicePdfRenderer.new(
+          primary.user,
+          year: primary.year, month: primary.month, category: primary.category,
+          client_name_override: I18n.t("companies.labop.name"),
+          issuer_user_override: current_user,
+          item_label_override: primary.item_label_override,
+          subject_override: primary.subject_override,
+          items_override: merged_items,
+          note: composed_note,
+          merged_users: others
+        ).call
+
+        surnames = subs.map(&:user).map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
+        cat_label = CATEGORY_LABELS[primary.category.to_s] || primary.category.to_s
+        filename = "#{surnames.presence || '集約'}_請求書_#{cat_label}_#{primary.year}年_#{primary.month}月分.pdf"
+        send_file path, type: "application/pdf", filename: filename, disposition: params[:disposition].presence || "attachment"
+      end
+
+      # 集約版: 複数の expense submission の amount>0 expense を 1 PDF にマージ
+      # POST /exports/merged_expense.pdf  with expense_submission_ids[]
+      def merged_expense
+        merged_expense_internal(format: :pdf)
+      end
+
+      def merged_expense_xlsx
+        merged_expense_internal(format: :xlsx)
+      end
+
       # macOS 限定: osascript で「フォルダを選択」ダイアログを開いて POSIX パスを返す
       # default_path を渡すとそのフォルダを初期表示
       def pick_local_dir
@@ -170,6 +214,32 @@ module Api
       end
 
       private
+
+      # 集約 expense (PDF or Excel) 共通処理
+      def merged_expense_internal(format:)
+        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        ids = Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
+        subs = InvoiceSubmission.where(id: ids).where(kind: "expense").approved.includes(:user)
+        return render(json: { error: "対象なし" }, status: :unprocessable_entity) if subs.empty?
+
+        # 全部 (year, month, category) が同一前提（呼び出し側で同じ集約グループの ids のみ渡す）
+        primary = subs.first
+        users = subs.map(&:user).uniq
+        others = users.drop(1)
+        renderer_class = format == :xlsx ? ExpenseExporter : ExpensePdfRenderer
+        path = renderer_class.new(
+          users.first, year: primary.year, month: primary.month, category: primary.category,
+          client_name_override: I18n.t("companies.labop.name"),
+          issuer_user_override: current_user,
+          merged_users: others, mode: :positive
+        ).call
+        surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
+        cat_label = CATEGORY_LABELS[primary.category.to_s] || primary.category.to_s
+        ext = format == :xlsx ? "xlsx" : "pdf"
+        ctype = format == :xlsx ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf"
+        filename = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{primary.year}年_#{primary.month}月分.#{ext}"
+        send_file path, type: ctype, filename: filename, disposition: params[:disposition].presence || "attachment"
+      end
 
       def save_local?
         ActiveModel::Type::Boolean.new.cast(params[:save_local])
