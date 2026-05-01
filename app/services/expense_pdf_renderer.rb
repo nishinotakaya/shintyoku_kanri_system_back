@@ -47,16 +47,17 @@ class ExpensePdfRenderer
     labop_forwarding = @issuer_user && @issuer_user != @user
     multi_user = target_users.size > 1
     should_prefix_name = labop_forwarding || multi_user
-    grouped_pairs = user_expense_pairs.group_by { |(u, e)| [ u.id, "#{e.from_station}〜#{e.to_station}" ] }
+    grouped_pairs = user_expense_pairs.group_by { |(u, e)| [ u.id, "#{e.from_station}-#{e.to_station}" ] }
     items = grouped_pairs.map do |(_uid, _route), pairs|
       grp_user, _ = pairs.first
       grp_exps = pairs.map { |(_, e)| e }
       unit_price = grp_exps.first.amount
       qty = grp_exps.size
-      user_label = grp_user.display_name.to_s.strip
-      prefix = (should_prefix_name && !user_label.empty?) ? "#{user_label} " : ""
+      surname = grp_user.display_name.to_s.split(/[\s　]/).first.to_s
+      prefix = (should_prefix_name && !surname.empty?) ? "#{surname} " : ""
+      route = "#{grp_exps.first.from_station}-#{grp_exps.first.to_station}"
       {
-        label: "#{prefix}交通費_往復(#{grp_exps.first.from_station}駅〜#{grp_exps.first.to_station}駅)",
+        label: "#{prefix}#{route}",
         qty: qty,
         unit: "回",
         unit_price: unit_price,
