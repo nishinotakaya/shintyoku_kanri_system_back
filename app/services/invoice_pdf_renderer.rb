@@ -28,70 +28,37 @@ class InvoicePdfRenderer
   end
 
   # データ計算結果をハッシュで返す（JSON プレビュー API でも使用）
+  #
+  # 計算ルール（税抜統一）:
+  # - すべての明細 unit_price / amount は **税抜** で扱う（DB 登録もこれに合わせる）
+  # - subtotal = items の amount 合計（税抜）
+  # - tax = subtotal × tax_rate / 100（四捨五入）
+  # - total = subtotal + tax（税込）
+  # - @total_override が指定された場合のみ、税込合計として上書きし subtotal/tax を逆算
   def calculation
     period = @user.period_for(@year, @month)
     scope = @user.work_reports.in_range(period)
     scope = scope.by_category(@category) if @category.present?
     hours = scope.sum(:hours).to_f
-    items = []
+    items = build_items(hours)
 
-    if @setting.unit_price.to_i > 0
-      items << {
-        label: "#{@setting.item_label}(#{format('%.1f', hours)}hまで)",
-        qty: hours,
-        unit: "時間",
-        unit_price: @setting.unit_price,
-        amount: (hours * @setting.unit_price).to_i
-      }
-    end
-
-    Array(@setting.default_items).each do |it|
-      qty = (it["qty"] || it[:qty] || 1).to_f
-      price = (it["price"] || it[:price] || 0).to_i
-      items << {
-        label: it["label"] || it[:label],
-        qty: qty,
-        unit: it["unit"] || it[:unit] || "",
-        unit_price: price,
-        amount: (qty * price).to_i
-      }
-    end
-
+    rate = labop_mode? ? 10 : @setting.tax_rate.to_i
     subtotal = items.sum { |i| i[:amount] }
-    tax = (subtotal * @setting.tax_rate / 100.0).round
+    tax = (subtotal * rate / 100.0).round
     total = subtotal + tax
 
-    # ラボップ宛 (issuer override) モード:
-    # items_override が指定されていればその明細をそのまま使い、合計は明細から自動算出。
-    # 指定が無ければ「{申請者の姓} 開発業務 1式」1行を生成して total_override で上書き。
-    # 消費税は 10% 内税扱い (subtotal = round(total/1.1), tax = total - subtotal)。
-    if labop_mode?
-      if @items_override
-        items = @items_override.map do |it|
-          h = it.respond_to?(:to_h) ? it.to_h : it
-          {
-            label: (h[:label] || h["label"]).to_s,
-            qty: (h[:qty] || h["qty"]).to_f,
-            unit: (h[:unit] || h["unit"]).to_s.presence || "式",
-            unit_price: (h[:unit_price] || h["unit_price"]).to_i,
-            amount: (h[:amount] || h["amount"]).to_i
-          }
-        end
-        total = @total_override || items.sum { |i| i[:amount] }
-      else
-        full_name = @user.display_name.to_s.strip
-        default_label = full_name.empty? ? "開発業務" : "#{full_name} 開発業務"
-        label = @item_label_override || default_label
-        total = @total_override || total
-        subtotal_tmp = (total / 1.1).round
-        # 単価 3,750 円/時間 で割って数量を出す。割り切れない場合は小数 1 桁。
-        unit_price = 3_750
-        qty = subtotal_tmp.to_f / unit_price
-        qty = qty == qty.to_i ? qty.to_i : qty.round(1)
-        items = [ { label: label, qty: qty, unit: "時間", unit_price: unit_price, amount: subtotal_tmp } ]
-      end
-      subtotal = (total / 1.1).round
+    # @total_override は「税込合計」として最優先（admin がラボップモーダルで明示した値）
+    if @total_override
+      total = @total_override.to_i
+      subtotal = (total / (1.0 + rate / 100.0)).round
       tax = total - subtotal
+      # 明細が無い labop モードのみ、override に合わせて単一行を再生成（unit_price=3,750 円/時間）
+      if items.empty?
+        unit_price = 3_750
+        qty_f = subtotal.to_f / unit_price
+        qty = qty_f == qty_f.to_i ? qty_f.to_i : qty_f.round(1)
+        items = [ { label: build_default_label, qty: qty, unit: "時間", unit_price: unit_price, amount: subtotal } ]
+      end
     end
 
     issue_date = period.last
@@ -150,6 +117,65 @@ class InvoicePdfRenderer
   end
 
   private
+
+  # 明細(items)構築。すべて **税抜単価** で返す。
+  # - labop モード + items_override 指定時: その明細をそのまま使う
+  # - labop モード + items_override なし: total_override から逆算して single line を作るため、空配列を返す
+  # - 通常モード: setting.unit_price (時間単価) + setting.default_items から組み立て
+  # 通常モードでは作業者名 (display_name) を品名先頭に付ける（2 名体制対応）
+  def build_items(hours)
+    if labop_mode? && @items_override
+      return @items_override.map do |it|
+        h = it.respond_to?(:to_h) ? it.to_h : it
+        {
+          label: (h[:label] || h["label"]).to_s,
+          qty: (h[:qty] || h["qty"]).to_f,
+          unit: (h[:unit] || h["unit"]).to_s.presence || "式",
+          unit_price: (h[:unit_price] || h["unit_price"]).to_i,
+          amount: (h[:amount] || h["amount"]).to_i
+        }
+      end
+    end
+
+    return [] if labop_mode? # items_override 無し → calculation 側で total_override から逆算する
+
+    # 通常モード: 作業者名を品名に prefix
+    name_prefix = @user.display_name.to_s.strip
+    name_prefix = name_prefix.empty? ? "" : "#{name_prefix} "
+
+    items = []
+    if @setting.unit_price.to_i > 0
+      items << {
+        label: "#{name_prefix}#{@setting.item_label}(#{format('%.1f', hours)}hまで)",
+        qty: hours,
+        unit: "時間",
+        unit_price: @setting.unit_price,
+        amount: (hours * @setting.unit_price).to_i # 税抜
+      }
+    end
+
+    Array(@setting.default_items).each do |it|
+      qty = (it["qty"] || it[:qty] || 1).to_f
+      price = (it["price"] || it[:price] || 0).to_i # 税抜単価
+      raw_label = (it["label"] || it[:label]).to_s
+      # 既に作業者名が入っていれば二重 prefix を回避
+      label = raw_label.start_with?(name_prefix) ? raw_label : "#{name_prefix}#{raw_label}"
+      items << {
+        label: label,
+        qty: qty,
+        unit: it["unit"] || it[:unit] || "",
+        unit_price: price,
+        amount: (qty * price).to_i # 税抜
+      }
+    end
+    items
+  end
+
+  def build_default_label
+    full_name = @user.display_name.to_s.strip
+    base = full_name.empty? ? "開発業務" : "#{full_name} 開発業務"
+    @item_label_override.presence || base
+  end
 
   # 支払期限を計算
   # payment_due_type:
