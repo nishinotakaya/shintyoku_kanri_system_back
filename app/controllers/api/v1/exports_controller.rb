@@ -50,9 +50,10 @@ module Api
         else
                              submission&.application_date_override || parse_application_date
         end
-        # PO がリンクされていれば note に order_no を自動付与
+        # PO がリンクされていれば note 先頭に「注文番号: ORD-XXX」を自動付与
         po_no_for_note = submission&.received_purchase_order&.order_no
-        composed_note = [ po_no_for_note, submission&.note ].compact.reject(&:blank?).join(" / ").presence
+        po_line = po_no_for_note.present? ? "注文番号: #{po_no_for_note}" : nil
+        composed_note = [ po_line, submission&.note ].compact.reject(&:blank?).join("\n").presence
         path = InvoicePdfRenderer.new(
           target_user,
           year: year, month: month, category: cat,

@@ -77,7 +77,8 @@ module Api
             primary = group.first
             others = group.drop(1).map(&:user)
             po = primary.received_purchase_order
-            composed_note = [ po&.order_no, primary.note ].compact.reject(&:blank?).join(" / ")
+            po_line = po&.order_no.present? ? "注文番号: #{po.order_no}" : nil
+            composed_note = [ po_line, primary.note ].compact.reject(&:blank?).join("\n")
             # items_override 集約: 各 submission に items_override があれば連結、無ければ build_items に任せる
             merged_items = group.flat_map { |s| s.items_override.is_a?(Array) ? s.items_override : [] }
             merged_items = nil if merged_items.empty?
@@ -101,7 +102,8 @@ module Api
             # 単一申請（PO なし or PO に1件）→ 個別 PDF
             group.each do |invoice|
               po = invoice.received_purchase_order
-              composed_note = [ po&.order_no, invoice.note ].compact.reject(&:blank?).join(" / ")
+              po_line = po&.order_no.present? ? "注文番号: #{po.order_no}" : nil
+              composed_note = [ po_line, invoice.note ].compact.reject(&:blank?).join("\n")
               invoice_pdf = InvoicePdfRenderer.new(
                 invoice.user,
                 year: invoice.year, month: invoice.month, category: invoice.category,
