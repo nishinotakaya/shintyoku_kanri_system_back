@@ -58,6 +58,7 @@ module Api
           issuer_user_override: issuer_override,
           total_override: submission&.total_override,
           item_label_override: submission&.item_label_override,
+          note: submission&.note,
           subject_override: submission&.subject_override,
           items_override: submission&.items_override
         ).call

@@ -77,7 +77,8 @@ module Api
             total_override: invoice.total_override,
             item_label_override: invoice.item_label_override,
             subject_override: invoice.subject_override,
-            items_override: invoice.items_override
+            items_override: invoice.items_override,
+            note: invoice.note
           ).call
           attachments << { filename: invoice_filename(invoice), content_type: "application/pdf", body: File.binread(invoice_pdf) }
         end

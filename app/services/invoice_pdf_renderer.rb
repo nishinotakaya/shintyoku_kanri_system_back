@@ -11,7 +11,7 @@ class InvoicePdfRenderer
   def initialize(user, year:, month:, category: nil, application_date: nil,
                  client_name_override: nil, issuer_user_override: nil,
                  total_override: nil, item_label_override: nil, subject_override: nil,
-                 items_override: nil)
+                 items_override: nil, note: nil)
     @user = user
     @year = year
     @month = month
@@ -23,6 +23,7 @@ class InvoicePdfRenderer
     @item_label_override = item_label_override.to_s.presence
     @subject_override = subject_override.to_s.presence
     @items_override = items_override if items_override.is_a?(Array) && items_override.any?
+    @note = note.to_s.presence # 備考欄に出すテキスト（発注番号など）
     @setting = user.invoice_setting_for(@category || "wings")
     @issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
   end
@@ -99,6 +100,14 @@ class InvoicePdfRenderer
     if @category == "living"
       subject_text = "タマリビング様 システム保守・開発"
     end
+
+    # シェアラウンジ請求書の宛名固定: 件名/備考に「シェアラウンジ」を含むなら宛名は必ず「株式会社ラボップ」
+    # 「大隅様」だと経費精算に通らないため
+    if (subject_text.to_s.include?("シェアラウンジ") || @note.to_s.include?("シェアラウンジ"))
+      client_name = I18n.t("companies.labop.name")
+    end
+
+    note_text = @note  # 備考に出すテキスト（発注番号、シェアラウンジ補足等）
 
     html_body = ERB.new(File.read(TEMPLATE)).result(binding)
 

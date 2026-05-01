@@ -196,6 +196,13 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
     </tfoot>
   </table>
 
+  <% if defined?(note_text) && note_text.to_s.strip.present? %>
+  <div class="note" style="margin-top: 12px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; color: #333;">
+    <div style="font-weight: 600; margin-bottom: 4px;">備考</div>
+    <div style="white-space: pre-wrap;"><%= note_text %></div>
+  </div>
+  <% end %>
+
   <div class="bank">
     <div class="lbl">お振込先：</div>
     <div><%= _issuer_setting.bank_info %></div>
