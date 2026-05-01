@@ -111,6 +111,18 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # 削除: admin or 自分の申請のみ
+      def destroy
+        record = InvoiceSubmission.find(params[:id])
+        unless current_user.admin? || record.user_id == current_user.id
+          return render(json: { error: "権限がありません" }, status: :forbidden)
+        end
+        record.destroy!
+        head :no_content
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
 
       KIND_LABELS = { "invoice" => "請求書", "expense" => "立替金", "work_report" => "業務報告書" }.freeze
