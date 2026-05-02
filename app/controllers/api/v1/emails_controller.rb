@@ -74,23 +74,24 @@ module Api
         invoices_grouped.each do |po_id, group|
           if po_id.present? && group.size >= 2
             # マージ請求書 (例: ORD-010014 西野+川村)
+            # items_override は使わず work_reports ベースで全ユーザー iterate
+            # total_override は各 submission を合算
             primary = group.first
             others = group.drop(1).map(&:user)
             po = primary.received_purchase_order
             po_line = po&.order_no.present? ? "注文番号: #{po.order_no}" : nil
             composed_note = [ po_line, primary.note ].compact.reject(&:blank?).join("\n")
-            # items_override 集約: 各 submission に items_override があれば連結、無ければ build_items に任せる
-            merged_items = group.flat_map { |s| s.items_override.is_a?(Array) ? s.items_override : [] }
-            merged_items = nil if merged_items.empty?
+            combined_total = group.sum { |s| s.total_override.to_i }
+            combined_total = nil if combined_total <= 0
             invoice_pdf = InvoicePdfRenderer.new(
               primary.user,
               year: primary.year, month: primary.month, category: primary.category,
               client_name_override: I18n.t("companies.labop.name"),
               issuer_user_override: current_user,
-              total_override: nil, # 集約時は明細から自動算出
+              total_override: combined_total,
               item_label_override: primary.item_label_override,
               subject_override: primary.subject_override,
-              items_override: merged_items,
+              items_override: nil, # 集約時は明細を全ユーザーの work_reports から自動生成
               note: composed_note.presence,
               merged_users: others
             ).call

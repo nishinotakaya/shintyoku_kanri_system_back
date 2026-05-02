@@ -118,8 +118,11 @@ module Api
         po = primary.received_purchase_order
         po_line = po&.order_no.present? ? "注文番号: #{po.order_no}" : nil
         composed_note = [ po_line, primary.note ].compact.reject(&:blank?).join("\n").presence
-        merged_items = subs.flat_map { |s| s.items_override.is_a?(Array) ? s.items_override : [] }
-        merged_items = nil if merged_items.empty?
+
+        # 集約: items_override は使わず、work_reports ベースで全ユーザーを iterate させる。
+        # 各 submission の total_override は合算して 1 つの税込合計に。
+        combined_total = subs.sum { |s| s.total_override.to_i }
+        combined_total = nil if combined_total <= 0
 
         path = InvoicePdfRenderer.new(
           primary.user,
@@ -128,7 +131,8 @@ module Api
           issuer_user_override: current_user,
           item_label_override: primary.item_label_override,
           subject_override: primary.subject_override,
-          items_override: merged_items,
+          items_override: nil, # 集約時は明細を work_reports から各ユーザー分自動生成
+          total_override: combined_total,
           note: composed_note,
           merged_users: others
         ).call
