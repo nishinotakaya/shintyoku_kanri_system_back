@@ -239,6 +239,12 @@ module Api
       # ラボップ宛 PDF と同じ「{氏名} 開発業務 1行 (qty=時間 / 単価=3,750)」の明細を返す
       def approved_defaults_for(record)
         return {} unless record.approved?
+        if record.kind == "expense"
+          # 立替金は対象月の expense.amount 合計（会社負担=true、amount>0 のみ）を default_total として返す
+          period = record.user.period_for(record.year, record.month)
+          total = record.user.expenses.in_range(period).where(category: record.category, company_burden: true).where("amount > 0").sum(:amount).to_i
+          return { total: total }
+        end
         return {} unless record.kind == "invoice"
         # issuer_user_override に reviewer (=admin) を渡すと labop_mode? が true になり、
         # 1 行明細の自動生成 + 内税 10% 逆算が走る → PDF と同じ初期値になる

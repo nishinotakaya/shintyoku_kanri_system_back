@@ -124,22 +124,41 @@ module Api
         combined_total = subs.sum { |s| s.total_override.to_i }
         combined_total = nil if combined_total <= 0
 
-        path = InvoicePdfRenderer.new(
+        renderer = InvoicePdfRenderer.new(
           primary.user,
           year: primary.year, month: primary.month, category: primary.category,
           client_name_override: I18n.t("companies.labop.name"),
           issuer_user_override: current_user,
           item_label_override: primary.item_label_override,
           subject_override: primary.subject_override,
-          items_override: nil, # 集約時は明細を work_reports から各ユーザー分自動生成
+          items_override: nil,
           total_override: combined_total,
           note: composed_note,
           merged_users: others
-        ).call
+        )
+        path = renderer.call
 
         surnames = subs.map(&:user).map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
         cat_label = CATEGORY_LABELS[primary.category.to_s] || primary.category.to_s
         filename = "#{surnames.presence || '集約'}_請求書_#{cat_label}_#{primary.year}年_#{primary.month}月分.pdf"
+
+        # save=1 で IssuedInvoicePdf に永続化
+        if params[:save].present?
+          calc = renderer.calculation
+          IssuedInvoicePdf.create!(
+            user: current_user, kind: "invoice", file_format: "pdf",
+            year: primary.year, month: primary.month, category: primary.category,
+            purchase_order_no: po&.order_no,
+            source_submission_ids: subs.map(&:id),
+            merged: subs.size > 1,
+            total_amount: calc[:total],
+            filename: filename,
+            file_data: File.binread(path),
+            note: composed_note,
+            generated_at: Time.current
+          )
+        end
+
         send_file path, type: "application/pdf", filename: filename, disposition: params[:disposition].presence || "attachment"
       end
 
@@ -226,7 +245,6 @@ module Api
         subs = InvoiceSubmission.where(id: ids).where(kind: "expense").approved.includes(:user)
         return render(json: { error: "対象なし" }, status: :unprocessable_entity) if subs.empty?
 
-        # 全部 (year, month, category) が同一前提（呼び出し側で同じ集約グループの ids のみ渡す）
         primary = subs.first
         users = subs.map(&:user).uniq
         others = users.drop(1)
@@ -242,6 +260,25 @@ module Api
         ext = format == :xlsx ? "xlsx" : "pdf"
         ctype = format == :xlsx ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf"
         filename = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{primary.year}年_#{primary.month}月分.#{ext}"
+
+        # save=1 で IssuedInvoicePdf に永続化（合計金額も全ユーザー集約値）
+        if params[:save].present?
+          combined_total = users.sum { |u|
+            u.expenses.in_range(u.period_for(primary.year, primary.month))
+              .where(category: primary.category, company_burden: true).where("amount > 0").sum(:amount).to_i
+          }
+          IssuedInvoicePdf.create!(
+            user: current_user, kind: "expense", file_format: format.to_s,
+            year: primary.year, month: primary.month, category: primary.category,
+            source_submission_ids: subs.map(&:id),
+            merged: subs.size > 1,
+            total_amount: combined_total,
+            filename: filename,
+            file_data: File.binread(path),
+            generated_at: Time.current
+          )
+        end
+
         send_file path, type: ctype, filename: filename, disposition: params[:disposition].presence || "attachment"
       end
 
