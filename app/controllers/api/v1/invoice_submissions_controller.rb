@@ -73,6 +73,9 @@ module Api
         if params.key?(:received_purchase_order_id)
           attrs[:received_purchase_order_id] = params[:received_purchase_order_id].presence
         end
+        if params.key?(:purchase_order_no_override)
+          attrs[:purchase_order_no_override] = params[:purchase_order_no_override].to_s.presence
+        end
         if params.key?(:total_override)
           raw = params[:total_override].to_s.gsub(",", "")
           attrs[:total_override] = raw.present? ? raw.to_i : nil
@@ -231,7 +234,9 @@ module Api
           default_application_date: defaults[:application_date],
           received_purchase_order_id: record.received_purchase_order_id,
           received_purchase_order_no: record.received_purchase_order&.order_no,
-          received_purchase_order_subject: record.received_purchase_order&.subject
+          received_purchase_order_subject: record.received_purchase_order&.subject,
+          purchase_order_no_override: record.purchase_order_no_override,
+          effective_purchase_order_no: record.purchase_order_no_override.presence || record.received_purchase_order&.order_no
         }
       end
 
