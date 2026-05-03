@@ -69,10 +69,24 @@ module Api
         invoices_for_pdf = InvoiceSubmission.where(id: invoice_pdf_ids).where(kind: "invoice").approved
         invoices_for_wr = InvoiceSubmission.where(id: wr_xlsx_ids).where(kind: "invoice").approved
         expense_pdfs = InvoiceSubmission.where(id: expense_pdf_ids).where(kind: "expense").approved
-        expense_xlsxs = InvoiceSubmission.where(id: expense_xlsx_ids).where(kind: "expense").approved
         # 保存済 統合 PDF (IssuedInvoicePdf): バイナリをそのまま添付
         issued_pdf_ids = Array(params[:issued_invoice_pdf_ids]).map(&:to_i).reject(&:zero?)
         issued_pdfs = IssuedInvoicePdf.where(id: issued_pdf_ids)
+        # 統合(保存済) 立替金 PDF が選ばれていたら、その元になった expense submission も
+        # Excel 対象に自動で展開する（運用上 PDF とセットで per-user Excel が必要なため）。
+        issued_pdfs.where(kind: "expense").each do |ip|
+          raw = ip.source_submission_ids
+          src = if raw.is_a?(Array)
+            raw
+          elsif raw.is_a?(String) && raw.present?
+            (JSON.parse(raw) rescue [])
+          else
+            []
+          end
+          expense_xlsx_ids += Array(src).map(&:to_i)
+        end
+        expense_xlsx_ids = expense_xlsx_ids.uniq.reject(&:zero?)
+        expense_xlsxs = InvoiceSubmission.where(id: expense_xlsx_ids).where(kind: "expense").approved
         if invoices_for_pdf.empty? && invoices_for_wr.empty? && expense_pdfs.empty? && expense_xlsxs.empty? && issued_pdfs.empty?
           return render(json: { error: "送付対象が空です" }, status: :unprocessable_entity)
         end
@@ -178,23 +192,23 @@ module Api
         end
 
         # ----- 立替金 Excel（通常: 集約） -----
-        expense_xlsxs.to_a.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
-          users = subs.map(&:user).uniq
-          # Excel 集計はシェアラウンジ等 (excel_excluded=true) を除外
-          total = users.sum { |u|
-            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true, excel_excluded: false).where("amount > 0").sum(:amount).to_i
-          }
+        # 立替金 Excel（通常: amount > 0）はユーザーごとに別ファイル出力する。
+        # 交通費の精算は申請者ごとに 1 シート単位で確認したい運用のため、PDF と違い Excel はマージしない。
+        expense_xlsxs.to_a.each do |s|
+          user = s.user
+          # シェアラウンジ等 (excel_excluded=true) は Excel から除外
+          total = user.expenses.in_range(user.period_for(s.year, s.month))
+            .where(category: s.category, company_burden: true, excel_excluded: false)
+            .where("amount > 0").sum(:amount).to_i
           next if total <= 0
-          primary = users.first
-          others = users.drop(1)
           exp_xlsx = ExpenseExporter.new(
-            primary, year: y, month: m, category: c,
+            user, year: s.year, month: s.month, category: s.category,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
-            merged_users: others, mode: :positive
+            mode: :positive
           ).call
-          surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
-          cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
-          fname = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.xlsx"
+          surname = user.display_name.to_s.split(/[\s　]/).first.to_s
+          cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
+          fname = "立替金_#{surname}_#{cat_label}_#{s.year}年_#{s.month}月分.xlsx"
           attachments << { filename: fname, content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
         end
 
