@@ -21,8 +21,8 @@
       "note": "exports#work_report の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
     },
     {
-      "fingerprint": "a1c5ced22231b4c9806d625cc4ccf0eed4ee235fd9e2584c856ef366d299adba",
-      "note": "exports#invoice の send_file filename (issuer_override 分岐 + 末日デフォルト版): year/month は to_i 済み、category は fixed list 想定。偽陽性"
+      "fingerprint": "fec457f53885d084ac3fc47b03c73ffb23759c63326f9aa4e4d3affe2e353675",
+      "note": "exports#invoice の send_file filename (received_purchase_order / items_override 同梱版): year/month は to_i 済み、category は fixed list 想定、note 内 order_no は purchase_order_no_override or 履歴 DB 由来。偽陽性"
     },
     {
       "fingerprint": "5a988c46082fee27cfbc065ed92756db11dc1e76dc40852e5418c3810357c147",
@@ -39,8 +39,16 @@
     {
       "fingerprint": "a95ea1e4e8a6fff096287dc6faf6544db9ff8d7d3135845283c7f1f2bed4f08b",
       "note": "exports#purchase_order の send_file filename: order_no は permit + フォーム固定値 想定。偽陽性"
+    },
+    {
+      "fingerprint": "4915a70b268ded222487af881070735ff03395e1ef7db60234a28c0c562b41b5",
+      "note": "exports#merged_invoice の send_file filename: invoice_submission_ids は to_i + reject(&:zero?) 済み、category は fixed list 想定、surnames は authenticated user の display_name を split したもの。filename へ params 由来文字列が直接埋まる経路なし。偽陽性"
+    },
+    {
+      "fingerprint": "b2d49d5d34f545c27ff8959f0426d758c4d5e144bfd3ea64daa294f04d3f1896",
+      "note": "exports#merged_expense の send_file filename: expense_submission_ids は to_i + reject(&:zero?) 済み、category は fixed list 想定、surnames は authenticated user の display_name を split したもの。filename へ params 由来文字列が直接埋まる経路なし。偽陽性"
     }
   ],
-  "updated": "2026-04-29 00:00:00 +0900",
+  "updated": "2026-05-03 00:00:00 +0900",
   "brakeman_version": "8.0.4"
 }
