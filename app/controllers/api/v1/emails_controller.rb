@@ -12,10 +12,11 @@ module Api
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
         invoice_ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
         expense_ids = Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
-        invoices = InvoiceSubmission.where(id: invoice_ids).where(kind: "invoice").approved.includes(:user)
+        invoices = InvoiceSubmission.where(id: invoice_ids).where(kind: "invoice").approved.includes(:user, :received_purchase_order)
         expenses = InvoiceSubmission.where(id: expense_ids).where(kind: "expense").approved.includes(:user)
         invoice_total = invoices.sum { |i| i.total_override || invoice_calc_total(i) }
         expense_total = expenses.sum { |e| expense_calc_total(e) }
+        breakdown_items = build_labop_breakdown_items(invoices, expenses)
         ctx = {
           recipient_name: params[:recipient_name].presence || "#{I18n.t("companies.labop.name")} #{I18n.t("companies.labop.honorific_default")}",
           year: invoices.first&.year || expenses.first&.year,
@@ -28,7 +29,8 @@ module Api
           sender_name: current_user.display_name,
           extra_attachments: params[:extra_count].to_i > 0,
           invoice_count: invoices.size,
-          expense_count: expenses.size
+          expense_count: expenses.size,
+          breakdown_items: breakdown_items
         }
         render json: EmailDrafter.draft(kind: :labop_invoice, context: ctx)
       end
@@ -61,7 +63,10 @@ module Api
         invoices_for_wr = InvoiceSubmission.where(id: wr_xlsx_ids).where(kind: "invoice").approved
         expense_pdfs = InvoiceSubmission.where(id: expense_pdf_ids).where(kind: "expense").approved
         expense_xlsxs = InvoiceSubmission.where(id: expense_xlsx_ids).where(kind: "expense").approved
-        if invoices_for_pdf.empty? && invoices_for_wr.empty? && expense_pdfs.empty? && expense_xlsxs.empty?
+        # 保存済 統合 PDF (IssuedInvoicePdf): バイナリをそのまま添付
+        issued_pdf_ids = Array(params[:issued_invoice_pdf_ids]).map(&:to_i).reject(&:zero?)
+        issued_pdfs = IssuedInvoicePdf.where(id: issued_pdf_ids)
+        if invoices_for_pdf.empty? && invoices_for_wr.empty? && expense_pdfs.empty? && expense_xlsxs.empty? && issued_pdfs.empty?
           return render(json: { error: "送付対象が空です" }, status: :unprocessable_entity)
         end
 
@@ -78,8 +83,8 @@ module Api
             # total_override は各 submission を合算
             primary = group.first
             others = group.drop(1).map(&:user)
-            po = primary.received_purchase_order
-            po_line = po&.order_no.present? ? "注文番号: #{po.order_no}" : nil
+            effective_no = primary.purchase_order_no_override.presence || primary.received_purchase_order&.order_no
+            po_line = effective_no.present? ? "注文番号: #{effective_no}" : nil
             composed_note = [ po_line, primary.note ].compact.reject(&:blank?).join("\n")
             combined_total = group.sum { |s| s.total_override.to_i }
             combined_total = nil if combined_total <= 0
@@ -102,8 +107,8 @@ module Api
           else
             # 単一申請（PO なし or PO に1件）→ 個別 PDF
             group.each do |invoice|
-              po = invoice.received_purchase_order
-              po_line = po&.order_no.present? ? "注文番号: #{po.order_no}" : nil
+              effective_no = invoice.purchase_order_no_override.presence || invoice.received_purchase_order&.order_no
+              po_line = effective_no.present? ? "注文番号: #{effective_no}" : nil
               composed_note = [ po_line, invoice.note ].compact.reject(&:blank?).join("\n")
               invoice_pdf = InvoicePdfRenderer.new(
                 invoice.user,
@@ -168,8 +173,9 @@ module Api
         # ----- 立替金 Excel（通常: 集約） -----
         expense_xlsxs.to_a.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
           users = subs.map(&:user).uniq
+          # Excel 集計はシェアラウンジ等 (excel_excluded=true) を除外
           total = users.sum { |u|
-            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).where("amount > 0").sum(:amount).to_i
+            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true, excel_excluded: false).where("amount > 0").sum(:amount).to_i
           }
           next if total <= 0
           primary = users.first
@@ -188,7 +194,7 @@ module Api
         # ----- 立替金 Excel（相殺: 別建て） -----
         expense_xlsxs.to_a.each do |s|
           neg_total = s.user.expenses.in_range(s.user.period_for(s.year, s.month))
-            .where(category: s.category, company_burden: true).where("amount < 0").sum(:amount).to_i
+            .where(category: s.category, company_burden: true, excel_excluded: false).where("amount < 0").sum(:amount).to_i
           next if neg_total >= 0
           exp_xlsx = ExpenseExporter.new(
             s.user, year: s.year, month: s.month, category: s.category,
@@ -199,6 +205,14 @@ module Api
           cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
           fname = "立替金_#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.xlsx"
           attachments << { filename: fname, content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
+        end
+
+        # 保存済み 統合 PDF: 既に生成済みのバイナリをそのまま添付
+        issued_pdfs.each do |ip|
+          ctype = ip.file_format == "xlsx" ?
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" :
+            "application/pdf"
+          attachments << { filename: ip.filename, content_type: ctype, body: ip.file_data }
         end
 
         Array(params[:extra_files]).each do |f|
@@ -365,6 +379,58 @@ module Api
       end
 
       private
+
+      # ラボップ宛メール本文の「請求金額の内訳」用に、添付ファイルと金額のリストを組み立てる。
+      # labop_send の attachments 生成ロジックと同じ単位で1行ずつ並べる:
+      #   - 同一 PO に複数申請 → 集約 PDF (filename ラベル)
+      #   - 単一申請 → "{ユーザー} {年}年{月}月（{案件}）" ラベル
+      #   - 立替金 (amount > 0) → カテゴリ単位で集約 PDF (filename ラベル)
+      #   - 立替金 (amount < 0, 相殺) → 申請者ごとに別建て PDF (filename ラベル)
+      def build_labop_breakdown_items(invoices, expenses)
+        items = []
+
+        invoices.to_a.group_by(&:received_purchase_order_id).each do |po_id, group|
+          if po_id.present? && group.size >= 2
+            primary = group.first
+            surnames = group.map(&:user).map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
+            cat_label = CATEGORY_LABELS[primary.category.to_s] || primary.category.to_s
+            label = "#{surnames.presence || '集約'}_請求書_#{cat_label}_#{primary.year}年_#{primary.month}月分.pdf"
+            amount = group.sum { |s| s.total_override.to_i.nonzero? || invoice_calc_total(s) }
+            items << { label: label, amount: amount }
+          else
+            group.each do |inv|
+              cat_label = CATEGORY_LABELS[inv.category.to_s] || inv.category.to_s
+              label = "#{inv.user.display_name} #{inv.year}年#{inv.month}月（#{cat_label}）"
+              amount = inv.total_override.to_i.nonzero? || invoice_calc_total(inv)
+              items << { label: label, amount: amount }
+            end
+          end
+        end
+
+        expenses.to_a.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
+          users = subs.map(&:user).uniq
+          total = users.sum { |u|
+            u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).where("amount > 0").sum(:amount).to_i
+          }
+          next if total <= 0
+          surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
+          cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
+          label = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.pdf"
+          items << { label: label, amount: total }
+        end
+
+        expenses.to_a.each do |s|
+          neg_total = s.user.expenses.in_range(s.user.period_for(s.year, s.month))
+            .where(category: s.category, company_burden: true).where("amount < 0").sum(:amount).to_i
+          next if neg_total >= 0
+          surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
+          cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
+          label = "立替金_#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.pdf"
+          items << { label: label, amount: neg_total }
+        end
+
+        items
+      end
 
       def invoice_filename(s)
         surname = s.user.display_name.to_s.split(/[\s　]/).first

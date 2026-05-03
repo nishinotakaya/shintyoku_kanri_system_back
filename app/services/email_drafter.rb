@@ -226,9 +226,9 @@ class EmailDrafter
 
   # 請求書送付メールの固定テンプレート (self_invoice / labop_invoice 共通)
   # 件名: 【ご請求】{year}年{month}月分 {name}{cat}案件 ...送付の件
-  # 本文: 株式会社ラボップ 御中 〜 ご不明点がございましたら、ご連絡ください。
+  # 本文: 株式会社ラボップ 御中 〜 何卒よろしくお願い申し上げます。
   def build_invoice_email(name_for_subject:, cat_label:, invoice_total:, expense_total:, grand_total:, include_expense:)
-    fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
+    fmt = ->(n) { sign = n.to_i < 0 ? "-" : ""; "#{sign}¥#{n.to_i.abs.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
 
     # 宛名行: 「株式会社ラボップ 御中」が無ければ補完して整形
     recipient_raw = @context[:recipient_name].to_s.strip
@@ -245,7 +245,20 @@ class EmailDrafter
     cat_block = cat_label.empty? ? "" : "#{cat_label}案件の"
     subject_cat_block = cat_label.empty? ? "" : "#{cat_label}案件 "
 
-    amount_block = if include_expense
+    sender_surname = @context[:sender_name].to_s.split(/[\s　]/).first.to_s
+    intro_line = sender_surname.empty? ? "" : "\n#{sender_surname}でございます。"
+
+    breakdown_items = Array(@context[:breakdown_items]).select { |it| it[:label].to_s.strip.length > 0 }
+    amount_block = if breakdown_items.any?
+      list = breakdown_items.map { |it| "・#{it[:label]}：#{fmt.call(it[:amount])}" }.join("\n")
+      <<~AMT.strip
+        請求金額（税込）の内訳は以下の通りです。
+
+        #{list}
+
+        合計 請求金額（税込）：#{fmt.call(grand_total)}
+      AMT
+    elsif include_expense
       <<~AMT.strip
         請求金額（税込）は #{fmt.call(invoice_total)}
         立替金合計は #{fmt.call(expense_total)}、
@@ -260,14 +273,14 @@ class EmailDrafter
       body: <<~BODY
         #{recipient_line}
 
-        お世話になっております。
+        お世話になっております。#{intro_line}
 
-        #{cat_block}#{@context[:year]}年#{@context[:month]}月分の#{kind_phrase_body}を送付いたします。
-        添付ファイルをご確認ください。
+        #{cat_block}#{@context[:year]}年#{@context[:month]}月分の#{kind_phrase_body}を送付いたしますので、添付ファイルをご確認ください。
 
         #{amount_block}
 
         ご不明点がございましたら、ご連絡ください。
+        何卒よろしくお願い申し上げます。
       BODY
     }
   end
