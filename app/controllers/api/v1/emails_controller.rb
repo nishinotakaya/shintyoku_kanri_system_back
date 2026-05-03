@@ -12,24 +12,31 @@ module Api
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
         invoice_ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
         expense_ids = Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
+        issued_pdf_ids = Array(params[:issued_invoice_pdf_ids]).map(&:to_i).reject(&:zero?)
         invoices = InvoiceSubmission.where(id: invoice_ids).where(kind: "invoice").approved.includes(:user, :received_purchase_order)
         expenses = InvoiceSubmission.where(id: expense_ids).where(kind: "expense").approved.includes(:user)
+        issued_pdfs = IssuedInvoicePdf.where(id: issued_pdf_ids)
         invoice_total = invoices.sum { |i| i.total_override || invoice_calc_total(i) }
         expense_total = expenses.sum { |e| expense_calc_total(e) }
-        breakdown_items = build_labop_breakdown_items(invoices, expenses)
+        issued_invoice_total = issued_pdfs.where(kind: "invoice").sum(:total_amount).to_i
+        issued_expense_total = issued_pdfs.where(kind: "expense").sum(:total_amount).to_i
+        breakdown_items = build_labop_breakdown_items(invoices, expenses, issued_pdfs)
+        first_year = invoices.first&.year || expenses.first&.year || issued_pdfs.first&.year
+        first_month = invoices.first&.month || expenses.first&.month || issued_pdfs.first&.month
+        first_cat = invoices.first&.category || expenses.first&.category || issued_pdfs.first&.category
         ctx = {
           recipient_name: params[:recipient_name].presence || "#{I18n.t("companies.labop.name")} #{I18n.t("companies.labop.honorific_default")}",
-          year: invoices.first&.year || expenses.first&.year,
-          month: invoices.first&.month || expenses.first&.month,
-          category_label: CATEGORY_LABELS[(invoices.first&.category || expenses.first&.category).to_s] || (invoices.first&.category || expenses.first&.category).to_s,
-          total: invoice_total,
-          expense_total: expense_total,
-          grand_total: invoice_total + expense_total,
+          year: first_year,
+          month: first_month,
+          category_label: CATEGORY_LABELS[first_cat.to_s] || first_cat.to_s,
+          total: invoice_total + issued_invoice_total,
+          expense_total: expense_total + issued_expense_total,
+          grand_total: invoice_total + issued_invoice_total + expense_total + issued_expense_total,
           applicant_name: (invoices + expenses).map { |s| s.user&.display_name }.compact.uniq.join("、"),
           sender_name: current_user.display_name,
           extra_attachments: params[:extra_count].to_i > 0,
-          invoice_count: invoices.size,
-          expense_count: expenses.size,
+          invoice_count: invoices.size + issued_pdfs.where(kind: "invoice").count,
+          expense_count: expenses.size + issued_pdfs.where(kind: "expense").count,
           breakdown_items: breakdown_items
         }
         render json: EmailDrafter.draft(kind: :labop_invoice, context: ctx)
@@ -386,8 +393,16 @@ module Api
       #   - 単一申請 → "{ユーザー} {年}年{月}月（{案件}）" ラベル
       #   - 立替金 (amount > 0) → カテゴリ単位で集約 PDF (filename ラベル)
       #   - 立替金 (amount < 0, 相殺) → 申請者ごとに別建て PDF (filename ラベル)
-      def build_labop_breakdown_items(invoices, expenses)
+      def build_labop_breakdown_items(invoices, expenses, issued_pdfs = [])
         items = []
+
+        # 保存済 統合 PDF (IssuedInvoicePdf): filename + total_amount をそのまま並べる。
+        # AI 下書きの内訳は「メールに添付されるファイル」と一致するべきなので、
+        # 統合(保存済)行を選択している場合はそれを優先して個別 invoice/expense の重複を避ける。
+        issued_pdfs.each do |ip|
+          label = ip.filename.presence || "保存済PDF##{ip.id}"
+          items << { label: label, amount: ip.total_amount.to_i }
+        end
 
         invoices.to_a.group_by(&:received_purchase_order_id).each do |po_id, group|
           if po_id.present? && group.size >= 2
