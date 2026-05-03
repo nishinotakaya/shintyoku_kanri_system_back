@@ -105,7 +105,7 @@ class InvoicePdfRenderer
 
     # シェアラウンジ請求書の宛名固定: 件名/備考に「シェアラウンジ」を含むなら宛名は必ず「株式会社ラボップ」
     # 「大隅様」だと経費精算に通らないため
-    if (subject_text.to_s.include?("シェアラウンジ") || @note.to_s.include?("シェアラウンジ"))
+    if subject_text.to_s.include?("シェアラウンジ") || @note.to_s.include?("シェアラウンジ")
       client_name = I18n.t("companies.labop.name")
     end
 
