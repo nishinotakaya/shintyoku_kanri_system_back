@@ -413,23 +413,36 @@ module Api
         # 保存済 統合 PDF (IssuedInvoicePdf): filename + total_amount をそのまま並べる。
         # AI 下書きの内訳は「メールに添付されるファイル」と一致するべきなので、
         # 統合(保存済)行を選択している場合はそれを優先して個別 invoice/expense の重複を避ける。
+        # ラベル先頭には「{注文番号}: 」(invoice) または「立替金: 」(expense) を付ける。
         issued_pdfs.each do |ip|
-          label = ip.filename.presence || "保存済PDF##{ip.id}"
-          items << { label: label, amount: ip.total_amount.to_i }
+          base = ip.filename.presence || "保存済PDF##{ip.id}"
+          prefix = if ip.kind == "expense"
+            "立替金: "
+          elsif ip.purchase_order_no.present?
+            "#{ip.purchase_order_no}: "
+          else
+            ""
+          end
+          base = base.sub(/\A立替金_/, "") if ip.kind == "expense"
+          items << { label: "#{prefix}#{base}", amount: ip.total_amount.to_i }
         end
 
         invoices.to_a.group_by(&:received_purchase_order_id).each do |po_id, group|
           if po_id.present? && group.size >= 2
             primary = group.first
+            effective_no = primary.purchase_order_no_override.presence || primary.received_purchase_order&.order_no
             surnames = group.map(&:user).map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
             cat_label = CATEGORY_LABELS[primary.category.to_s] || primary.category.to_s
-            label = "#{surnames.presence || '集約'}_請求書_#{cat_label}_#{primary.year}年_#{primary.month}月分.pdf"
+            base = "#{surnames.presence || '集約'}_請求書_#{cat_label}_#{primary.year}年_#{primary.month}月分.pdf"
+            label = effective_no.present? ? "#{effective_no}: #{base}" : base
             amount = group.sum { |s| s.total_override.to_i.nonzero? || invoice_calc_total(s) }
             items << { label: label, amount: amount }
           else
             group.each do |inv|
               cat_label = CATEGORY_LABELS[inv.category.to_s] || inv.category.to_s
-              label = "#{inv.user.display_name} #{inv.year}年#{inv.month}月（#{cat_label}）"
+              effective_no = inv.purchase_order_no_override.presence || inv.received_purchase_order&.order_no
+              base = "#{inv.user.display_name} #{inv.year}年#{inv.month}月（#{cat_label}）"
+              label = effective_no.present? ? "#{effective_no}: #{base}" : base
               amount = inv.total_override.to_i.nonzero? || invoice_calc_total(inv)
               items << { label: label, amount: amount }
             end
@@ -444,8 +457,8 @@ module Api
           next if total <= 0
           surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
           cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
-          label = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.pdf"
-          items << { label: label, amount: total }
+          base = "#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.pdf"
+          items << { label: "立替金: #{base}", amount: total }
         end
 
         expenses.to_a.each do |s|
@@ -454,8 +467,8 @@ module Api
           next if neg_total >= 0
           surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
           cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
-          label = "立替金_#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.pdf"
-          items << { label: label, amount: neg_total }
+          base = "#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.pdf"
+          items << { label: "立替金: #{base}", amount: neg_total }
         end
 
         items
