@@ -26,7 +26,7 @@ gem "rack-cors"
 gem "devise", "~> 4.9"
 gem "devise-jwt", "~> 0.12"
 # Devise 4.9.4 が Zeitwerk 2.7 の strict require と非互換のため 2.6 系に固定
-gem "zeitwerk", "~> 2.6.0"
+gem "zeitwerk", "~> 2.7.5"
 
 # Excel 既存テンプレートを書式維持で編集
 gem "rubyXL", "~> 3.4"
