@@ -1,8 +1,8 @@
 module Api
   module V1
     class ReceivedPurchaseOrdersController < BaseController
-      before_action :ensure_admin, only: [ :create, :update, :destroy ]
-      before_action :set_record, only: [ :show, :update, :destroy ]
+      before_action :ensure_admin, only: [ :create, :update, :destroy, :upload, :extract ]
+      before_action :set_record, only: [ :show, :update, :destroy, :download ]
 
       # GET /api/v1/received_purchase_orders
       # admin: 全件 / それ以外: 自分のもの
@@ -40,6 +40,52 @@ module Api
         head :no_content
       end
 
+      # POST /api/v1/received_purchase_orders/extract
+      # multipart で PDF を受け取り、AI で抽出した JSON を返す（保存はしない）。
+      # フロント側で内容確認 → upload で保存、の 2 ステップで使う想定。
+      def extract
+        file = params[:file]
+        return render(json: { error: "PDF を添付してください" }, status: :unprocessable_entity) unless file.respond_to?(:read)
+        result = PurchaseOrderPdfExtractor.call(file.tempfile.presence || file)
+        render json: result
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/received_purchase_orders/upload
+      # multipart で PDF + 抽出 or 編集済みフィールドを受け取り、レコード作成 + PDF 保存。
+      def upload
+        file = params[:file]
+        return render(json: { error: "PDF を添付してください" }, status: :unprocessable_entity) unless file.respond_to?(:read)
+
+        binary = file.read
+        attrs = po_params.to_h.merge(
+          file_data: binary,
+          filename: file.original_filename,
+          content_type: file.content_type || "application/pdf"
+        )
+        attrs[:user_id] ||= params[:user_id] || current_user.id
+        attrs[:order_no] = "UNKNOWN-#{SecureRandom.hex(4)}" if attrs[:order_no].blank?
+        attrs[:ai_extracted_at] = Time.current if params[:ai_extracted].to_s == "true"
+        attrs[:ai_raw_text] = params[:ai_raw_text].to_s if params[:ai_raw_text].present?
+
+        record = ReceivedPurchaseOrder.new(attrs)
+        record.save!
+        render json: serialize(record), status: :created
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/v1/received_purchase_orders/:id/download
+      # 保存済 PDF をブラウザに送る。
+      def download
+        return render(json: { error: "PDF が保存されていません" }, status: :not_found) if @record.file_data.blank?
+        send_data @record.file_data,
+          type: @record.content_type.presence || "application/pdf",
+          filename: @record.filename.presence || "発注書_#{@record.order_no}.pdf",
+          disposition: params[:disposition].presence || "inline"
+      end
+
       private
 
       def set_record
@@ -75,6 +121,9 @@ module Api
           total_amount: r.total_amount,
           note: r.note,
           file_url: r.file_url,
+          filename: r.filename,
+          has_pdf: r.file_data.present?,
+          ai_extracted_at: r.ai_extracted_at&.iso8601,
           invoice_submission_count: r.invoice_submissions.size
         }
       end

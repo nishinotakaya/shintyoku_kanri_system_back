@@ -36,8 +36,16 @@ Rails.application.routes.draw do
       resources :expenses, only: [ :index, :create, :update, :destroy ]
 
       resources :invoice_submissions, only: [ :index, :create, :update, :destroy ]
-      resources :received_purchase_orders, only: [ :index, :show, :create, :update, :destroy ]
-      resources :issued_invoice_pdfs, only: [ :index, :show, :destroy ] do
+      resources :received_purchase_orders, only: [ :index, :show, :create, :update, :destroy ] do
+        collection do
+          post :extract
+          post :upload
+        end
+        member do
+          get :download
+        end
+      end
+      resources :issued_invoice_pdfs, only: [ :index, :show, :update, :destroy ] do
         member do
           get :download
         end

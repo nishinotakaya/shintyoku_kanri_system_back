@@ -34,6 +34,9 @@ gem "rubyXL", "~> 3.4"
 # OpenAI
 gem "ruby-openai", "~> 7.4"
 
+# PDF テキスト抽出 (発注書 PDF からの注文番号/金額自動抽出に使用)
+gem "pdf-reader", "~> 2.13"
+
 # .env loader (development)
 gem "dotenv-rails", "~> 3.1", groups: [ :development, :test ]
 
