@@ -70,7 +70,26 @@ class TeamScheduleImporter
 
     write_totals_back(service, spreadsheet_id, sheet_title, person_columns)
 
-    { sheet: sheet_title, imported: imported, persons: PERSONS }
+    # 出社予定の日に交通費を自動作成（取り込んだ team_schedule に基づく）
+    expenses_created = sync_commute_expenses
+
+    { sheet: sheet_title, imported: imported, persons: PERSONS, expenses_created: expenses_created }
+  end
+
+  # team_schedules の status が "出社" の日に、display_name でマッチするユーザーごとの
+  # default_transit_* で Expense を自動作成する。
+  def sync_commute_expenses
+    total = 0
+    PERSONS.each do |person_name|
+      target = User.where("display_name LIKE ?", "%#{person_name}%").find_each.find { |u| !u.display_name.to_s.start_with?("wing") }
+      next unless target
+      created = TeamScheduleExpenseSync.new(user: target, year: @year, month: @month).call
+      total += created.size
+    end
+    total
+  rescue => e
+    Rails.logger.warn("[TeamScheduleImporter] sync_commute_expenses error: #{e.class}: #{e.message}")
+    0
   end
 
   private

@@ -60,6 +60,27 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/team_schedules/sync_expenses
+      # 取り込み済みの team_schedules から、出社日に交通費 Expense を一括作成する。
+      # 既存の Expense は上書きしない (idempotent)。
+      def sync_expenses
+        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        results = []
+        total = 0
+        target_year_months.each do |y, m|
+          TeamScheduleImporter::PERSONS.each do |person_name|
+            target = User.where("display_name LIKE ?", "%#{person_name}%").find_each.find { |u| !u.display_name.to_s.start_with?("wing") }
+            next unless target
+            created = TeamScheduleExpenseSync.new(user: target, year: y, month: m).call
+            total += created.size
+            results << { year: y, month: m, person: person_name, created: created.size }
+          end
+        end
+        render json: { created: total, details: results }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       def create
         date = Date.iso8601(params[:date].to_s)
         record = TeamSchedule.find_or_initialize_by(date: date, person: params[:person].to_s)

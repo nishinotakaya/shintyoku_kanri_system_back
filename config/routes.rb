@@ -19,6 +19,7 @@ Rails.application.routes.draw do
       post   "team_schedules",        to: "team_schedules#create"
       post   "team_schedules/import", to: "team_schedules#import"
       post   "team_schedules/export", to: "team_schedules#export"
+      post   "team_schedules/sync_expenses", to: "team_schedules#sync_expenses"
       patch  "team_schedules/:id",    to: "team_schedules#update"
 
       resources :work_reports, only: [ :index, :create, :update, :destroy ] do
