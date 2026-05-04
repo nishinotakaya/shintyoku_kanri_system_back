@@ -55,6 +55,6 @@ gem "omniauth-google-oauth2", "~> 1.2"
 # omniauth-rails_csrf_protection は API モードでは不要（CSRF トークンがない）
 
 gem "google-apis-sheets_v4", "~> 0.47.0"
-gem "google-apis-gmail_v1", "~> 0.36"
+gem "google-apis-gmail_v1", "~> 0.49"
 
 gem "dockerfile-rails", ">= 1.7", group: :development
