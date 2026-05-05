@@ -23,6 +23,19 @@ module Api
         send_data rec.file_data, type: ctype, filename: rec.filename, disposition: params[:disposition].presence || "attachment"
       end
 
+      def update
+        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        rec = IssuedInvoicePdf.find(params[:id])
+        attrs = {}
+        attrs[:purchase_order_no] = params[:purchase_order_no].to_s.presence if params.key?(:purchase_order_no)
+        attrs[:filename] = params[:filename].to_s if params.key?(:filename) && params[:filename].to_s.present?
+        attrs[:note] = params[:note].to_s.presence if params.key?(:note)
+        rec.update!(attrs) if attrs.any?
+        render json: serialize(rec)
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       def destroy
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
         IssuedInvoicePdf.find(params[:id]).destroy!
