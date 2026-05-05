@@ -16,6 +16,11 @@ class User < ApplicationRecord
   has_many :received_purchase_orders, dependent: :destroy
   has_many :issued_invoice_pdfs, dependent: :destroy
 
+  # 別アカウントを admin の同一人物としてリンク。
+  # 例: wing西野 鷹也 (taka-nishino@tamahome.jp) を admin 西野 鷹也 (takaya314boxing@gmail.com) にリンク
+  # → BaseController#current_user が linked_user に解決し、両アカウントから同一データを編集可能。
+  belongs_to :linked_user, class_name: "User", optional: true
+
   def application_date_for(year, month)
     # 設定が無い場合は対象月の末日をデフォルトとする
     monthly_settings.find_by(year: year, month: month)&.application_date || Date.new(year.to_i, month.to_i, -1)

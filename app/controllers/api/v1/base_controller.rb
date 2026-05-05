@@ -3,6 +3,16 @@ module Api
     class BaseController < ApplicationController
       before_action :authenticate_user!
 
+      # users.linked_user_id が設定されているアカウント (例: wing西野 鷹也 が admin 西野 鷹也 に
+      # 紐付いている) は、current_user を自動で linked 先 (= admin) に置き換える。
+      # → 同じバックログ・進捗・請求書データを別アカウントからも編集できる。
+      # super (Devise#current_user) は warden が解決した実ログインユーザー。
+      def current_user
+        raw = super
+        return raw unless raw
+        @resolved_current_user ||= (raw.respond_to?(:linked_user) && raw.linked_user) || raw
+      end
+
       private
 
       def parse_month
