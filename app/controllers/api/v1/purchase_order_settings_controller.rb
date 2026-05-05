@@ -47,11 +47,16 @@ module Api
       end
 
       def serialize(setting)
+        items = Array(setting.items)
+        subtotal = items.sum { |it| (it["amount"] || it[:amount]).to_i }
+        total_amount = (subtotal * 1.1).round
         {
+          id: setting.id,
           category: setting.category,
           position: setting.position,
           exists: true,
           subject: setting.subject,
+          total_amount: total_amount,
           issuer_company: setting.issuer_company,
           issuer_representative: setting.issuer_representative,
           issuer_postal: setting.issuer_postal,
