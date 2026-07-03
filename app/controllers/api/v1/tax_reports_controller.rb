@@ -13,13 +13,22 @@ module Api
         render json: build_summary(year)
       end
 
-      # GET /api/v1/tax_reports/export_pdf?year=2026&deduction=650000
-      # 青色申告決算書(損益計算書)の様式風PDF（転記・保管用）
+      # GET /api/v1/tax_reports/export_pdf?year=2026&deduction=650000&doc=kessansho|shinkokusho
+      # 国税庁の実物様式に値を重ね打ちしたPDF。
+      #   kessansho:   青色申告決算書 (損益計算書/月別売上・特別控除/減価償却・売上明細) 3面
+      #   shinkokusho: 確定申告書 第一表
       def export_pdf
         year = target_year
         deduction = params[:deduction].presence&.to_i || 650_000
-        path = TaxReturnPdfRenderer.new(current_user, year: year, deduction: deduction).call
-        send_file path, type: "application/pdf", filename: "青色申告決算書_#{year}年分.pdf", disposition: "attachment"
+        renderer = OfficialTaxFormRenderer.new(current_user, year: year, deduction: deduction)
+        if params[:doc] == "shinkokusho"
+          path = renderer.render_shinkokusho
+          filename = "確定申告書第一表_#{year}年分.pdf"
+        else
+          path = renderer.render_kessansho
+          filename = "青色申告決算書_#{year}年分.pdf"
+        end
+        send_file path, type: "application/pdf", filename: filename, disposition: "attachment"
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
