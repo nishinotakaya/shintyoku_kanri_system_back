@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_01_000003) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_03_000001) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -95,6 +95,26 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_01_000003) do
     t.boolean "did_previous", default: false, null: false
     t.boolean "do_today", default: false, null: false
     t.index ["user_id"], name: "index_backlog_tasks_on_user_id"
+  end
+
+  create_table "business_expenses", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.date "expense_date"
+    t.string "store_name"
+    t.integer "amount"
+    t.integer "tax_rate", default: 10, null: false
+    t.string "account_category"
+    t.string "memo"
+    t.integer "business_ratio", default: 100, null: false
+    t.string "status", default: "needs_review", null: false
+    t.binary "receipt_data"
+    t.string "content_type"
+    t.datetime "ai_extracted_at"
+    t.integer "ai_confidence"
+    t.text "ai_raw"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "expense_date"], name: "index_business_expenses_on_user_id_and_expense_date"
   end
 
   create_table "expenses", force: :cascade do |t|

@@ -6,6 +6,7 @@ class User < ApplicationRecord
 
   has_many :work_reports, dependent: :destroy
   has_many :expenses, dependent: :destroy
+  has_many :business_expenses, dependent: :destroy
   has_many :invoice_settings, dependent: :destroy
   has_one  :backlog_setting, dependent: :destroy
   has_many :backlog_tasks, dependent: :destroy

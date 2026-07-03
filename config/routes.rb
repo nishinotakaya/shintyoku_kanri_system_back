@@ -139,6 +139,13 @@ Rails.application.routes.draw do
         end
       end
 
+      # 確定申告用の事業経費 (レシート撮影→AI読取→勘定科目分類)
+      resources :business_expenses, only: [ :index, :create, :update, :destroy ] do
+        member do
+          get :receipt
+        end
+      end
+
       resources :invoice_submissions, only: [ :index, :create, :update, :destroy ] do
         collection do
           post :bulk_create
