@@ -17,36 +17,8 @@
       "note": "PurchaseOrderPdfRenderer: 同上、配列引数 + SecureRandom。偽陽性"
     },
     {
-      "fingerprint": "3673433e13289bd0cba4ccd68ea0dd036667ecf283440f9ef1127648383b24d4",
-      "note": "exports#work_report の send_file filename: year/month は to_i 済み、category は fixed list 想定。偽陽性"
-    },
-    {
-      "fingerprint": "fec457f53885d084ac3fc47b03c73ffb23759c63326f9aa4e4d3affe2e353675",
-      "note": "exports#invoice の send_file filename (received_purchase_order / items_override 同梱版): year/month は to_i 済み、category は fixed list 想定、note 内 order_no は purchase_order_no_override or 履歴 DB 由来。偽陽性"
-    },
-    {
-      "fingerprint": "5a988c46082fee27cfbc065ed92756db11dc1e76dc40852e5418c3810357c147",
-      "note": "purchase_order_histories#regenerate の send_file filename: order_no は履歴 DB から取得 (params 由来ではない)。偽陽性"
-    },
-    {
-      "fingerprint": "0646280de99068b4feb4a29cde9364d4c990c12b838c9c1bcb619fdef178c970",
-      "note": "exports#expense の send_file filename (resolve_expense_target で issuer_user_override / client_name_override 追加版): year/month は to_i 済み、category は fixed list 想定。偽陽性"
-    },
-    {
-      "fingerprint": "fa48e86178c363d3842e293b26c54b2314694bf97ab5e682a22dc96193cc339e",
-      "note": "exports#expense_pdf の send_file filename (issuer_user_override / client_name_override 追加版): year/month は to_i 済み、category は fixed list 想定。偽陽性"
-    },
-    {
       "fingerprint": "a95ea1e4e8a6fff096287dc6faf6544db9ff8d7d3135845283c7f1f2bed4f08b",
       "note": "exports#purchase_order の send_file filename: order_no は permit + フォーム固定値 想定。偽陽性"
-    },
-    {
-      "fingerprint": "4915a70b268ded222487af881070735ff03395e1ef7db60234a28c0c562b41b5",
-      "note": "exports#merged_invoice の send_file filename: invoice_submission_ids は to_i + reject(&:zero?) 済み、category は fixed list 想定、surnames は authenticated user の display_name を split したもの。filename へ params 由来文字列が直接埋まる経路なし。偽陽性"
-    },
-    {
-      "fingerprint": "b2d49d5d34f545c27ff8959f0426d758c4d5e144bfd3ea64daa294f04d3f1896",
-      "note": "exports#merged_expense の send_file filename: expense_submission_ids は to_i + reject(&:zero?) 済み、category は fixed list 想定、surnames は authenticated user の display_name を split したもの。filename へ params 由来文字列が直接埋まる経路なし。偽陽性"
     },
     {
       "warning_type": "File Access",
