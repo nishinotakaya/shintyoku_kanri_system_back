@@ -178,15 +178,14 @@ class OfficialTaxFormRenderer
   end
 
   # ============ 確定申告書 第一表 ============
-  # 様式は令和六年分用(FA2204)。行番号は同様式に準拠: (30)課税所得 (31)税額 (41)差引 (43)再差引
-  # (46)復興特別所得税 (47)合計 (51)申告納税額 (53)第3期分納める税金 (60)青色申告特別控除額
+  # 様式: 令和七年分用(FA2205・実物)。行: (31)課税所得 (32)税額 (42)差引 (44)再差引
+  # (45)復興特別所得税 (46)合計 (50)申告納税額 (52)第3期分納める税金 (59)青色申告特別控除額
   def shinkokusho_page
     f = []
-    f << { x: 12.0, y: 9.0, text: @setting&.address.to_s, size: 8 }
-    f << { x: 48.0, y: 12.1, text: @user.display_name.to_s, size: 11 }
-    f << { x: 40.5, y: 14.3, text: "ソフトウェア・情報サービス業", size: 7 }
+    f << { x: 14.5, y: 10.0, text: @setting&.address.to_s, size: 8 }
+    f << { x: 60.0, y: 11.8, text: @user.display_name.to_s, size: 11 }
+    f << { x: 49.0, y: 15.1, text: "ソフトウェア・情報サービス業", size: 7 }
 
-    income = @summary[:income_total]
     basic_deduction = 680_000 # 基礎控除
     taxable = [ ((final_income - basic_deduction) / 1000) * 1000, 0 ].max
     tax = income_tax_for(taxable)
@@ -194,24 +193,26 @@ class OfficialTaxFormRenderer
     total_tax = tax + reconstruction
     payment = (total_tax / 100) * 100
 
-    money = ->(y, v, size = 10) { { x: 21.0, y: y, w: 15.5, align: :right, text: fmt0(v), size: size } }
-    f << money.call(20.0, income)                      # 収入 事業営業等(ア)
-    f << money.call(42.9, final_income)                # 所得 事業①
-    f << money.call(64.0, final_income)                # ⑫合計
-    f << money.call(82.7, basic_deduction)             # ㉔基礎控除
-    f << money.call(85.7, basic_deduction)             # ㉕13から24までの計
-    rmoney = ->(y, v, size = 10) { { x: 58.5, y: y, w: 15.0, align: :right, text: fmt0(v), size: size } }
-    # (30)課税所得は下3桁000がプレ印字 → 千円単位のみ刻印
-    f << { x: 58.5, y: 20.3, w: 11.7, align: :right, text: fmt0(taxable / 1000), size: 10 }
-    f << rmoney.call(23.0, tax)                        # (31)税額
-    f << rmoney.call(33.8, tax)                        # (41)差引所得税額
-    f << rmoney.call(38.2, tax)                        # (43)再差引所得税額
-    f << rmoney.call(44.4, reconstruction)             # (46)復興特別所得税額
-    f << rmoney.call(46.7, total_tax)                  # (47)所得税及び復興特別所得税の額
-    f << rmoney.call(54.3, payment)                    # (51)申告納税額
-    # (53)納める税金は下2桁00がプレ印字 → 百円単位のみ刻印
-    f << { x: 58.5, y: 58.9, w: 12.3, align: :right, text: fmt0(payment / 100), size: 10 }
-    f << rmoney.call(69.3, deduction_applied)          # (60)青色申告特別控除額
+    money = ->(y, v) { { x: 30.0, y: y, w: 19.6, align: :right, text: fmt0(v), size: 10 } }
+    f << money.call(20.4, @summary[:income_total])     # 収入 事業営業等(ア)
+    f << money.call(42.2, final_income)                # 所得 事業①
+    f << money.call(64.3, final_income)                # ⑫合計
+    # ㉕基礎控除は下4桁0000がプレ印字 → 万円単位のみ刻印
+    f << { x: 30.0, y: 84.8, w: 13.4, align: :right, text: fmt0(basic_deduction / 10_000), size: 10 }
+    f << money.call(87.1, basic_deduction)             # ㉖13から25までの計
+
+    rmoney = ->(y, v) { { x: 62.5, y: y, w: 22.3, align: :right, text: fmt0(v), size: 10 } }
+    # (31)課税所得は下3桁000がプレ印字 → 千円単位のみ刻印
+    f << { x: 62.5, y: 20.4, w: 16.0, align: :right, text: fmt0(taxable / 1000), size: 10 }
+    f << rmoney.call(22.5, tax)                        # (32)税額
+    f << rmoney.call(34.4, tax)                        # (42)差引所得税額
+    f << rmoney.call(38.7, tax)                        # (44)再差引所得税額(基準所得税額)
+    f << rmoney.call(40.3, reconstruction)             # (45)復興特別所得税額
+    f << rmoney.call(42.3, total_tax)                  # (46)所得税及び復興特別所得税の額
+    f << rmoney.call(48.5, payment)                    # (50)申告納税額
+    # (52)納める税金は下2桁00がプレ印字 → 百円単位のみ刻印
+    f << { x: 62.5, y: 52.3, w: 18.3, align: :right, text: fmt0(payment / 100), size: 10 }
+    f << rmoney.call(66.5, deduction_applied)          # (59)青色申告特別控除額
     { image_base64: form_base64("shinkokusho_p1.png"), fields: f.reject { |x| x[:text].blank? } }
   end
 

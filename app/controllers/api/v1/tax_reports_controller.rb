@@ -33,6 +33,17 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/tax_reports/advice?year=2026
+      # 集計データをもとに AI が税務アドバイス（節税・消費税・インボイス・注意点）を返す
+      def advice
+        year = target_year
+        summary = build_summary(year)
+        result = TaxAdvisor.call(user: current_user, summary: summary)
+        render json: result
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       # GET /api/v1/tax_reports/export_csv?year=2026&kind=summary|details
       # e-Tax(確定申告書等作成コーナー)転記用のCSV。Excelで開けるようBOM付きUTF-8。
       def export_csv

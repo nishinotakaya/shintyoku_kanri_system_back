@@ -154,6 +154,7 @@ Rails.application.routes.draw do
       get "tax_reports/summary",    to: "tax_reports#summary"
       get "tax_reports/export_csv", to: "tax_reports#export_csv"
       get "tax_reports/export_pdf", to: "tax_reports#export_pdf"
+      post "tax_reports/advice",    to: "tax_reports#advice"
 
       resources :invoice_submissions, only: [ :index, :create, :update, :destroy ] do
         collection do
