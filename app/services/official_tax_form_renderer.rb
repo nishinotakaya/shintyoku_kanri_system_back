@@ -99,34 +99,34 @@ class OfficialTaxFormRenderer
 
     # 左列 金額 (右端 x=20.5〜35.3 の右寄せ)
     lx, lw = 20.5, 14.6
-    f << { x: lx, y: 39.7, w: lw, align: :right, text: fmt(@summary[:income_total]), size: 12.5 }
-    f << { x: lx, y: 59.3, w: lw, align: :right, text: fmt(@summary[:income_total]), size: 12.5 }  # ⑦
-    { 8 => 64.7, 9 => 67.65, 10 => 70.6, 11 => 73.55, 12 => 76.5, 13 => 79.45, 14 => 82.4, 15 => 85.35, 16 => 88.3 }.each do |no, y|
+    f << { x: lx, y: 39.4, w: lw, align: :right, text: fmt(@summary[:income_total]), size: 13.5 }
+    f << { x: lx, y: 59.9, w: lw, align: :right, text: fmt(@summary[:income_total]), size: 13.5 }  # ⑦
+    { 8 => 64.3, 9 => 67.2, 10 => 70.2, 11 => 73.1, 12 => 76.0, 13 => 79.0, 14 => 81.9, 15 => 84.8, 16 => 87.7 }.each do |no, y|
       cat = FIXED_CATEGORIES.key(no)
-      f << { x: lx, y: y, w: lw, align: :right, text: fmt(totals[cat]), size: 13 }
+      f << { x: lx, y: y, w: lw, align: :right, text: fmt(totals[cat]), size: 14 }
     end
 
     # 中列 金額 (x=48.0〜63.7 右寄せ)
     mx, mw = 47.5, 15.0
-    { 17 => 38.9, 18 => 41.77, 19 => 44.64, 20 => 47.51, 21 => 50.38, 22 => 53.25, 23 => 56.12, 24 => 58.99 }.each do |no, y|
+    { 17 => 37.9, 18 => 40.85, 19 => 43.75, 20 => 46.7, 21 => 49.65, 22 => 52.55, 23 => 55.5, 24 => 58.4 }.each do |no, y|
       cat = FIXED_CATEGORIES.key(no)
-      f << { x: mx, y: y, w: mw, align: :right, text: fmt(totals[cat]), size: 13 }
+      f << { x: mx, y: y, w: mw, align: :right, text: fmt(totals[cat]), size: 14 }
     end
     # 空欄枠 ㉕〜㉚ (科目名 + 金額)
-    slot_ys = [ 62.0, 64.87, 67.74, 70.61, 73.48, 76.35 ]
+    slot_ys = [ 61.35, 64.3, 67.2, 70.15, 73.1, 76.0 ]
     extra_categories.first(6).each_with_index do |row, i|
       f << { x: 38.5, y: slot_ys[i], text: row[:category], size: 9 }
-      f << { x: mx, y: slot_ys[i], w: mw, align: :right, text: fmt(row[:total]), size: 13 }
+      f << { x: mx, y: slot_ys[i], w: mw, align: :right, text: fmt(row[:total]), size: 14 }
     end
-    f << { x: mx, y: 79.3, w: mw, align: :right, text: fmt(category_totals["雑費"]), size: 12 }             # ㉛
-    f << { x: mx, y: 82.3, w: mw, align: :right, text: fmt0(@summary[:expense_total]), size: 12 }          # ㉜ 計
-    f << { x: mx, y: 86.4, w: mw, align: :right, text: fmt0(profit_before_deduction), size: 12.5 }           # ㉝
+    f << { x: mx, y: 78.95, w: mw, align: :right, text: fmt(category_totals["雑費"]), size: 14 }            # ㉛
+    f << { x: mx, y: 81.9, w: mw, align: :right, text: fmt0(@summary[:expense_total]), size: 14 }          # ㉜ 計
+    f << { x: mx, y: 86.3, w: mw, align: :right, text: fmt0(profit_before_deduction), size: 14 }           # ㉝
 
     # 右列 ㊸㊹㊺ (x=76.7〜92.0 右寄せ)
     rx, rw = 76.7, 15.0
-    f << { x: rx, y: 63.9, w: rw, align: :right, text: fmt0(profit_before_deduction), size: 12.5 }
-    f << { x: rx, y: 67.9, w: rw, align: :right, text: fmt0(deduction_applied), size: 12.5 }
-    f << { x: rx, y: 71.9, w: rw, align: :right, text: fmt0(final_income), size: 13 }
+    f << { x: rx, y: 64.3, w: rw, align: :right, text: fmt0(profit_before_deduction), size: 14 }
+    f << { x: rx, y: 67.3, w: rw, align: :right, text: fmt0(deduction_applied), size: 14 }
+    f << { x: rx, y: 71.6, w: rw, align: :right, text: fmt0(final_income), size: 14 }
 
     { image_base64: form_base64("kessansho_p1.png"), fields: f.reject { |x| x[:text].blank? } }
   end
@@ -138,14 +138,14 @@ class OfficialTaxFormRenderer
     f << { x: 21.0, y: 9.2, text: @user.display_name.to_s, size: 13 }
     # 月別売上 (1〜12月): 金額右寄せ x=13.0〜28.5
     sx, sw = 13.0, 15.0
-    row0, row_h = 19.05, 3.05
+    row0, row_h = 18.8, 2.941
     @summary[:monthly].each_with_index do |m, i|
-      f << { x: sx, y: row0 + row_h * i, w: sw, align: :right, text: fmt(m[:income]), size: 13 }
+      f << { x: sx, y: row0 + row_h * i, w: sw, align: :right, text: fmt(m[:income]), size: 14 }
     end
-    f << { x: sx, y: 62.0, w: sw, align: :right, text: fmt0(@summary[:income_total]), size: 12.5 } # 計
+    f << { x: sx, y: 61.4, w: sw, align: :right, text: fmt0(@summary[:income_total]), size: 14 } # 計
     # 青色申告特別控除の計算 (右下): ⑦控除前所得 / ⑨控除額
-    f << { x: 77.5, y: 80.4, w: 13.0, align: :right, text: fmt0(profit_before_deduction), size: 13 }
-    f << { x: 77.5, y: 85.2, w: 13.0, align: :right, text: fmt0(deduction_applied), size: 13 }
+    f << { x: 77.5, y: 80.6, w: 13.0, align: :right, text: fmt0(profit_before_deduction), size: 14 }
+    f << { x: 77.5, y: 83.4, w: 13.0, align: :right, text: fmt0(deduction_applied), size: 14 }
     { image_base64: form_base64("kessansho_p2.png"), fields: f.reject { |x| x[:text].blank? } }
   end
 
@@ -199,26 +199,26 @@ class OfficialTaxFormRenderer
     total_tax = tax + reconstruction
     payment = (total_tax / 100) * 100
 
-    money = ->(y, v) { { x: 30.0, y: y, w: 19.6, align: :right, text: fmt0(v), size: 12 } }
-    f << money.call(20.4, @summary[:income_total])     # 収入 事業営業等(ア)
-    f << money.call(42.2, final_income)                # 所得 事業①
-    f << money.call(64.3, final_income)                # ⑫合計
-    # ㉕基礎控除は下4桁0000がプレ印字 → 万円単位のみ刻印
-    f << { x: 30.0, y: 84.8, w: 13.4, align: :right, text: fmt0(basic_deduction / 10_000), size: 13 }
-    f << money.call(87.1, basic_deduction)             # ㉖13から25までの計
+    money = ->(y, v) { { x: 30.0, y: y, w: 19.6, align: :right, text: fmt0(v), size: 13.5 } }
+    f << money.call(19.8, @summary[:income_total])     # 収入 事業営業等(ア)
+    f << money.call(42.0, final_income)                # 所得 事業①
+    f << money.call(64.0, final_income)                # ⑫合計
+    # ㉕基礎控除は下4桁0000がプレ印字 → 万円単位のみ刻印(0000 の直前 x40.5 に右寄せ)
+    f << { x: 30.0, y: 84.4, w: 10.4, align: :right, text: fmt0(basic_deduction / 10_000), size: 14 }
+    f << money.call(86.3, basic_deduction)             # ㉖13から25までの計
 
-    rmoney = ->(y, v) { { x: 62.5, y: y, w: 22.3, align: :right, text: fmt0(v), size: 12 } }
-    # (31)課税所得は下3桁000がプレ印字 → 千円単位のみ刻印
-    f << { x: 62.5, y: 20.4, w: 16.0, align: :right, text: fmt0(taxable / 1000), size: 13 }
-    f << rmoney.call(22.5, tax)                        # (32)税額
-    f << rmoney.call(34.4, tax)                        # (42)差引所得税額
-    f << rmoney.call(38.7, tax)                        # (44)再差引所得税額(基準所得税額)
-    f << rmoney.call(40.3, reconstruction)             # (45)復興特別所得税額
-    f << rmoney.call(42.3, total_tax)                  # (46)所得税及び復興特別所得税の額
-    f << rmoney.call(48.5, payment)                    # (50)申告納税額
-    # (52)納める税金は下2桁00がプレ印字 → 百円単位のみ刻印
-    f << { x: 62.5, y: 52.3, w: 18.3, align: :right, text: fmt0(payment / 100), size: 13 }
-    f << rmoney.call(66.5, deduction_applied)          # (59)青色申告特別控除額
+    rmoney = ->(y, v) { { x: 62.5, y: y, w: 30.5, align: :right, text: fmt0(v), size: 13.5 } }
+    # (31)課税所得は下3桁000がプレ印字 → 千円単位のみ刻印(000 の直前 x85.2 に右寄せ)
+    f << { x: 62.5, y: 19.6, w: 22.7, align: :right, text: fmt0(taxable / 1000), size: 14 }
+    f << rmoney.call(21.7, tax)                        # (32)税額
+    f << rmoney.call(33.7, tax)                        # (42)差引所得税額
+    f << rmoney.call(37.7, tax)                        # (44)再差引所得税額(基準所得税額)
+    f << rmoney.call(39.9, reconstruction)             # (45)復興特別所得税額
+    f << rmoney.call(41.8, total_tax)                  # (46)所得税及び復興特別所得税の額
+    f << rmoney.call(47.8, payment)                    # (50)申告納税額
+    # (52)納める税金は下2桁00がプレ印字 → 百円単位のみ刻印(00 の直前 x87.5 に右寄せ)
+    f << { x: 62.5, y: 51.9, w: 25.0, align: :right, text: fmt0(payment / 100), size: 14 }
+    f << rmoney.call(66.3, deduction_applied)          # (59)青色申告特別控除額
     { image_base64: form_base64("shinkokusho_p1.png"), fields: f.reject { |x| x[:text].blank? } }
   end
 
