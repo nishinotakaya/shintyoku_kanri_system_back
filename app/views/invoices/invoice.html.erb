@@ -8,17 +8,24 @@ require "base64"
 # issuer_setting / issuer_user が渡された場合はそちらを使い、未指定なら従来通り setting / user を使う
 _issuer_setting = (defined?(issuer_setting) && issuer_setting) || setting
 _issuer_user    = (defined?(issuer_user) && issuer_user) || user
-_issuer_surname = (_issuer_setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || _issuer_user.display_name.to_s.split(/[\s　]/).first.to_s
+# 印鑑の持ち主: 請求書=請求者(対象ユーザー=user)、支払通知書=発行者(payer=_issuer_user)
+_is_payment_notice = (defined?(title_text) && title_text == "支払通知書")
+_seal_user    = _is_payment_notice ? _issuer_user : user
+_seal_setting = _is_payment_notice ? _issuer_setting : setting
+# まず DB(ユーザーの seal_image=data URL)を使い、無ければ従来の public/hanko_* にフォールバック
+_db_seal = (_seal_user.respond_to?(:seal_image) ? _seal_user.seal_image.to_s : "")
+_seal_surname = (_seal_setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || _seal_user.display_name.to_s.split(/[\s　]/).first.to_s
 _hanko_map = { "西野" => "hanko_nishino.png", "川村" => "hanko_kawamura.svg" }
-_hanko_file = _hanko_map[_issuer_surname]
+_hanko_file = _hanko_map[_seal_surname]
 _hanko_path = _hanko_file ? "#{Rails.root}/public/#{_hanko_file}" : nil
 _mime = _hanko_file&.end_with?(".svg") ? "image/svg+xml" : "image/png"
-hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil %>
+_file_seal = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil
+hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
 <!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>請求書 <%= data[:invoice_no] %></title>
+<title><%= title_text %> <%= data[:invoice_no] %></title>
 <style>
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; }
@@ -55,11 +62,12 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
     line-height: 1.55;
     position: relative;
   }
-  /* 西野ハンコ（画像） */
+  /* 西野ハンコ（画像） — 請求書/支払通知書 共通で右上 */
   .hanko-img {
     position: absolute;
     top: -8px; right: -4px;
     width: 80px; height: 80px;
+    object-fit: contain;
   }
   .client {
     font-size: 16px;
@@ -109,33 +117,51 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
   table.items tfoot td.val { text-align: right; font-variant-numeric: tabular-nums; width: 130px; }
   table.items tfoot tr td.spacer { border: none; }
   .bank {
-    margin-top: 28px;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
     font-size: 11px;
+    color: #333;
   }
-  .bank .lbl { font-weight: 700; }
+  .bank .lbl { font-weight: 600; margin-bottom: 4px; }
 </style>
 </head>
-<body>
+<body class="<%= title_text == '支払通知書' ? 'payment-notice' : '' %>">
   <div class="top">
-    申請日: <%= data[:application_date].strftime("%Y年%m月%d日") %><br>
-    請求番号: <%= data[:invoice_no] %>
+    <% if title_text == '支払通知書' %>
+      発行日: <%= data[:application_date].strftime("%Y年%m月%d日") %><br>
+      通知番号: <%= data[:invoice_no] %>
+    <% else %>
+      申請日: <%= data[:application_date].strftime("%Y年%m月%d日") %><br>
+      請求番号: <%= data[:invoice_no] %>
+    <% end %>
   </div>
 
-  <h1 class="title">請求書</h1>
+  <h1 class="title"><%= title_text %></h1>
 
   <div class="head">
     <div class="left">
-      <div class="client"><%= (defined?(client_name) && client_name.presence) || setting.client_name %> <%= setting.honorific.presence || "御中" %></div>
+      <div class="client"><%= (defined?(client_name) && client_name.presence) || setting.client_name %> <%= (defined?(honorific) && honorific.presence) || setting.honorific.presence || "御中" %></div>
       <% _subject = (defined?(subject_text) && subject_text.presence) || setting.subject.to_s %>
       <% if _subject.to_s.strip.present? %>
       <div class="subject">件名 : <%= _subject %></div>
       <% end %>
-      <div>下記のとおりご請求申し上げます。</div>
-      <div class="amount-box">
-        <span class="label">ご請求金額</span>
-        <span class="value">¥ <%= fmt_yen(data[:total]) %> -</span>
-      </div>
-      <div class="due">お支払い期限 : <%= data[:due_date].strftime("%Y年%m月%d日") %></div>
+      <% if title_text == '支払通知書' %>
+        <div>下記のとおりお振込いたしましたので、ご確認のほどよろしくお願い申し上げます。</div>
+        <div class="amount-box">
+          <span class="label">お振込金額</span>
+          <span class="value">¥ <%= fmt_yen(data[:total]) %> -</span>
+        </div>
+        <div class="due">お振込日 : <%= data[:due_date].strftime("%Y年%m月%d日") %></div>
+      <% else %>
+        <div>下記のとおりご請求申し上げます。</div>
+        <div class="amount-box">
+          <span class="label">ご請求金額</span>
+          <span class="value">¥ <%= fmt_yen(data[:total]) %> -</span>
+        </div>
+        <div class="due">お支払い期限 : <%= data[:due_date].strftime("%Y年%m月%d日") %></div>
+      <% end %>
     </div>
     <div class="right">
       <% if hanko_src %>
@@ -143,7 +169,8 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
       <% end %>
       <div class="issuer-name"><%= _issuer_setting.issuer_name %></div>
       <div>適格請求書発行事業者登録番号</div>
-      <div><%= _issuer_setting.registration_no %></div>
+      <%# インボイス番号: 請求書単体の上書きがあれば優先、無ければ発行者設定の値 %>
+      <div><%= (defined?(registration_no_override) && registration_no_override.present?) ? registration_no_override : _issuer_setting.registration_no %></div>
       <br>
       <div>〒<%= _issuer_setting.postal_code %></div>
       <div><%= _issuer_setting.address %></div>
@@ -196,16 +223,19 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
     </tfoot>
   </table>
 
+  <div class="bank">
+    <div class="lbl">お振込先：</div>
+    <%# 振込先は常に対象ユーザー(setting=請求書の請求者 / 支払通知書の受領者)の bank_info。
+        admin が代理発行しても操作者(発行者=西野)の口座にしない。
+        請求書単体で bank_info_override があればそれを優先(bank_info_text)。 %>
+    <div><%= defined?(bank_info_text) ? bank_info_text : setting.bank_info %></div>
+  </div>
+
   <% if defined?(note_text) && note_text.to_s.strip.present? %>
   <div class="note" style="margin-top: 12px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; color: #333;">
     <div style="font-weight: 600; margin-bottom: 4px;">備考</div>
     <div style="white-space: pre-wrap;"><%= note_text %></div>
   </div>
   <% end %>
-
-  <div class="bank">
-    <div class="lbl">お振込先：</div>
-    <div><%= _issuer_setting.bank_info %></div>
-  </div>
 </body>
 </html>

@@ -6,12 +6,18 @@ end
 require "base64"
 _issuer_setting = (defined?(issuer_setting) && issuer_setting) || setting
 _issuer_user    = (defined?(issuer_user) && issuer_user) || user
-_issuer_surname = (_issuer_setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || _issuer_user.display_name.to_s.split(/[\s　]/).first.to_s
+# 印鑑の持ち主: 立替金/請求書=請求者(対象ユーザー=user)、支払通知書=発行者(_issuer_user)
+_is_payment_notice = (defined?(title_text) && title_text == "支払通知書")
+_seal_user    = _is_payment_notice ? _issuer_user : user
+_seal_setting = _is_payment_notice ? _issuer_setting : setting
+_db_seal = (_seal_user.respond_to?(:seal_image) ? _seal_user.seal_image.to_s : "")
+_issuer_surname = (_seal_setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || _seal_user.display_name.to_s.split(/[\s　]/).first.to_s
 _hanko_map = { "西野" => "hanko_nishino.png", "川村" => "hanko_kawamura.svg" }
 _hanko_file = _hanko_map[_issuer_surname]
 _hanko_path = _hanko_file ? "#{Rails.root}/public/#{_hanko_file}" : nil
 _mime = _hanko_file&.end_with?(".svg") ? "image/svg+xml" : "image/png"
-hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil %>
+_file_seal = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil
+hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
 <!doctype html>
 <html lang="ja">
 <head>
@@ -33,9 +39,11 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
   .head { display: flex; justify-content: space-between; gap: 32px; margin-bottom: 24px; }
   .head .left { flex: 1; }
   .head .right { flex: 0 0 38%; font-size: 11px; line-height: 1.55; position: relative; }
+  /* 西野ハンコ（画像） — 請求書/支払通知書 共通で右上 */
   .hanko-img {
     position: absolute; top: -8px; right: -4px;
     width: 80px; height: 80px;
+    object-fit: contain;
   }
   .client { font-size: 16px; font-weight: 700; border-bottom: 1.5px solid #333; padding-bottom: 4px; margin-bottom: 14px; display: inline-block; }
   .subject { font-weight: 600; margin-bottom: 8px; }
@@ -53,29 +61,59 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
   table.items tfoot td.lbl { text-align: center; background: #fafafa; font-weight: 600; width: 110px; }
   table.items tfoot td.val { text-align: right; font-variant-numeric: tabular-nums; width: 130px; }
   table.items tfoot tr td.spacer { border: none; }
-  .note { margin-top: 20px; font-size: 11px; color: #444; line-height: 1.7; }
-  .bank { margin-top: 28px; font-size: 11px; }
-  .bank .lbl { font-weight: 700; }
+  .note {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #333;
+  }
+  .note .lbl { font-weight: 600; margin-bottom: 4px; }
+  .bank {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #333;
+  }
+  .bank .lbl { font-weight: 600; margin-bottom: 4px; }
 </style>
 </head>
-<body>
+<% _title_text = data[:title_text].presence || "請求書" %>
+<body class="<%= _title_text == '支払通知書' ? 'payment-notice' : '' %>">
   <div class="top">
-    申請日: <%= data[:application_date].strftime("%Y年%m月%d日") %><br>
-    請求番号: <%= data[:invoice_no] %>
+    <% if _title_text == '支払通知書' %>
+      発行日: <%= data[:application_date].strftime("%Y年%m月%d日") %><br>
+      通知番号: <%= data[:invoice_no] %>
+    <% else %>
+      申請日: <%= data[:application_date].strftime("%Y年%m月%d日") %><br>
+      請求番号: <%= data[:invoice_no] %>
+    <% end %>
   </div>
 
-  <h1 class="title">請求書</h1>
+  <h1 class="title"><%= _title_text %></h1>
 
   <div class="head">
     <div class="left">
-      <div class="client"><%= (defined?(client_name) && client_name.presence) || setting.client_name %> <%= setting.honorific.presence || "御中" %></div>
+      <div class="client"><%= (defined?(client_name) && client_name.presence) || setting.client_name %> <%= (defined?(honorific) && honorific.presence) || setting.honorific.presence || "御中" %></div>
       <div class="subject">件名 : 立替金精算（<%= @year %>年<%= @month %>月分）</div>
-      <div>下記のとおりご請求申し上げます。</div>
-      <div class="amount-box">
-        <span class="label">ご請求金額</span>
-        <span class="value">¥ <%= fmt_yen(data[:total]) %> -</span>
-      </div>
-      <div class="due">お支払い期限 : <%= data[:due_date].strftime("%Y年%m月%d日") %></div>
+      <% if _title_text == '支払通知書' %>
+        <div>下記のとおりお振込いたしましたので、ご確認のほどよろしくお願い申し上げます。</div>
+        <div class="amount-box">
+          <span class="label">お振込金額</span>
+          <span class="value">¥ <%= fmt_yen(data[:total]) %> -</span>
+        </div>
+        <div class="due">お振込日 : <%= data[:due_date].strftime("%Y年%m月%d日") %></div>
+      <% else %>
+        <div>下記のとおりご請求申し上げます。</div>
+        <div class="amount-box">
+          <span class="label">ご請求金額</span>
+          <span class="value">¥ <%= fmt_yen(data[:total]) %> -</span>
+        </div>
+        <div class="due">お支払い期限 : <%= data[:due_date].strftime("%Y年%m月%d日") %></div>
+      <% end %>
     </div>
     <div class="right">
       <% if hanko_src %>
@@ -128,17 +166,30 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
         <td class="lbl">合計</td>
         <td class="val"><%= fmt_yen(data[:total]) %></td>
       </tr>
+      <%# インボイス制度対応: 適用税率・消費税額・内税/外税 の記載（金額は税込のまま変えない） %>
+      <% inclusive_tax = (data[:total].to_i * 10 / 110.0).round %>
+      <tr>
+        <td class="spacer" colspan="3"></td>
+        <td class="lbl">10%対象（内税）</td>
+        <td class="val"><%= fmt_yen(data[:total]) %></td>
+      </tr>
+      <tr>
+        <td class="spacer" colspan="3"></td>
+        <td class="lbl">内 消費税額（10%）</td>
+        <td class="val"><%= fmt_yen(inclusive_tax) %></td>
+      </tr>
     </tfoot>
   </table>
 
   <div class="note">
-    ※明細は税込み金額です。<br>
+    ※明細は税込み金額（内税・適用税率10%）です。<br>
     詳細は別個「交通費精算書(インボイス制度対応)」に記載済み
   </div>
 
   <div class="bank">
     <div class="lbl">お振込先：</div>
-    <div><%= _issuer_setting.bank_info %></div>
+    <%# 支払通知書モード: 振込先は受領者(payee=user=川村) の bank_info。それ以外は発行者(payer/請求者)の bank_info。 %>
+    <div><%= _title_text == '支払通知書' ? setting.bank_info : _issuer_setting.bank_info %></div>
   </div>
 </body>
 </html>
