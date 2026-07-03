@@ -95,9 +95,22 @@ class TaxSummaryBuilder
                                             .where("month >= ?", from_month).includes(:user).to_a
   end
 
+  # 小規模事業者の特例納税割合（納付税額 = 売上税額 × この割合）。
+  # 〜2026年分(令和8年分)は「2割特例」。2026年度税制改正で個人事業者に限り
+  # 2027・2028年分(令和9・10年分)は納付3割の「3割特例」として延長された。
+  # 2029年分以降は特例終了予定（簡易課税 or 一般課税）なので、その時に要見直し。
+  # https://www.nta.go.jp/taxes/shiraberu/zeimokubetsu/shohi/keigenzeiritsu/invoice-review/index.htm
+  def special_payment_rate
+    @year <= 2026 ? 0.2 : 0.3
+  end
+
+  def special_label
+    special_payment_rate == 0.2 ? "2割特例" : "3割特例"
+  end
+
   # 消費税の概算（インボイス課税事業者前提）。
   # - sales_tax: 売上に含まれる消費税(税込×10/110)
-  # - special20: 2割特例の納税見込み(売上税額×20%・百円未満切捨て)。個人は2026年分の申告が最後の適用
+  # - special20: 2割特例/3割特例の納税見込み(売上税額×特例割合・百円未満切捨て)
   # - general_estimate: 一般課税の概算(売上税額 − 仕入税額控除)
   #   ※外注費の仕入税額控除は、パートナーの users.invoice_registered で判定:
   #     登録済み(課税事業者)=100%控除 / 免税事業者=経過措置80%(〜2026/9)
@@ -115,12 +128,12 @@ class TaxSummaryBuilder
     purchase_tax = expense_tax + subcontract_tax
     general_estimate = [ sales_tax - purchase_tax, 0 ].max / 100 * 100
 
-    # 2割特例の正式計算(付表6・実申告と同一方式):
-    # 税抜対価 → 課税標準額(千円切捨て) → 国税7.8% → 特別控除80% → 差引(百円切捨て) → 地方22/78(百円切捨て)
+    # 2割特例/3割特例の正式計算(付表6・実申告と同一方式):
+    # 税抜対価 → 課税標準額(千円切捨て) → 国税7.8% → 特別控除(1−特例割合) → 差引(百円切捨て) → 地方22/78(百円切捨て)
     taxable_base_raw = (income_total * 100 / 110.0).floor   # 課税資産の譲渡等の対価の額(税抜)
     taxable_base = taxable_base_raw / 1000 * 1000            # 課税標準額
     national_tax = (taxable_base * 0.078).floor              # 消費税額(国税7.8%)
-    special_deduction = (national_tax * 0.8).floor           # 特別控除税額(80%)
+    special_deduction = (national_tax * (1 - special_payment_rate)).floor # 特別控除税額(2割特例=80% / 3割特例=70%)
     national_payment = (national_tax - special_deduction) / 100 * 100 # 差引税額(百円切捨て)
     local_payment = (national_payment * 22 / 78.0).floor / 100 * 100  # 地方消費税(22/78)
     special20 = national_payment + local_payment
@@ -130,6 +143,8 @@ class TaxSummaryBuilder
       sales_tax: sales_tax,
       purchase_tax: purchase_tax,
       special20_payment: special20,
+      special_rate_percent: (special_payment_rate * 100).round, # 20=2割特例 / 30=3割特例
+      special_label: special_label,
       general_estimate: general_estimate,
       recommended: special20 <= general_estimate ? "special20" : "general",
       partner_invoice_registered: subcontract_incomes.map(&:user).uniq.all?(&:invoice_registered?),

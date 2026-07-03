@@ -6,6 +6,10 @@
 #   OfficialTaxFormRenderer が id => 値 を流し込む。
 #   位置を調整したい場合は .tlf を Thinreports Editor で直接編集してもよい
 #   （その場合ここの数値と乖離するので、再生成すると Editor の調整は失われる点に注意）。
+# - combs: OCR用の1マス1桁記入枠。y はマス中心、x_right は最右マスの中心、pitch はマス間隔
+#   （いずれも%）。cells はマス数、skip は様式にプレ印字された「000」等で潰れている右端マス数。
+#   overflow はマスに収まらない上位桁を書く幅広マス（第一表の左端）。
+#   座標は背景PNGのプレ印字0・e-Tax印字数字のピクセル走査から採寸した。
 module TaxFormTlfLayouts
   # 決算書P1 経費欄の科目番号→行 y%
   KESSANSHO_LEFT_ROWS = {
@@ -20,6 +24,11 @@ module TaxFormTlfLayouts
 
   def self.pages
     @pages ||= build_pages.freeze
+  end
+
+  def self.comb(page_key, id)
+    pages.fetch(page_key)[:combs].find { |comb_field| comb_field[:id] == id } ||
+      raise(ArgumentError, "comb not found: #{page_key}/#{id}")
   end
 
   def self.build_pages
@@ -97,56 +106,66 @@ module TaxFormTlfLayouts
     f << { id: :address, x: 14.5, y: 10.0, w: 42.0, size: 9.5,  ja: true }
     f << { id: :name,    x: 60.0, y: 11.8, w: 25.0, size: 12.5, ja: true }
     f << { id: :job,     x: 49.0, y: 15.1, w: 20.0, size: 7,    ja: true }
-    f << { id: :income_total,       x: 30.0, y: 19.8, w: 19.6, size: 13.5, align: :right } # (ア)営業等収入
-    f << { id: :business_income,    x: 30.0, y: 42.0, w: 19.6, size: 13.5, align: :right } # ①事業所得
-    f << { id: :total_income,       x: 30.0, y: 64.0, w: 19.6, size: 13.5, align: :right } # ⑫合計
-    f << { id: :basic_deduction_man, x: 30.0, y: 84.4, w: 10.4, size: 14, align: :right }  # ㉕基礎控除(万円・0000前)
-    f << { id: :deduction_sum,      x: 30.0, y: 86.3, w: 19.6, size: 13.5, align: :right } # ㉖⑬〜㉕計
-    f << { id: :taxable_thousand,   x: 62.5, y: 19.6, w: 22.7, size: 14, align: :right }   # ㉛課税所得(千円・000前)
-    f << { id: :tax_32,             x: 62.5, y: 21.7, w: 30.5, size: 13.5, align: :right } # ㉜税額
-    f << { id: :tax_42,             x: 62.5, y: 33.7, w: 30.5, size: 13.5, align: :right } # ㊷差引所得税額
-    f << { id: :tax_44,             x: 62.5, y: 37.7, w: 30.5, size: 13.5, align: :right } # ㊹基準所得税額
-    f << { id: :reconstruction_45,  x: 62.5, y: 39.9, w: 30.5, size: 13.5, align: :right } # ㊺復興特別所得税
-    f << { id: :total_tax_46,       x: 62.5, y: 41.8, w: 30.5, size: 13.5, align: :right } # ㊻合計
-    f << { id: :declared_tax_50,    x: 62.5, y: 47.8, w: 30.5, size: 13.5, align: :right } # (50)申告納税額
-    f << { id: :third_period_hundred, x: 62.5, y: 51.9, w: 25.0, size: 14, align: :right } # (52)納める税金(百円・00前)
-    f << { id: :blue_deduction_59,  x: 62.5, y: 66.3, w: 30.5, size: 13.5, align: :right } # (59)青色申告特別控除額
-    pages[:shinkokusho_p1] = { image: "shinkokusho_p1.png", orientation: "portrait", fields: f }
+    # 左列(収入・所得・控除)/右列(税金の計算)の桁マス。行ピッチ2.024%(=34.375px@150dpi)
+    left_grid  = { x_right: 48.80, pitch: 2.401, cells: 7, size: 22, overflow: { x: 30.71, w: 4.30 } }
+    right_grid = { x_right: 92.22, pitch: 2.421, cells: 7, size: 22, overflow: { x: 74.13, w: 4.39 } }
+    combs = []
+    combs << left_grid.merge(id: :income_total,        y: 20.26)          # (ア)営業等収入
+    combs << left_grid.merge(id: :business_income,     y: 42.52)          # ①事業所得
+    combs << left_grid.merge(id: :total_income,        y: 64.78)          # ⑫合計
+    combs << left_grid.merge(id: :basic_deduction_man, y: 85.01, skip: 4) # ㉕基礎控除(万円・0000前)
+    combs << left_grid.merge(id: :deduction_sum,       y: 87.04)          # ㉖⑬〜㉕計
+    combs << right_grid.merge(id: :taxable_thousand,   y: 20.26, skip: 3) # ㉛課税所得(千円・000前)
+    combs << right_grid.merge(id: :tax_32,             y: 22.28)          # ㉜税額
+    combs << right_grid.merge(id: :tax_42,             y: 34.43)          # ㊷差引所得税額
+    combs << right_grid.merge(id: :tax_44,             y: 38.48)          # ㊹基準所得税額
+    combs << right_grid.merge(id: :reconstruction_45,  y: 40.51)          # ㊺復興特別所得税
+    combs << right_grid.merge(id: :total_tax_46,       y: 42.53)          # ㊻合計
+    combs << right_grid.merge(id: :declared_tax_50,    y: 48.60)          # (50)申告納税額
+    combs << right_grid.merge(id: :third_period_hundred, y: 52.65, skip: 2) # (52)納める税金(百円・00前)
+    combs << right_grid.merge(id: :blue_deduction_59,  y: 66.81)          # (59)青色申告特別控除額
+    pages[:shinkokusho_p1] = { image: "shinkokusho_p1.png", orientation: "portrait", fields: f, combs: combs }
 
     # ============ 消費税申告書 第一表 GK0306 (A4縦) ============
     f = []
     f << { id: :year_from, x: 13.7, y: 25.4, w: 3.0, size: 13 }
     f << { id: :year_to,   x: 13.7, y: 29.9, w: 3.0, size: 13 }
+    # 十兆〜一円の14マス。e-Tax印字と同じ大きさ(15.5)・位置
+    grid = { x_right: 55.20, pitch: 2.468, cells: 14, size: 16.7 }
+    combs = []
     {
-      taxable_base: 36.4, national_tax: 38.5, deduction: 43.4, deduction_sum: 49.5,
-      national_payment_9: 54.0, national_payment_11: 58.4, local_base_18: 75.7,
-      local_payment_20: 80.2, local_payment_22: 84.6, total_payment_26: 94.0
+      taxable_base: 36.92, national_tax: 39.00, deduction: 43.44, deduction_sum: 49.94,
+      national_payment_9: 54.35, national_payment_11: 58.68, local_base_18: 76.08,
+      local_payment_20: 80.43, local_payment_22: 84.77, total_payment_26: 94.58
     }.each do |id, y|
-      f << { id: id, x: 23.0, y: y, w: 32.2, size: 12, align: :right }
+      combs << grid.merge(id: id, y: y)
     end
-    pages[:shohi_p1] = { image: "shohi_p1.png", orientation: "portrait", fields: f }
+    pages[:shohi_p1] = { image: "shohi_p1.png", orientation: "portrait", fields: f, combs: combs }
 
     # ============ 消費税申告書 第二表 GK0602 (A4縦) ============
     f = []
     f << { id: :year_from, x: 14.2, y: 25.3, w: 3.0, size: 13 }
     f << { id: :year_to,   x: 14.2, y: 29.7, w: 3.0, size: 13 }
+    grid = { x_right: 90.85, pitch: 2.468, cells: 14, size: 16.7 }
+    combs = []
     {
-      taxable_base_1: 33.9, taxable_raw_6: 47.1, taxable_raw_7: 49.7,
-      national_tax_11: 61.9, national_tax_16: 72.8,
-      local_base_20: 86.7, local_base_23: 93.1
+      taxable_base_1: 35.82, taxable_raw_6: 48.86, taxable_raw_7: 50.97,
+      national_tax_11: 62.43, national_tax_16: 73.32,
+      local_base_20: 86.94, local_base_23: 93.44
     }.each do |id, y|
-      f << { id: id, x: 57.5, y: y, w: 34.0, size: 12, align: :right }
+      combs << grid.merge(id: id, y: y)
     end
-    pages[:shohi_p2] = { image: "shohi_p2.png", orientation: "portrait", fields: f }
+    pages[:shohi_p2] = { image: "shohi_p2.png", orientation: "portrait", fields: f, combs: combs }
 
     # ============ 消費税 付表6 (A4縦) ============
     f = []
     f << { id: :period, x: 33.8, y: 13.0, w: 25.0, size: 11, ja: true }
-    { raw_1: 27.6, base_2: 33.1, tax_3: 39.6, basis_6: 54.1, special_deduction_7: 67.1 }.each do |id, y|
+    # 各セルとも e-Tax 印字の位置(セル下部・右寄せ)に合わせている
+    { raw_1: 28.44, base_2: 33.40, tax_3: 39.56, basis_6: 56.61, special_deduction_7: 68.52 }.each do |id, y|
       f << { id: :"#{id}_b", x: 48.0, y: y, w: 24.0, size: 11, align: :right }
-      f << { id: :"#{id}_c", x: 73.5, y: y, w: 21.5, size: 11, align: :right }
+      f << { id: :"#{id}_c", x: 73.5, y: y, w: 19.2, size: 11, align: :right }
     end
-    pages[:shohi_p3] = { image: "shohi_p3.png", orientation: "portrait", fields: f }
+    pages[:shohi_p3] = { image: "shohi_p3.png", orientation: "portrait", fields: f, combs: [] }
 
     pages
   end

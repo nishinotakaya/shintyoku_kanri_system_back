@@ -8,6 +8,8 @@ require "thinreports"
 #   :kessansho   青色申告決算書(一般用) P1損益計算書 / P2月別売上・特別控除 / P3減価償却・売上明細 (A4横)
 #   :shinkokusho 確定申告書 第一表 (A4縦)
 #   :shohi       消費税及び地方消費税申告書(2割特例) 第一表/第二表/付表6 (A4縦)
+#                ※特別控除率は TaxSummaryBuilder が年度で切替（〜2026=2割特例80% / 2027・2028=3割特例70%）。
+#                  2027年分からは付表6の様式改訂(⑥×80%→70%)が見込まれるため、公表され次第差し替えること
 class OfficialTaxFormRenderer
   TLF_DIR = Rails.root.join("app/reports/tax_forms/tlf")
 
@@ -69,6 +71,17 @@ class OfficialTaxFormRenderer
   def fmt(n) = n.to_i.zero? ? "" : n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
   def fmt0(n) = n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
   def wareki = @year - 2018
+
+  # コーム欄(1マス1桁)への桁割り。右端の記入可能マス(_d0)から下位桁を詰め、
+  # マス数を超えた上位桁は幅広マス(_ov)にまとめて書く。
+  def comb(page_key, id, number)
+    spec = TaxFormTlfLayouts.comb(page_key, id)
+    digits = number.to_i.to_s.chars.reverse
+    fillable = spec[:cells] - spec.fetch(:skip, 0)
+    values = digits.first(fillable).each_with_index.to_h { |digit, i| [ :"#{id}_d#{i}", digit ] }
+    values[:"#{id}_ov"] = digits.drop(fillable).reverse.join if digits.size > fillable
+    values
+  end
 
   def category_totals
     @summary[:by_category].to_h { |row| [ row[:category], row[:total] ] }
@@ -159,53 +172,52 @@ class OfficialTaxFormRenderer
     total_tax = tax + reconstruction
     payment = (total_tax / 100) * 100
 
-    {
-      address: @setting&.address, name: @user.display_name, job: "ソフトウェア・情報サービス業",
-      income_total: fmt0(@summary[:income_total]),
-      business_income: fmt0(final_income),
-      total_income: fmt0(final_income),
-      basic_deduction_man: fmt0(basic_deduction / 10_000),
-      deduction_sum: fmt0(basic_deduction),
-      taxable_thousand: fmt0(taxable / 1000),
-      tax_32: fmt0(tax), tax_42: fmt0(tax), tax_44: fmt0(tax),
-      reconstruction_45: fmt0(reconstruction),
-      total_tax_46: fmt0(total_tax),
-      declared_tax_50: fmt0(payment),
-      third_period_hundred: fmt0(payment / 100),
-      blue_deduction_59: fmt0(deduction_applied)
-    }
+    { address: @setting&.address, name: @user.display_name, job: "ソフトウェア・情報サービス業" }.merge(
+      comb(:shinkokusho_p1, :income_total, @summary[:income_total]),
+      comb(:shinkokusho_p1, :business_income, final_income),
+      comb(:shinkokusho_p1, :total_income, final_income),
+      comb(:shinkokusho_p1, :basic_deduction_man, basic_deduction / 10_000),
+      comb(:shinkokusho_p1, :deduction_sum, basic_deduction),
+      comb(:shinkokusho_p1, :taxable_thousand, taxable / 1000),
+      comb(:shinkokusho_p1, :tax_32, tax),
+      comb(:shinkokusho_p1, :tax_42, tax),
+      comb(:shinkokusho_p1, :tax_44, tax),
+      comb(:shinkokusho_p1, :reconstruction_45, reconstruction),
+      comb(:shinkokusho_p1, :total_tax_46, total_tax),
+      comb(:shinkokusho_p1, :declared_tax_50, payment),
+      comb(:shinkokusho_p1, :third_period_hundred, payment / 100),
+      comb(:shinkokusho_p1, :blue_deduction_59, deduction_applied)
+    )
   end
 
   # ============ 消費税申告書(2割特例) ============
   def ct = @summary[:consumption_tax][:breakdown]
 
   def shohi_p1_values
-    {
-      year_from: wareki, year_to: wareki,
-      taxable_base: fmt0(ct[:taxable_base]),
-      national_tax: fmt0(ct[:national_tax]),
-      deduction: fmt0(ct[:special_deduction]),
-      deduction_sum: fmt0(ct[:special_deduction]),
-      national_payment_9: fmt0(ct[:national_payment]),
-      national_payment_11: fmt0(ct[:national_payment]),
-      local_base_18: fmt0(ct[:national_payment]),
-      local_payment_20: fmt0(ct[:local_payment]),
-      local_payment_22: fmt0(ct[:local_payment]),
-      total_payment_26: fmt0(ct[:total_payment])
-    }
+    { year_from: wareki, year_to: wareki }.merge(
+      comb(:shohi_p1, :taxable_base, ct[:taxable_base]),
+      comb(:shohi_p1, :national_tax, ct[:national_tax]),
+      comb(:shohi_p1, :deduction, ct[:special_deduction]),
+      comb(:shohi_p1, :deduction_sum, ct[:special_deduction]),
+      comb(:shohi_p1, :national_payment_9, ct[:national_payment]),
+      comb(:shohi_p1, :national_payment_11, ct[:national_payment]),
+      comb(:shohi_p1, :local_base_18, ct[:national_payment]),
+      comb(:shohi_p1, :local_payment_20, ct[:local_payment]),
+      comb(:shohi_p1, :local_payment_22, ct[:local_payment]),
+      comb(:shohi_p1, :total_payment_26, ct[:total_payment])
+    )
   end
 
   def shohi_p2_values
-    {
-      year_from: wareki, year_to: wareki,
-      taxable_base_1: fmt0(ct[:taxable_base]),
-      taxable_raw_6: fmt0(ct[:taxable_base_raw]),
-      taxable_raw_7: fmt0(ct[:taxable_base_raw]),
-      national_tax_11: fmt0(ct[:national_tax]),
-      national_tax_16: fmt0(ct[:national_tax]),
-      local_base_20: fmt0(ct[:national_payment]),
-      local_base_23: fmt0(ct[:national_payment])
-    }
+    { year_from: wareki, year_to: wareki }.merge(
+      comb(:shohi_p2, :taxable_base_1, ct[:taxable_base]),
+      comb(:shohi_p2, :taxable_raw_6, ct[:taxable_base_raw]),
+      comb(:shohi_p2, :taxable_raw_7, ct[:taxable_base_raw]),
+      comb(:shohi_p2, :national_tax_11, ct[:national_tax]),
+      comb(:shohi_p2, :national_tax_16, ct[:national_tax]),
+      comb(:shohi_p2, :local_base_20, ct[:national_payment]),
+      comb(:shohi_p2, :local_base_23, ct[:national_payment])
+    )
   end
 
   def shohi_p3_values

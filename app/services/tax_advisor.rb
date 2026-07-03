@@ -23,7 +23,7 @@ class TaxAdvisor
       "summary_note": "全体講評(60字以内)" }
     【観点】※4〜6個に絞る
     - 節税: 使えていない控除/経費の漏れ(家事按分・少額減価償却の特例30万円未満・小規模企業共済/iDeCo等)
-    - 消費税: 2割特例と一般課税の有利判定、インボイス(外注先の登録番号確認)
+    - 消費税: 2割特例/3割特例(2027・2028年分は個人限定で納付3割)と一般課税の有利判定、インボイス(外注先の登録番号確認)
     - 経費バランス: 同業比で不自然に多い/少ない科目、税務調査で見られやすい点(接待交際費など)
     - 期限・手続き: 申告期限、納付方法
     断定しすぎず、金額は集計値を引用して具体的に。免責の但し書きは不要。
@@ -40,7 +40,7 @@ class TaxAdvisor
       経費合計(按分後): #{@summary[:expense_total]}円 / 減価償却: #{@summary[:depreciation_total]}円
       差引所得(青色控除前): #{@summary[:profit]}円
       科目別: #{@summary[:by_category].map { |c| "#{c[:category]}#{c[:total]}円" }.join(" / ")}
-      消費税概算: 売上税額#{ct[:sales_tax]}円 / 2割特例納税#{ct[:special20_payment]}円 / 一般課税概算#{ct[:general_estimate]}円
+      消費税概算: 売上税額#{ct[:sales_tax]}円 / #{ct[:special_label] || "2割特例"}納税#{ct[:special20_payment]}円 / 一般課税概算#{ct[:general_estimate]}円
       前提: 青色申告(電子帳簿・e-Tax想定で控除65万円) / 適格請求書発行事業者
     TXT
 
