@@ -37,6 +37,9 @@ gem "ruby-openai", "~> 7.4"
 # PDF テキスト抽出 (発注書 PDF からの注文番号/金額自動抽出に使用)
 gem "pdf-reader", "~> 2.13"
 
+# 国税庁様式PDF (確定申告/消費税) の .tlf レイアウトへの値差し込み
+gem "thinreports", "~> 0.14"
+
 # .env loader (development)
 gem "dotenv-rails", "~> 3.1", groups: [ :development, :test ]
 

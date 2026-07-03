@@ -44,29 +44,6 @@
       "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
     },
     {
-      "warning_type": "Command Injection",
-      "warning_code": 14,
-      "fingerprint": "1c8981a9e97907a79c934c3a282494adc04271d027f90d905b3a3284e0846c89",
-      "check_name": "Execute",
-      "message": "Possible command injection",
-      "file": "app/services/official_tax_form_renderer.rb",
-      "line": 59,
-      "link": "https://brakemanscanner.org/docs/warning_types/command_injection/",
-      "code": "Open3.capture3(\"node\", SCRIPT.to_s, Rails.root.join(\"tmp/exports\").join(\"taxform_#{user.id}_#{SecureRandom.hex(4)}.html\").to_s, Rails.root.join(\"tmp/exports\").join(\"taxform_#{user.id}_#{SecureRandom.hex(4)}.html\").to_s.sub(/\\.html$/, \".pdf\"), orientation)",
-      "render_path": null,
-      "location": {
-        "type": "method",
-        "class": "OfficialTaxFormRenderer",
-        "method": "render_pdf"
-      },
-      "user_input": "user.id",
-      "confidence": "Medium",
-      "cwe_id": [
-        77
-      ],
-      "note": "Open3.capture3 に配列引数で渡しておりシェルを経由しない(node + 固定スクリプト + tmp配下のパス + 内部定数の orientation)。誤検知。"
-    },
-    {
       "warning_type": "File Access",
       "warning_code": 16,
       "fingerprint": "1d0c6987c0e8bef93a16f0f6308d3c30d696ca519fc9dad4baaac3857ffcdddb",

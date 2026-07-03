@@ -188,6 +188,7 @@ GEM
       net-pop
       net-smtp
     marcel (1.1.0)
+    matrix (0.4.3)
     mini_mime (1.1.5)
     minitest (6.0.5)
       drb (~> 2.0)
@@ -252,6 +253,7 @@ GEM
     parser (3.3.11.1)
       ast (~> 2.4.1)
       racc
+    pdf-core (0.9.0)
     pdf-reader (2.15.1)
       Ascii85 (>= 1.0, < 3.0, != 2.0.0)
       afm (>= 0.2.1, < 2)
@@ -260,6 +262,12 @@ GEM
       ttfunk
     pp (0.6.3)
       prettyprint
+    prawn (2.4.0)
+      pdf-core (~> 0.9.0)
+      ttfunk (~> 1.7)
+    prawn-disable_word_break (2.3.1)
+      matrix (~> 0.4)
+      prawn (>= 2.4.0)
     prettyprint (0.2.0)
     prism (1.9.0)
     psych (5.3.1)
@@ -331,6 +339,7 @@ GEM
       actionpack (>= 7.0)
       railties (>= 7.0)
     retriable (3.4.1)
+    rexml (3.4.4)
     rubocop (1.86.0)
       json (~> 2.3)
       language_server-protocol (~> 3.17.0.2)
@@ -387,6 +396,13 @@ GEM
     sqlite3 (2.9.2-x86_64-linux-gnu)
     sqlite3 (2.9.2-x86_64-linux-musl)
     stringio (3.2.0)
+    thinreports (0.14.2)
+      base64
+      bigdecimal
+      matrix
+      prawn (>= 2.4.0)
+      prawn-disable_word_break (>= 2.3.1)
+      rexml
     thor (1.5.0)
     thruster (0.1.20)
     thruster (0.1.20-aarch64-linux)
@@ -451,6 +467,7 @@ DEPENDENCIES
   ruby-openai (~> 7.4)
   rubyXL (~> 3.4)
   sqlite3 (>= 2.1)
+  thinreports (~> 0.14)
   thruster
   tzinfo-data
   zeitwerk (~> 2.6.0)

@@ -1,15 +1,15 @@
-require "erb"
-require "open3"
-require "base64"
+require "thinreports"
 
-# 国税庁の白紙様式(実物)に値を重ね打ちして「提出書類と同じ見た目」のPDFを作る。
+# 国税庁の白紙様式(実物)に値を差し込んで「提出書類と同じ見た目」のPDFを作る。
+# レイアウトは Thinreports (.tlf) — 座標マスタは TaxFormTlfLayouts、
+# .tlf の再生成は `bin/rails runner script/build_tax_form_tlfs.rb`。
+#
 # kind:
 #   :kessansho   青色申告決算書(一般用) P1損益計算書 / P2月別売上・特別控除 / P3減価償却・売上明細 (A4横)
 #   :shinkokusho 確定申告書 第一表 (A4縦)
+#   :shohi       消費税及び地方消費税申告書(2割特例) 第一表/第二表/付表6 (A4縦)
 class OfficialTaxFormRenderer
-  TEMPLATE = Rails.root.join("app/views/invoices/tax_form_overlay.html.erb")
-  SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
-  FORMS    = Rails.root.join("app/reports/tax_forms")
+  TLF_DIR = Rails.root.join("app/reports/tax_forms/tlf")
 
   # 決算書P1: 固定科目→科目番号(枠は様式に印字済み)
   FIXED_CATEGORIES = {
@@ -29,17 +29,17 @@ class OfficialTaxFormRenderer
   end
 
   def render_kessansho
-    render_pdf(kessansho_pages, orientation: "landscape")
+    render_pdf(kessansho_p1: kessansho_p1_values,
+               kessansho_p2: kessansho_p2_values,
+               kessansho_p3: kessansho_p3_values)
   end
 
   def render_shinkokusho
-    render_pdf([ shinkokusho_page ], orientation: "full")
+    render_pdf(shinkokusho_p1: shinkokusho_values)
   end
 
-  # 消費税及び地方消費税申告書(2割特例): 第一表(GK0306)/第二表(GK0602)/付表6
-  # 様式は本人の提出済みPDFをテンプレ化(数値のみ差し替え)。○2割特例・氏名・納税地は様式に印字済み。
   def render_shohi
-    render_pdf([ shohi_p1, shohi_p2, shohi_p3 ], orientation: "full")
+    render_pdf(shohi_p1: shohi_p1_values, shohi_p2: shohi_p2_values, shohi_p3: shohi_p3_values)
   end
 
   # === 集計値 ===
@@ -49,21 +49,23 @@ class OfficialTaxFormRenderer
 
   private
 
-  def render_pdf(pages, orientation:)
-    html_body = ERB.new(File.read(TEMPLATE)).result(binding)
+  # 各ページの {tlfキー => {項目id => 値}} を Thinreports で1つのPDFにまとめる
+  def render_pdf(pages)
+    report = Thinreports::Report.new
+    pages.each do |layout_key, values|
+      report.start_new_page(layout: TLF_DIR.join("#{layout_key}.tlf").to_s) do |page|
+        values.each do |id, value|
+          page.item(id).value(value.to_s) if page.item_exists?(id)
+        end
+      end
+    end
     out_dir = Rails.root.join("tmp/exports")
     FileUtils.mkdir_p(out_dir)
-    html_path = out_dir.join("taxform_#{@user.id}_#{SecureRandom.hex(4)}.html").to_s
-    pdf_path = html_path.sub(/\.html$/, ".pdf")
-    File.write(html_path, html_body)
-    _out, err, status = Open3.capture3("node", SCRIPT.to_s, html_path, pdf_path, orientation)
-    raise "html_to_pdf failed: #{err}" unless status.success?
+    pdf_path = out_dir.join("taxform_#{@user.id}_#{SecureRandom.hex(4)}.pdf").to_s
+    report.generate(filename: pdf_path)
     pdf_path
-  ensure
-    File.delete(html_path) if defined?(html_path) && html_path && File.exist?(html_path)
   end
 
-  def form_base64(name) = Base64.strict_encode64(File.binread(FORMS.join(name)))
   def fmt(n) = n.to_i.zero? ? "" : n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
   def fmt0(n) = n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
   def wareki = @year - 2018
@@ -78,197 +80,142 @@ class OfficialTaxFormRenderer
   end
 
   # ============ 決算書 P1: 損益計算書 ============
-  def kessansho_pages
-    [ kessansho_p1, kessansho_p2, kessansho_p3 ]
-  end
-
-  def kessansho_p1
+  def kessansho_p1_values
     totals = category_totals
-    f = []
-    # ヘッダー
-    f << { x: 40.35, y: 7.9, text: wareki.to_s, size: 13 }
-    f << { x: 40.5, y: 12.5, text: @setting&.address.to_s, size: 9.5 }
-    f << { x: 63.5, y: 13.3, text: @user.display_name.to_s, size: 12.5 }
-    f << { x: 40.5, y: 23.2, text: "ソフトウェア・情報サービス業", size: 9 }
-    f << { x: 66.3, y: 18.6, text: @setting&.tel.to_s, size: 9 }
-    # 自1月1日 至12月31日
-    f << { x: 57.6, y: 31.0, text: "1", size: 13 }
-    f << { x: 62.2, y: 31.0, text: "1", size: 13 }
-    f << { x: 66.6, y: 31.0, text: "12", size: 13 }
-    f << { x: 71.2, y: 31.0, text: "31", size: 13 }
-
-    # 左列 金額 (右端 x=20.5〜35.3 の右寄せ)
-    lx, lw = 20.5, 14.6
-    f << { x: lx, y: 39.4, w: lw, align: :right, text: fmt(@summary[:income_total]), size: 13.5 }
-    f << { x: lx, y: 59.9, w: lw, align: :right, text: fmt(@summary[:income_total]), size: 13.5 }  # ⑦
-    { 8 => 64.3, 9 => 67.2, 10 => 70.2, 11 => 73.1, 12 => 76.0, 13 => 79.0, 14 => 81.9, 15 => 84.8, 16 => 87.7 }.each do |no, y|
-      cat = FIXED_CATEGORIES.key(no)
-      f << { x: lx, y: y, w: lw, align: :right, text: fmt(totals[cat]), size: 14 }
+    values = {
+      wareki: wareki, address: @setting&.address, name: @user.display_name,
+      job: "ソフトウェア・情報サービス業", tel: @setting&.tel,
+      from_month: 1, from_day: 1, to_month: 12, to_day: 31,
+      sales: fmt(@summary[:income_total]), sales_diff: fmt(@summary[:income_total]),
+      misc_expense: fmt(totals["雑費"]),
+      expense_total: fmt0(@summary[:expense_total]),
+      profit_33: fmt0(profit_before_deduction),
+      profit_43: fmt0(profit_before_deduction),
+      deduction_44: fmt0(deduction_applied),
+      income_45: fmt0(final_income)
+    }
+    FIXED_CATEGORIES.each_value do |no|
+      values[:"cat_#{no}"] = fmt(totals[FIXED_CATEGORIES.key(no)])
     end
-
-    # 中列 金額 (x=48.0〜63.7 右寄せ)
-    mx, mw = 47.5, 15.0
-    { 17 => 37.9, 18 => 40.85, 19 => 43.75, 20 => 46.7, 21 => 49.65, 22 => 52.55, 23 => 55.5, 24 => 58.4 }.each do |no, y|
-      cat = FIXED_CATEGORIES.key(no)
-      f << { x: mx, y: y, w: mw, align: :right, text: fmt(totals[cat]), size: 14 }
-    end
-    # 空欄枠 ㉕〜㉚ (科目名 + 金額)
-    slot_ys = [ 61.35, 64.3, 67.2, 70.15, 73.1, 76.0 ]
     extra_categories.first(6).each_with_index do |row, i|
-      f << { x: 38.5, y: slot_ys[i], text: row[:category], size: 9 }
-      f << { x: mx, y: slot_ys[i], w: mw, align: :right, text: fmt(row[:total]), size: 14 }
+      values[:"slot_#{i + 1}_label"] = row[:category]
+      values[:"slot_#{i + 1}_amount"] = fmt(row[:total])
     end
-    f << { x: mx, y: 78.95, w: mw, align: :right, text: fmt(category_totals["雑費"]), size: 14 }            # ㉛
-    f << { x: mx, y: 81.9, w: mw, align: :right, text: fmt0(@summary[:expense_total]), size: 14 }          # ㉜ 計
-    f << { x: mx, y: 86.3, w: mw, align: :right, text: fmt0(profit_before_deduction), size: 14 }           # ㉝
-
-    # 右列 ㊸㊹㊺ (x=76.7〜92.0 右寄せ)
-    rx, rw = 76.7, 15.0
-    f << { x: rx, y: 64.3, w: rw, align: :right, text: fmt0(profit_before_deduction), size: 14 }
-    f << { x: rx, y: 67.3, w: rw, align: :right, text: fmt0(deduction_applied), size: 14 }
-    f << { x: rx, y: 71.6, w: rw, align: :right, text: fmt0(final_income), size: 14 }
-
-    { image_base64: form_base64("kessansho_p1.png"), fields: f.reject { |x| x[:text].blank? } }
+    values
   end
 
   # ============ 決算書 P2: 月別売上 + 青色申告特別控除の計算 ============
-  def kessansho_p2
-    f = []
-    f << { x: 13.3, y: 5.8, text: wareki.to_s, size: 13 }
-    f << { x: 21.0, y: 9.2, text: @user.display_name.to_s, size: 13 }
-    # 月別売上 (1〜12月): 金額右寄せ x=13.0〜28.5
-    sx, sw = 13.0, 15.0
-    row0, row_h = 18.8, 2.941
+  def kessansho_p2_values
+    values = {
+      wareki: wareki, name: @user.display_name,
+      monthly_total: fmt0(@summary[:income_total]),
+      profit_8: fmt0(profit_before_deduction),
+      deduction_9: fmt0(deduction_applied)
+    }
     @summary[:monthly].each_with_index do |m, i|
-      f << { x: sx, y: row0 + row_h * i, w: sw, align: :right, text: fmt(m[:income]), size: 14 }
+      values[:"month_#{i + 1}"] = fmt(m[:income])
     end
-    f << { x: sx, y: 61.4, w: sw, align: :right, text: fmt0(@summary[:income_total]), size: 14 } # 計
-    # 青色申告特別控除の計算 (右下): ⑦控除前所得 / ⑨控除額
-    f << { x: 77.5, y: 80.6, w: 13.0, align: :right, text: fmt0(profit_before_deduction), size: 14 }
-    f << { x: 77.5, y: 83.4, w: 13.0, align: :right, text: fmt0(deduction_applied), size: 14 }
-    { image_base64: form_base64("kessansho_p2.png"), fields: f.reject { |x| x[:text].blank? } }
+    values
   end
 
   # ============ 決算書 P3: 売上明細 + 減価償却費の計算 ============
-  def kessansho_p3
-    f = []
-    # 売上(収入)金額の明細: 上記以外の計 / 計
-    f << { x: 57.0, y: 21.3, w: 11.5, align: :right, text: fmt0(@summary[:income_total]), size: 13 }
-    f << { x: 57.0, y: 24.6, w: 11.5, align: :right, text: fmt0(@summary[:income_total]), size: 13 }
-    # 減価償却費の計算 (資産ごと)
-    row0, row_h = 57.7, 4.0
-    @assets.first(7).each_with_index do |a, i|
-      y = row0 + row_h * i
-      annual = (a.cost / a.useful_life_years.to_f).floor
-      months = a.acquired_on.year == @year ? (13 - a.acquired_on.month) : 12
-      raw = @year < a.acquired_on.year ? 0 : (annual * months / 12.0).floor
-      dep = a.depreciation_for(@year)
-      f << { x: 3.2, y: y, text: a.name.to_s.slice(0, 10), size: 9.5 }
-      f << { x: 10.2, y: y, text: "#{a.acquired_on.year % 100}・#{a.acquired_on.month}", size: 9.5 }
-      f << { x: 14.5, y: y, w: 8.0, align: :right, text: fmt0(a.cost), size: 9.5 }
-      f << { x: 24.0, y: y, w: 8.5, align: :right, text: fmt0(a.cost), size: 9.5 }
-      f << { x: 33.0, y: y, text: "定額", size: 9.5 }
-      f << { x: 37.8, y: y, text: a.useful_life_years.to_s, size: 9.5 }
-      f << { x: 40.0, y: y, text: format("%.3f", 1.0 / a.useful_life_years), size: 9.5 }
-      f << { x: 44.3, y: y, text: "#{months}/12", size: 9.5 }
-      f << { x: 47.5, y: y, w: 7.5, align: :right, text: fmt0(raw), size: 9.5 }
-      f << { x: 59.5, y: y, w: 6.5, align: :right, text: fmt0(raw), size: 9.5 }
-      f << { x: 67.8, y: y, text: a.business_ratio.to_s, size: 9.5 }
-      f << { x: 71.5, y: y, w: 7.5, align: :right, text: fmt0(dep), size: 9.5 }
+  def kessansho_p3_values
+    values = {
+      sales_other: fmt0(@summary[:income_total]),
+      sales_total: fmt0(@summary[:income_total])
+    }
+    @assets.first(7).each_with_index do |asset, i|
+      n = i + 1
+      annual = (asset.cost / asset.useful_life_years.to_f).floor
+      months = asset.acquired_on.year == @year ? (13 - asset.acquired_on.month) : 12
+      raw = @year < asset.acquired_on.year ? 0 : (annual * months / 12.0).floor
+      values[:"asset_#{n}_name"]     = asset.name.to_s.slice(0, 10)
+      values[:"asset_#{n}_acquired"] = "#{asset.acquired_on.year % 100}・#{asset.acquired_on.month}"
+      values[:"asset_#{n}_cost"]     = fmt0(asset.cost)
+      values[:"asset_#{n}_base"]     = fmt0(asset.cost)
+      values[:"asset_#{n}_method"]   = "定額"
+      values[:"asset_#{n}_life"]     = asset.useful_life_years
+      values[:"asset_#{n}_rate"]     = format("%.3f", 1.0 / asset.useful_life_years)
+      values[:"asset_#{n}_months"]   = "#{months}/12"
+      values[:"asset_#{n}_dep"]      = fmt0(raw)
+      values[:"asset_#{n}_dep_sum"]  = fmt0(raw)
+      values[:"asset_#{n}_ratio"]    = asset.business_ratio
+      values[:"asset_#{n}_expense"]  = fmt0(asset.depreciation_for(@year))
     end
     if @assets.any?
-      f << { x: 47.5, y: 84.5, w: 7.5, align: :right, text: fmt0(@summary[:depreciation_total]), size: 9.5 }
-      f << { x: 71.5, y: 84.5, w: 7.5, align: :right, text: fmt0(@summary[:depreciation_total]), size: 9.5 }
+      values[:dep_total] = fmt0(@summary[:depreciation_total])
+      values[:dep_total_expense] = fmt0(@summary[:depreciation_total])
     end
-    { image_base64: form_base64("kessansho_p3.png"), fields: f.reject { |x| x[:text].blank? } }
+    values
   end
 
-  # ============ 確定申告書 第一表 ============
-  # 様式: 令和七年分用(FA2205・実物)。行: (31)課税所得 (32)税額 (42)差引 (44)再差引
-  # (45)復興特別所得税 (46)合計 (50)申告納税額 (52)第3期分納める税金 (59)青色申告特別控除額
-  def shinkokusho_page
-    f = []
-    f << { x: 14.5, y: 10.0, text: @setting&.address.to_s, size: 9.5 }
-    f << { x: 60.0, y: 11.8, text: @user.display_name.to_s, size: 12.5 }
-    f << { x: 49.0, y: 15.1, text: "ソフトウェア・情報サービス業", size: 7 }
-
-    basic_deduction = 680_000 # 基礎控除
+  # ============ 確定申告書 第一表 (令和7年分 FA2205) ============
+  # ㉕基礎控除は下4桁0000・㉛課税所得は下3桁000・(52)納める税金は下2桁00がプレ印字
+  def shinkokusho_values
+    basic_deduction = 680_000
     taxable = [ ((final_income - basic_deduction) / 1000) * 1000, 0 ].max
     tax = income_tax_for(taxable)
     reconstruction = (tax * 0.021).floor
     total_tax = tax + reconstruction
     payment = (total_tax / 100) * 100
 
-    money = ->(y, v) { { x: 30.0, y: y, w: 19.6, align: :right, text: fmt0(v), size: 13.5 } }
-    f << money.call(19.8, @summary[:income_total])     # 収入 事業営業等(ア)
-    f << money.call(42.0, final_income)                # 所得 事業①
-    f << money.call(64.0, final_income)                # ⑫合計
-    # ㉕基礎控除は下4桁0000がプレ印字 → 万円単位のみ刻印(0000 の直前 x40.5 に右寄せ)
-    f << { x: 30.0, y: 84.4, w: 10.4, align: :right, text: fmt0(basic_deduction / 10_000), size: 14 }
-    f << money.call(86.3, basic_deduction)             # ㉖13から25までの計
-
-    rmoney = ->(y, v) { { x: 62.5, y: y, w: 30.5, align: :right, text: fmt0(v), size: 13.5 } }
-    # (31)課税所得は下3桁000がプレ印字 → 千円単位のみ刻印(000 の直前 x85.2 に右寄せ)
-    f << { x: 62.5, y: 19.6, w: 22.7, align: :right, text: fmt0(taxable / 1000), size: 14 }
-    f << rmoney.call(21.7, tax)                        # (32)税額
-    f << rmoney.call(33.7, tax)                        # (42)差引所得税額
-    f << rmoney.call(37.7, tax)                        # (44)再差引所得税額(基準所得税額)
-    f << rmoney.call(39.9, reconstruction)             # (45)復興特別所得税額
-    f << rmoney.call(41.8, total_tax)                  # (46)所得税及び復興特別所得税の額
-    f << rmoney.call(47.8, payment)                    # (50)申告納税額
-    # (52)納める税金は下2桁00がプレ印字 → 百円単位のみ刻印(00 の直前 x87.5 に右寄せ)
-    f << { x: 62.5, y: 51.9, w: 25.0, align: :right, text: fmt0(payment / 100), size: 14 }
-    f << rmoney.call(66.3, deduction_applied)          # (59)青色申告特別控除額
-    { image_base64: form_base64("shinkokusho_p1.png"), fields: f.reject { |x| x[:text].blank? } }
+    {
+      address: @setting&.address, name: @user.display_name, job: "ソフトウェア・情報サービス業",
+      income_total: fmt0(@summary[:income_total]),
+      business_income: fmt0(final_income),
+      total_income: fmt0(final_income),
+      basic_deduction_man: fmt0(basic_deduction / 10_000),
+      deduction_sum: fmt0(basic_deduction),
+      taxable_thousand: fmt0(taxable / 1000),
+      tax_32: fmt0(tax), tax_42: fmt0(tax), tax_44: fmt0(tax),
+      reconstruction_45: fmt0(reconstruction),
+      total_tax_46: fmt0(total_tax),
+      declared_tax_50: fmt0(payment),
+      third_period_hundred: fmt0(payment / 100),
+      blue_deduction_59: fmt0(deduction_applied)
+    }
   end
 
   # ============ 消費税申告書(2割特例) ============
   def ct = @summary[:consumption_tax][:breakdown]
 
-  def shohi_p1
-    f = []
-    f << { x: 13.7, y: 25.4, text: wareki.to_s, size: 13 }  # 自 令和[8]年 (月日は様式に1月1日が印字済み)
-    f << { x: 13.7, y: 29.9, text: wareki.to_s, size: 13 }  # 至 令和[8]年 (12月31日 印字済み)
-    m = ->(y, v) { { x: 23.0, y: y, w: 32.2, align: :right, text: fmt0(v), size: 12 } }
-    f << m.call(36.4, ct[:taxable_base])        # ①課税標準額
-    f << m.call(38.5, ct[:national_tax])        # ②消費税額
-    f << m.call(43.4, ct[:special_deduction])   # ④控除対象仕入税額(特別控除)
-    f << m.call(49.5, ct[:special_deduction])   # ⑦控除税額小計
-    f << m.call(54.0, ct[:national_payment])    # ⑨差引税額
-    f << m.call(58.4, ct[:national_payment])    # ⑪納付税額
-    f << m.call(75.7, ct[:national_payment])    # ⑱差引税額(地方の課税標準)
-    f << m.call(80.2, ct[:local_payment])       # ⑳納税額(譲渡割額)
-    f << m.call(84.6, ct[:local_payment])       # ㉒納付譲渡割額
-    f << m.call(94.0, ct[:total_payment])       # ㉖合計(納付税額)
-    { image_base64: form_base64("shohi_p1.png"), fields: f.reject { |x| x[:text].blank? } }
+  def shohi_p1_values
+    {
+      year_from: wareki, year_to: wareki,
+      taxable_base: fmt0(ct[:taxable_base]),
+      national_tax: fmt0(ct[:national_tax]),
+      deduction: fmt0(ct[:special_deduction]),
+      deduction_sum: fmt0(ct[:special_deduction]),
+      national_payment_9: fmt0(ct[:national_payment]),
+      national_payment_11: fmt0(ct[:national_payment]),
+      local_base_18: fmt0(ct[:national_payment]),
+      local_payment_20: fmt0(ct[:local_payment]),
+      local_payment_22: fmt0(ct[:local_payment]),
+      total_payment_26: fmt0(ct[:total_payment])
+    }
   end
 
-  def shohi_p2
-    f = []
-    f << { x: 14.2, y: 25.3, text: wareki.to_s, size: 13 }  # 自 令和[8]年
-    f << { x: 14.2, y: 29.7, text: wareki.to_s, size: 13 }  # 至 令和[8]年
-    m = ->(y, v) { { x: 57.5, y: y, w: 34.0, align: :right, text: fmt0(v), size: 12 } }
-    f << m.call(33.9, ct[:taxable_base])        # ①課税標準額
-    f << m.call(47.1, ct[:taxable_base_raw])    # ⑥7.8%適用分(対価の額)
-    f << m.call(49.7, ct[:taxable_base_raw])    # ⑦計
-    f << m.call(61.9, ct[:national_tax])        # ⑪消費税額
-    f << m.call(72.8, ct[:national_tax])        # ⑯7.8%適用分
-    f << m.call(86.7, ct[:national_payment])    # ⑳地方消費税の課税標準となる消費税額(計)
-    f << m.call(93.1, ct[:national_payment])    # ㉓6.24%及び7.8%適用分
-    { image_base64: form_base64("shohi_p2.png"), fields: f.reject { |x| x[:text].blank? } }
+  def shohi_p2_values
+    {
+      year_from: wareki, year_to: wareki,
+      taxable_base_1: fmt0(ct[:taxable_base]),
+      taxable_raw_6: fmt0(ct[:taxable_base_raw]),
+      taxable_raw_7: fmt0(ct[:taxable_base_raw]),
+      national_tax_11: fmt0(ct[:national_tax]),
+      national_tax_16: fmt0(ct[:national_tax]),
+      local_base_20: fmt0(ct[:national_payment]),
+      local_base_23: fmt0(ct[:national_payment])
+    }
   end
 
-  def shohi_p3
-    f = []
-    f << { x: 33.8, y: 13.0, text: "令#{wareki}・ 1・ 1 〜 令#{wareki}・12・31", size: 11 }
-    b = ->(y, v) { { x: 48.0, y: y, w: 24.0, align: :right, text: fmt0(v), size: 11 } }
-    c = ->(y, v) { { x: 73.5, y: y, w: 21.5, align: :right, text: fmt0(v), size: 11 } }
-    f << b.call(27.6, ct[:taxable_base_raw]);  f << c.call(27.6, ct[:taxable_base_raw])   # ①対価の額
-    f << b.call(33.1, ct[:taxable_base]);      f << c.call(33.1, ct[:taxable_base])       # ②課税標準額
-    f << b.call(39.6, ct[:national_tax]);      f << c.call(39.6, ct[:national_tax])       # ③消費税額
-    f << b.call(54.1, ct[:national_tax]);      f << c.call(54.1, ct[:national_tax])       # ⑥基礎となる消費税額
-    f << b.call(67.1, ct[:special_deduction]); f << c.call(67.1, ct[:special_deduction])  # ⑦特別控除税額(80%)
-    { image_base64: form_base64("shohi_p3.png"), fields: f.reject { |x| x[:text].blank? } }
+  def shohi_p3_values
+    values = { period: "令#{wareki}・ 1・ 1 〜 令#{wareki}・12・31" }
+    { raw_1: ct[:taxable_base_raw], base_2: ct[:taxable_base], tax_3: ct[:national_tax],
+      basis_6: ct[:national_tax], special_deduction_7: ct[:special_deduction] }.each do |id, v|
+      values[:"#{id}_b"] = fmt0(v)
+      values[:"#{id}_c"] = fmt0(v)
+    end
+    values
   end
 
   # 所得税の速算表 (令和方式)
