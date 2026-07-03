@@ -60,7 +60,25 @@ class TaxSummaryBuilder
       monthly: (1..12).map { |m| { month: m, income: income_by_month[m - 1], expense: expense_by_month[m - 1] } },
       expense_count: expenses.size,
       needs_review_count: expenses.count { |e| e.status == "needs_review" },
-      consumption_tax: consumption_tax_block(income_total, expenses, subcontract_total)
+      consumption_tax: consumption_tax_block(income_total, expenses),
+      income_items: income_items(incomes, subcontract)
+    }
+  end
+
+  # 売上の内訳(クリックで詳細表示用): 自分の請求 + パートナー合算分を月順で返す
+  def income_items(incomes, subcontract)
+    (incomes.map { |s| income_item(s, "own") } + subcontract.map { |s| income_item(s, "subcontract") })
+      .sort_by { |row| [ row[:month], row[:source] ] }
+  end
+
+  def income_item(submission, source)
+    {
+      month: submission.month,
+      user_name: submission.user&.display_name,
+      category: submission.category,
+      total: submission.total_override.to_i,
+      source: source, # own=自分の請求 / subcontract=パートナー合算(同額を外注工賃で控除)
+      note: submission.note
     }
   end
 
@@ -68,22 +86,33 @@ class TaxSummaryBuilder
 
   # 4月以降の川村さん(非admin)の承認済み請求 = 西野の売上に合算 & 外注工賃で控除する対象
   def subcontract_incomes
+    return @subcontract_incomes if defined?(@subcontract_incomes)
     from_month = SUBCONTRACT_FROM[@year]
-    return [] unless from_month && @user.admin?
+    return @subcontract_incomes = [] unless from_month && @user.admin?
     partner_ids = User.where("display_name LIKE ?", "%川村%").pluck(:id)
-    return [] if partner_ids.empty?
-    InvoiceSubmission.where(user_id: partner_ids, kind: "invoice", status: "approved", year: @year)
-                     .where("month >= ?", from_month).to_a
+    return @subcontract_incomes = [] if partner_ids.empty?
+    @subcontract_incomes = InvoiceSubmission.where(user_id: partner_ids, kind: "invoice", status: "approved", year: @year)
+                                            .where("month >= ?", from_month).includes(:user).to_a
   end
 
   # 消費税の概算（インボイス課税事業者前提）。
   # - sales_tax: 売上に含まれる消費税(税込×10/110)
-  # - special20: 2割特例の納税見込み(売上税額×20%・百円未満切捨て)
-  # - general_estimate: 一般課税の概算(売上税額 − 仕入税額控除。外注費・課税経費の税額を控除)
-  def consumption_tax_block(income_total, expenses, subcontract_total)
+  # - special20: 2割特例の納税見込み(売上税額×20%・百円未満切捨て)。個人は2026年分の申告が最後の適用
+  # - general_estimate: 一般課税の概算(売上税額 − 仕入税額控除)
+  #   ※外注費の仕入税額控除は、パートナーの users.invoice_registered で判定:
+  #     登録済み(課税事業者)=100%控除 / 免税事業者=経過措置80%(〜2026/9)
+  def consumption_tax_block(income_total, expenses)
     sales_tax = (income_total * 10 / 110.0).floor
-    taxable_expenses = expenses.select { |e| e.tax_rate.to_i.positive? }.sum(&:deductible_amount) + subcontract_total
-    purchase_tax = (taxable_expenses * 10 / 110.0).floor
+    taxable_expenses = expenses.select { |e| e.tax_rate.to_i.positive? }.sum(&:deductible_amount)
+    expense_tax = (taxable_expenses * 10 / 110.0).floor
+
+    # 外注費の税額はパートナーごとにインボイス登録の有無で控除率を分ける
+    subcontract_tax = subcontract_incomes.group_by(&:user).sum do |partner, submissions|
+      tax = (submissions.sum { |s| s.total_override.to_i } * 10 / 110.0).floor
+      partner.invoice_registered? ? tax : (tax * 0.8).floor
+    end
+
+    purchase_tax = expense_tax + subcontract_tax
     special20 = (sales_tax * 0.2).floor / 100 * 100
     general_estimate = [ sales_tax - purchase_tax, 0 ].max / 100 * 100
     {
@@ -92,7 +121,8 @@ class TaxSummaryBuilder
       purchase_tax: purchase_tax,
       special20_payment: special20,
       general_estimate: general_estimate,
-      recommended: special20 <= general_estimate ? "special20" : "general"
+      recommended: special20 <= general_estimate ? "special20" : "general",
+      partner_invoice_registered: subcontract_incomes.map(&:user).uniq.all?(&:invoice_registered?)
     }
   end
 end
