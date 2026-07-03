@@ -158,15 +158,11 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
     <tfoot>
       <tr>
         <td class="spacer" colspan="3"></td>
-        <td class="lbl">小計</td>
-        <td class="val"><%= fmt_yen(data[:subtotal]) %></td>
-      </tr>
-      <tr>
-        <td class="spacer" colspan="3"></td>
         <td class="lbl">合計</td>
         <td class="val"><%= fmt_yen(data[:total]) %></td>
       </tr>
-      <%# インボイス制度対応: 適用税率・消費税額・内税/外税 の記載（金額は税込のまま変えない） %>
+      <%# インボイス制度対応: 適用税率・対象額・消費税額・内税区分（金額は税込のまま変えない）。
+          明細が全て内税のため小計=合計となり冗長 → 小計行は置かない。 %>
       <% inclusive_tax = (data[:total].to_i * 10 / 110.0).round %>
       <tr>
         <td class="spacer" colspan="3"></td>
