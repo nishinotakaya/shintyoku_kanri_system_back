@@ -84,16 +84,16 @@ class NotionSyncService
   end
 
   def extract_first_person(prop, user_map)
-    return [nil, nil] if prop.nil?
+    return [ nil, nil ] if prop.nil?
     prop.each do |segment|
       next unless segment[1]
       segment[1].each do |annotation|
         next unless annotation[0] == "u"
         user_id = annotation[1]
         user = user_map.dig(user_id, "value", "value") || user_map.dig(user_id, "value")
-        return [user_id, user&.dig("name") || user_id]
+        return [ user_id, user&.dig("name") || user_id ]
       end
     end
-    [nil, nil]
+    [ nil, nil ]
   end
 end

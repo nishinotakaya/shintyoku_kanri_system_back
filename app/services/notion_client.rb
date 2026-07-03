@@ -73,7 +73,7 @@ class NotionClient
         reducers: { collection_group_results: { type: "results", limit: 500 } },
         filter: {
           operator: "and",
-          filters: [{
+          filters: [ {
             property: PROPERTY_IDS[:assignee],
             filter: {
               operator: "person_contains",
@@ -81,7 +81,7 @@ class NotionClient
                 { type: "exact", value: { table: "notion_user", id: id } }
               }
             }
-          }]
+          } ]
         },
         sort: [],
         searchQuery: "",

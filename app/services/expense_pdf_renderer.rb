@@ -86,11 +86,11 @@ class ExpensePdfRenderer
       surname = grp_user.display_name.to_s.split(/[\s　]/).first.to_s
       prefix = (should_prefix_name && !surname.empty?) ? "#{surname} " : ""
       label = if route_key.to_s.start_with?("purpose-")
-                "#{prefix}#{grp_exps.first.purpose.to_s}"
-              else
+                "#{prefix}#{grp_exps.first.purpose}"
+      else
                 route = "#{grp_exps.first.from_station}-#{grp_exps.first.to_station}"
                 "#{prefix}#{route}"
-              end
+      end
       {
         label: label,
         qty: qty,

@@ -31,6 +31,6 @@ class SkillSheetTech < ApplicationRecord
     return "" if months_used.to_i <= 0
     years = months_used / 12
     months = months_used % 12
-    [years.positive? ? "#{years}年" : nil, months.positive? ? "#{months}ヶ月" : nil].compact.join
+    [ years.positive? ? "#{years}年" : nil, months.positive? ? "#{months}ヶ月" : nil ].compact.join
   end
 end

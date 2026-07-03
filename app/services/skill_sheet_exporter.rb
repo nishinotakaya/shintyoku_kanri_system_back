@@ -28,8 +28,8 @@ class SkillSheetExporter
   COLS         = 17 # A..Q
   PHASE_KEYS   = SkillSheetProject::PHASE_KEYS # 7 工程
   PHASE_START  = 10 # K列 (0-indexed)
-  LABEL_BG     = [0.6, 0.8, 1.0].freeze
-  BORDER_COLOR = [0.0, 0.0, 0.0].freeze
+  LABEL_BG     = [ 0.6, 0.8, 1.0 ].freeze
+  BORDER_COLOR = [ 0.0, 0.0, 0.0 ].freeze
 
   # 行位置 (0-indexed)
   # 上部ブロックは全て「ラベル A:B + 値 C:Q」の縦1列 (得意分野と同じ形)。
@@ -54,11 +54,11 @@ class SkillSheetExporter
   # 上部の「ラベル+値(C:Q)」行 (技術者名/年齢/稼動開始/性別/得意分野/得意技術/得意業務/自己PR)
   INFO_ROWS = [ NAME_ROW, AGE_ROW, START_ROW, GENDER_ROW, SPECIAL_ROW, SKILL_ROW, DUTY_ROW, PR_ROW ].freeze
 
-  SEP_ROWS    = [SEP1_ROW, SEP2_ROW, SEP3_ROW].freeze
+  SEP_ROWS    = [ SEP1_ROW, SEP2_ROW, SEP3_ROW ].freeze
   SEP_HEIGHTS = { SEP1_ROW => 8, SEP2_ROW => 7, SEP3_ROW => 10 }.freeze
 
   # 見本実測の列幅 (A..Q)
-  COL_WIDTHS = [41, 104, 25, 100, 827, 111, 100, 100, 100, 101, 31, 34, 30, 28, 27, 28, 29].freeze
+  COL_WIDTHS = [ 41, 104, 25, 100, 827, 111, 100, 100, 100, 101, 31, 34, 30, 28, 27, 28, 29 ].freeze
 
   # 行高さ算出パラメータ (文字が切れないよう少し余裕を持たせる)
   LINE_PX      = 22 # 1 行ぶんの高さ目安 (10pt の実行高 + 余白)
@@ -169,7 +169,7 @@ class SkillSheetExporter
   # title カラムがあればそれを採用、無ければ旧データ互換で description の■行から切り出す。
   def project_title_and_detail(project)
     if project.title.present?
-      [project.title, project.description.to_s]
+      [ project.title, project.description.to_s ]
     else
       split_description(project.description)
     end
@@ -178,12 +178,12 @@ class SkillSheetExporter
   # 業務内容を「タイトル行(■概要)」と「詳細(≪担当業務≫…)」に分割。改行が無ければ全文を詳細へ。
   def split_description(text)
     body = text.to_s
-    return ["", ""] if body.strip.empty?
+    return [ "", "" ] if body.strip.empty?
     head, _, rest = body.partition("\n")
     if head.start_with?("■") && !rest.strip.empty?
-      [head, rest]
+      [ head, rest ]
     else
-      ["", body]
+      [ "", body ]
     end
   end
 
@@ -244,7 +244,7 @@ class SkillSheetExporter
     from = year_month(period_from)
     return nil unless from
     to = year_month(period_to) || current_year_month
-    [(to - from) + 1, 1].max
+    [ (to - from) + 1, 1 ].max
   end
 
   # "2025年11月" / "2025/11" → 通算月 (year*12+month)。"現在"等は当月。
@@ -460,10 +460,10 @@ class SkillSheetExporter
   # 罫線を引く行レンジ (区切り行 SEP を除外して分割)。
   def border_blocks(total_rows)
     [
-      [TITLE_ROW, SEP1_ROW],         # タイトル+技術者名..稼動開始
-      [SPECIAL_ROW, SEP2_ROW],       # 得意分野..得意業務
-      [PR_ROW, SEP3_ROW],            # 自己PR
-      [HEADER_ROW, total_rows]       # 職務経歴ヘッダ..案件
+      [ TITLE_ROW, SEP1_ROW ],         # タイトル+技術者名..稼動開始
+      [ SPECIAL_ROW, SEP2_ROW ],       # 得意分野..得意業務
+      [ PR_ROW, SEP3_ROW ],            # 自己PR
+      [ HEADER_ROW, total_rows ]       # 職務経歴ヘッダ..案件
     ]
   end
 
@@ -560,12 +560,12 @@ class SkillSheetExporter
   end
 
   def wrapped_lines(text, width_px)
-    usable = [width_px - CELL_PAD_PX, FULL_CHAR_PX].max
-    text.to_s.split("\n").sum { |segment| [(segment_width_px(segment).to_f / usable).ceil, 1].max }
+    usable = [ width_px - CELL_PAD_PX, FULL_CHAR_PX ].max
+    text.to_s.split("\n").sum { |segment| [ (segment_width_px(segment).to_f / usable).ceil, 1 ].max }
   end
 
   def cell_px(text, width_px)
-    [wrapped_lines(text, width_px) * LINE_PX + 10, MIN_ROW_PX].max
+    [ wrapped_lines(text, width_px) * LINE_PX + 10, MIN_ROW_PX ].max
   end
 
   def col_px(col_index) = COL_WIDTHS[col_index]
@@ -577,29 +577,29 @@ class SkillSheetExporter
 
     SEP_HEIGHTS.each { |row, px| heights[row] = px } # 区切り行は薄く
 
-    [[SPECIAL_ROW, @skill_sheet.specialties], [SKILL_ROW, @skill_sheet.skills],
-     [DUTY_ROW, @skill_sheet.duties], [PR_ROW, @skill_sheet.self_pr]].each do |row, text|
+    [ [ SPECIAL_ROW, @skill_sheet.specialties ], [ SKILL_ROW, @skill_sheet.skills ],
+     [ DUTY_ROW, @skill_sheet.duties ], [ PR_ROW, @skill_sheet.self_pr ] ].each do |row, text|
       heights[row] = cell_px(text, value_width)
     end
     # ヘッダは「役割\n規模」「FW・MW\nツール等」等の2行ラベルが切れないよう確保。
     # 期間 A:D や 役割..ツールは HEADER_ROW..PHASE_HDR_ROW の2行結合なので合計で2行ぶん入ればよい。
     heights[HEADER_ROW]    = MIN_ROW_PX
     # 担当工程の工程名 (狭い列に「要件定義」等) は縦に伸びるので固めに
-    heights[PHASE_HDR_ROW] = [cell_px("要件定義", col_px(PHASE_START)), LINE_PX * 2 + 10].max
+    heights[PHASE_HDR_ROW] = [ cell_px("要件定義", col_px(PHASE_START)), LINE_PX * 2 + 10 ].max
 
     projects.each_with_index do |project, idx|
       base = PROJECT_TOP + idx * PROJECT_SPAN
       title_line, detail = project_title_and_detail(project)
-      h_line1 = [cell_px(title_line, col_px(4)), MIN_ROW_PX].max
+      h_line1 = [ cell_px(title_line, col_px(4)), MIN_ROW_PX ].max
       h_detail = cell_px(detail, col_px(4))
       h_supp = MIN_ROW_PX
       # 役割/言語/DB/OS/ツール (3行縦結合) に必要な高さ
-      h_side = [5, 6, 7, 8, 9].map { |c| cell_px(project_value(project, c), col_px(c)) }.max
+      h_side = [ 5, 6, 7, 8, 9 ].map { |c| cell_px(project_value(project, c), col_px(c)) }.max
       # 詳細行は「詳細テキストに必要な高さ」と「横結合セルを賄うのに必要な残り」の大きい方。
       # こうしないと役割/ツール等が長いとき詳細行に回る高さが足りず文章が切れる。
       heights[base]     = h_line1
       heights[base + 2] = h_supp
-      heights[base + 1] = [h_detail, h_side - h_line1 - h_supp, MIN_ROW_PX].max
+      heights[base + 1] = [ h_detail, h_side - h_line1 - h_supp, MIN_ROW_PX ].max
     end
 
     heights.each_index.map { |row| dimension_height(row, heights[row]) }

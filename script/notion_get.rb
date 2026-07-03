@@ -49,13 +49,13 @@ request.body = {
     reducers: { collection_group_results: { type: "results", limit: 200 } },
     filter: {
       operator: "and",
-      filters: [{
+      filters: [ {
         property: ASSIGNEE_PROPERTY,
         filter: {
           operator: "person_contains",
           value: ASSIGNEE_USER_IDS.map { |id| { type: "exact", value: { table: "notion_user", id: id } } }
         }
-      }]
+      } ]
     },
     sort: [],
     searchQuery: "",

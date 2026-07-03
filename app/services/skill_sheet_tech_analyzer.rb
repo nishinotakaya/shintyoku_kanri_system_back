@@ -92,7 +92,7 @@ class SkillSheetTechAnalyzer
         name = tech["name"].to_s.strip
         next if name.empty? || !SkillSheetTech::CATEGORIES.include?(category)
 
-        key = [category, name]
+        key = [ category, name ]
         record = aggregated[key] ||= { category: category, name: name, months_used: 0, last_used_rank: -1, version: nil, last_used_on: nil }
         record[:months_used] += span
         # 最も新しく使った案件のバージョン・最終使用を採用
@@ -145,7 +145,7 @@ class SkillSheetTechAnalyzer
     from_rank = year_month_rank(period_from)
     to_rank = year_month_rank(period_to) || current_rank
     return 1 if from_rank.nil?
-    [to_rank - from_rank + 1, 1].max
+    [ to_rank - from_rank + 1, 1 ].max
   end
 
   def current_rank

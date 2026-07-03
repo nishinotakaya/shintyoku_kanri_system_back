@@ -4,8 +4,8 @@ module SkillSheetTechCatalog
   # フォームのフィールドキー → 候補リスト
   MASTER = {
     "languages"  => %w[Ruby JavaScript TypeScript Java Python PHP Go C# Kotlin Swift Dart Scala HTML CSS SQL Shell].freeze,
-    "db"         => ["MySQL", "PostgreSQL", "Oracle", "SQLite3", "SQL Server", "MongoDB", "Redis", "DynamoDB", "MariaDB"].freeze,
-    "server_os"  => ["Linux", "CentOS", "Amazon Linux", "Ubuntu", "Red Hat", "Windows Server", "Heroku", "AWS", "GCP", "Azure", "Vercel", "Fly.io"].freeze,
+    "db"         => [ "MySQL", "PostgreSQL", "Oracle", "SQLite3", "SQL Server", "MongoDB", "Redis", "DynamoDB", "MariaDB" ].freeze,
+    "server_os"  => [ "Linux", "CentOS", "Amazon Linux", "Ubuntu", "Red Hat", "Windows Server", "Heroku", "AWS", "GCP", "Azure", "Vercel", "Fly.io" ].freeze,
     "tools"      => [
       "Ruby on Rails", "React", "Vue.js", "Next.js", "Nuxt.js", "Angular", "Spring", "Laravel", "Django", "Flask",
       "Express", "jQuery", "Bootstrap", "Tailwind CSS", "Sass", "Vite", "webpack", "Docker", "Kubernetes",

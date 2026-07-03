@@ -132,7 +132,7 @@ class YoutubeResearchReader
     json = Base64.decode64(b64)
     authorizer = Google::Auth::ServiceAccountCredentials.make_creds(
       json_key_io: StringIO.new(json),
-      scope: ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+      scope: [ "https://www.googleapis.com/auth/spreadsheets.readonly" ]
     )
     authorizer.fetch_access_token!
     authorizer

@@ -115,7 +115,7 @@ module Freee
           issue_date: due,
           transactions_attributes: {
             "0" => {
-              line_items_attributes: [{
+              line_items_attributes: [ {
                 default_tags_id: [],
                 default_tags_name: "",
                 description: @invoice[:subject].to_s,
@@ -127,7 +127,7 @@ module Freee
                 vat: vat,
                 vat_system_calc: 0,
                 partner_id: @partner_id
-              }]
+              } ]
             }
           }
         },
@@ -140,7 +140,7 @@ module Freee
     def deal_payload(total, vat, due)
       tax_code = @transaction_type == "expense" ? TAX_CODE_EXPENSE_10 : TAX_CODE_INCOME_10
       {
-        details: [{
+        details: [ {
           account_item_id: @account_item_id,
           amount: total,
           default_tag_ids: [],
@@ -149,15 +149,15 @@ module Freee
           tax_code: tax_code,
           tax_entry_method: TAX_ENTRY_METHOD_INCLUDED,
           vat: vat
-        }],
+        } ],
         issue_date: due,
         partner_id: @partner_id,
-        payments: [{
+        payments: [ {
           amount: total,
           date: due,
           from_walletable_id: WALLET_CASH,
           from_walletable_type: "wallet"
-        }],
+        } ],
         receipts: [],
         ref: "",
         type: @transaction_type,

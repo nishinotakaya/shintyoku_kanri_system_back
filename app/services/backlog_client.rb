@@ -112,7 +112,7 @@ class BacklogClient
     safe_filename = filename.to_s.gsub(/[\r\n"]/, "_")
     body = +""
     body << "--#{boundary}\r\n"
-    body << %{Content-Disposition: form-data; name="file"; filename="#{safe_filename}"\r\n}
+    body << %(Content-Disposition: form-data; name="file"; filename="#{safe_filename}"\r\n)
     body << "Content-Type: #{content_type.presence || 'application/octet-stream'}\r\n\r\n"
     body << content
     body << "\r\n--#{boundary}--\r\n"

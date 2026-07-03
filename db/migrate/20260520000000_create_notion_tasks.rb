@@ -20,7 +20,7 @@ class CreateNotionTasks < ActiveRecord::Migration[8.0]
     end
 
     add_index :notion_tasks, :notion_block_id, unique: true
-    add_index :notion_tasks, [:start_date, :end_date]
+    add_index :notion_tasks, [ :start_date, :end_date ]
     add_index :notion_tasks, :assignee_name
   end
 end

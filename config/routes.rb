@@ -217,7 +217,7 @@ Rails.application.routes.draw do
       get   "purchase_order_setting",      to: "purchase_order_settings#show"
       patch "purchase_order_setting",      to: "purchase_order_settings#update"
       delete "purchase_order_setting",     to: "purchase_order_settings#destroy"
-      post  "purchase_order_settings/:id/report_to_freee", to: "purchase_order_settings#report_to_freee", as: :purchase_order_setting_report_to_freee
+      post "purchase_order_settings/:id/report_to_freee", to: "purchase_order_settings#report_to_freee", as: :purchase_order_setting_report_to_freee
 
       # 発注書 発行履歴
       resources :purchase_order_histories, only: [ :index, :create, :destroy ] do
@@ -281,7 +281,7 @@ Rails.application.routes.draw do
       post  "work_reports/apply_transit",  to: "work_reports#apply_transit"
 
       # Notion (WBS タスク) 連携
-      resources :notion_tasks, only: [:index, :update] do
+      resources :notion_tasks, only: [ :index, :update ] do
         collection do
           post :sync
         end

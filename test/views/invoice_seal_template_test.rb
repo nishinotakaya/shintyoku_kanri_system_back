@@ -9,7 +9,7 @@ class InvoiceSealTemplateTest < Minitest::Test
 
   def test_invoice_seal_user_is_subject_for_invoice
     src = erb("invoice.html.erb")
-    assert_includes src, '_seal_user    = _is_payment_notice ? _issuer_user : user',
+    assert_includes src, "_seal_user    = _is_payment_notice ? _issuer_user : user",
       "請求書の印鑑が請求者(user)になっていない"
   end
 

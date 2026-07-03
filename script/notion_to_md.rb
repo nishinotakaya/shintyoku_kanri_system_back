@@ -36,7 +36,7 @@ request.body = {
     reducers: { collection_group_results: { type: "results", limit: 200 } },
     filter: {
       operator: "and",
-      filters: [{
+      filters: [ {
         property: "ENlJ",
         filter: {
           operator: "person_contains",
@@ -45,7 +45,7 @@ request.body = {
             { type: "exact", value: { table: "notion_user", id: "e1c39454-24a8-4955-a538-58e0430f97b6" } }
           ]
         }
-      }]
+      } ]
     },
     sort: [], searchQuery: "", archiveStatus: "NON_ARCHIVED",
     userId: ACTIVE_USER_ID, userTimeZone: "Asia/Tokyo"
@@ -64,7 +64,7 @@ result_ids = data.dig("result", "reducerResults", "collection_group_results", "b
 def user_name(user_map, user_id)
   user = user_map.dig(user_id, "value", "value") || user_map.dig(user_id, "value")
   return user_id unless user
-  [user["name"], user["given_name"], user["family_name"]].compact.reject(&:empty?).first || user_id
+  [ user["name"], user["given_name"], user["family_name"] ].compact.reject(&:empty?).first || user_id
 end
 
 def extract_text(prop)
@@ -140,7 +140,7 @@ def escape(value)
 end
 
 header_columns = %w[WBS タスク名 親タスク 担当者 開始日 終了日 工数(人日) 進捗率 進捗状況 優先度 備考]
-separator = (["---"] * header_columns.size).join(" | ")
+separator = ([ "---" ] * header_columns.size).join(" | ")
 
 lines = []
 lines << "# WBS（フェーズ1：現行機能の刷新） — 西野鷹也 + 川村卓也"

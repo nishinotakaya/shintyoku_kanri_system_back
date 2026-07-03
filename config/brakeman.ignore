@@ -47,6 +47,213 @@
     {
       "fingerprint": "b2d49d5d34f545c27ff8959f0426d758c4d5e144bfd3ea64daa294f04d3f1896",
       "note": "exports#merged_expense の send_file filename: expense_submission_ids は to_i + reject(&:zero?) 済み、category は fixed list 想定、surnames は authenticated user の display_name を split したもの。filename へ params 由来文字列が直接埋まる経路なし。偽陽性"
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "1bac8661355bc81219597223a88c6539847850928445a596c6aa4cac71a5b5f0",
+      "check_name": "SendFile",
+      "message": "Parameter value used in file name",
+      "file": "app/controllers/api/v1/purchase_order_histories_controller.rb",
+      "line": 43,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(PurchaseOrderPdfRenderer.new(scoped.find(params[:id]).user, scoped.find(params[:id]).payload.deep_symbolize_keys).call, :type => \"application/pdf\", :filename => (\"\\u767A\\u6CE8\\u66F8_#{scoped.find(params[:id]).order_no}.pdf\"), :disposition => \"attachment\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::PurchaseOrderHistoriesController",
+        "method": "regenerate"
+      },
+      "user_input": "params[:id]",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
+    },
+    {
+      "warning_type": "Command Injection",
+      "warning_code": 14,
+      "fingerprint": "1c8981a9e97907a79c934c3a282494adc04271d027f90d905b3a3284e0846c89",
+      "check_name": "Execute",
+      "message": "Possible command injection",
+      "file": "app/services/official_tax_form_renderer.rb",
+      "line": 59,
+      "link": "https://brakemanscanner.org/docs/warning_types/command_injection/",
+      "code": "Open3.capture3(\"node\", SCRIPT.to_s, Rails.root.join(\"tmp/exports\").join(\"taxform_#{user.id}_#{SecureRandom.hex(4)}.html\").to_s, Rails.root.join(\"tmp/exports\").join(\"taxform_#{user.id}_#{SecureRandom.hex(4)}.html\").to_s.sub(/\\.html$/, \".pdf\"), orientation)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "OfficialTaxFormRenderer",
+        "method": "render_pdf"
+      },
+      "user_input": "user.id",
+      "confidence": "Medium",
+      "cwe_id": [
+        77
+      ],
+      "note": "Open3.capture3 に配列引数で渡しておりシェルを経由しない(node + 固定スクリプト + tmp配下のパス + 内部定数の orientation)。誤検知。"
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "1d0c6987c0e8bef93a16f0f6308d3c30d696ca519fc9dad4baaac3857ffcdddb",
+      "check_name": "SendFile",
+      "message": "Parameter value used in file name",
+      "file": "app/controllers/api/v1/exports_controller.rb",
+      "line": 124,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(ExpensePdfRenderer.new(target_user, :year => year, :month => month, :application_date => ((parse_application_date or InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"expense\").application_date_override)), :category => params[:category], :client_name_override => target_user.invoice_recipient_name, :issuer_user_override => current_user).call, :type => \"application/pdf\", :filename => category_prefixed(\"\\u7ACB\\u66FF\\u91D1_#{year}\\u5E74_#{month}\\u6708\\u5206.pdf\", params[:category], :user => target_user), :disposition => \"attachment\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::ExportsController",
+        "method": "expense_pdf"
+      },
+      "user_input": "params[:category]",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "c1ec1fa5ffd8cd2aea67403cf77245359992c0e931a29457567cb4962e175601",
+      "check_name": "SendFile",
+      "message": "Parameter value used in file name",
+      "file": "app/controllers/api/v1/exports_controller.rb",
+      "line": 42,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(ExpenseExporter.new(target_user, :year => year, :month => month, :application_date => ((parse_application_date or InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"expense\").application_date_override)), :category => params[:category], :client_name_override => target_user.invoice_recipient_name, :issuer_user_override => current_user).call, :type => \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\", :filename => category_prefixed(\"\\u7ACB\\u66FF\\u91D1_#{year}\\u5E74_#{month}\\u6708\\u5206.xlsx\", params[:category], :user => target_user), :disposition => \"attachment\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::ExportsController",
+        "method": "expense"
+      },
+      "user_input": "params[:category]",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "c9a9717f4f5efd7d9c69de2f84594ce6ad00b5c89166d3c8193ab094ade824ee",
+      "check_name": "SendFile",
+      "message": "Model attribute used in file name",
+      "file": "app/controllers/api/v1/exports_controller.rb",
+      "line": 402,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file((ExpenseExporter or ExpensePdfRenderer).new(InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.first, :year => (InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).first).year, :month => (InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).first).month, :category => (InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).first).category, :application_date => InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:application_date_override).compact.first, :client_name_override => I18n.t(\"companies.labop.name\"), :issuer_user_override => current_user, :merged_users => InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.drop(1), :mode => :positive).call, :type => ((\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\" or \"application/pdf\")), :filename => (\"#{(:BRAKEMAN_SAFE_LITERAL or (InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).first).category.to_s)}_#{(InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.map do\n u.display_name.to_s.split(/[\\s　]/).first\n end.compact.reject(&:empty?).uniq.join(\"_\") or \"\\u96C6\\u7D04\")}_\\u7ACB\\u66FF\\u91D1_#{(InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).first).year}\\u5E74_#{(InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\").approved.includes(:user).first).month}\\u6708\\u5206.#{(\"xlsx\" or \"pdf\")}\"), :disposition => ((params[:disposition] or \"attachment\")))",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::ExportsController",
+        "method": "merged_expense_internal"
+      },
+      "user_input": "InvoiceSubmission.where(:id => Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"expense\")",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "dc1752667d586426fe1eca196645df80d2875aa2ef35c04b8921bcb2ef12fd88",
+      "check_name": "SendFile",
+      "message": "Parameter value used in file name",
+      "file": "app/controllers/api/v1/exports_controller.rb",
+      "line": 21,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(WorkReportExporter.new(viewing_user, :year => year, :month => month, :category => params[:category]).call, :type => \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\", :filename => category_prefixed(\"\\u696D\\u52D9\\u5831\\u544A\\u66F8_#{year}\\u5E74_#{month}\\u6708\\u5206.xlsx\", params[:category], :user => viewing_user, :default_label => \"Wing\"), :disposition => \"attachment\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::ExportsController",
+        "method": "work_report"
+      },
+      "user_input": "params[:category]",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "e1ad0becb5a3f1080a76ca7a3a1e66907634f5232edb7b027b48022aa210bbd1",
+      "check_name": "SendFile",
+      "message": "Parameter value used in file name",
+      "file": "app/controllers/api/v1/tax_reports_controller.rb",
+      "line": 35,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(((OfficialTaxFormRenderer.new(current_user, :year => target_year, :deduction => ((params[:deduction].to_i or 650000))).render_shinkokusho or OfficialTaxFormRenderer.new(current_user, :year => target_year, :deduction => ((params[:deduction].to_i or 650000))).render_shohi) or OfficialTaxFormRenderer.new(current_user, :year => target_year, :deduction => ((params[:deduction].to_i or 650000))).render_kessansho), :type => \"application/pdf\", :filename => (((\"\\u78BA\\u5B9A\\u7533\\u544A\\u66F8\\u7B2C\\u4E00\\u8868_#{target_year}\\u5E74\\u5206.pdf\" or \"\\u6D88\\u8CBB\\u7A0E\\u7533\\u544A\\u66F8_#{target_year}\\u5E74\\u5206.pdf\") or \"\\u9752\\u8272\\u7533\\u544A\\u6C7A\\u7B97\\u66F8_#{target_year}\\u5E74\\u5206.pdf\")), :disposition => \"attachment\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::TaxReportsController",
+        "method": "export_pdf"
+      },
+      "user_input": "params[:deduction]",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "ef60516c7346691c49cb68914b99ede0f8b206b00e418c0bb6ec16601e0c8bbc",
+      "check_name": "SendFile",
+      "message": "Model attribute used in file name",
+      "file": "app/controllers/api/v1/exports_controller.rb",
+      "line": 84,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(InvoicePdfRenderer.new(target_user, :year => year, :month => month, :category => params[:category], :application_date => ((parse_application_date or (InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").application_date_override or InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").application_date_override))), :client_name_override => client_override, :issuer_user_override => issuer_override, :total_override => InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").total_override, :item_label_override => InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").item_label_override, :note => [(\"\\u6CE8\\u6587\\u756A\\u53F7: #{(InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").purchase_order_no_override or InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").received_purchase_order.order_no)}\" or nil), InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").note].compact.reject(&:blank?).join(\"\\n\"), :subject_override => InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").subject_override, :items_override => InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").items_override, :due_date_override => InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").due_date_override, :registration_no_override => InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").registration_no_override, :bank_info_override => InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").bank_info_override).call, :type => \"application/pdf\", :filename => category_prefixed(\"\\u8ACB\\u6C42\\u66F8_#{year}\\u5E74_#{month}\\u6708\\u5206.pdf\", params[:category], :user => target_user), :disposition => \"attachment\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::ExportsController",
+        "method": "invoice"
+      },
+      "user_input": "InvoiceSubmission.find_by(:user_id => target_user.id, :year => year, :month => month, :category => params[:category], :kind => \"invoice\").bank_info_override",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "fc3117b562e1f868c72ebb34b05dd2a20390279d344a65b3bf8b7c68f492fb4c",
+      "check_name": "SendFile",
+      "message": "Model attribute used in file name",
+      "file": "app/controllers/api/v1/exports_controller.rb",
+      "line": 205,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(InvoicePdfRenderer.new(InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first, :year => (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).year, :month => (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).month, :category => (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).category, :application_date => ((parse_application_date or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:application_date_override).compact.first)), :client_name_override => I18n.t(\"companies.labop.name\"), :issuer_user_override => current_user, :item_label_override => (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).item_label_override, :subject_override => (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).subject_override, :items_override => ((MergedInvoiceItems.normalize(params[:items_override]) or MergedInvoiceItems.build(MergedInvoiceItems.order(InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order))))), :total_override => nil, :note => [*purchase_order_note_lines((params[:purchase_order_no].to_s.strip or ((InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).purchase_order_no_override or (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).received_purchase_order.order_no))), (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).note].compact.reject(&:blank?).join(\"\\n\"), :bank_info_override => (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).bank_info_override).call, :type => \"application/pdf\", :filename => (\"#{(:BRAKEMAN_SAFE_LITERAL or (InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).category.to_s)}_#{(InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.map do\n u.display_name.to_s.split(/[\\s　]/).first\n end.compact.reject(&:empty?).uniq.join(\"_\") or \"\\u96C6\\u7D04\")}_\\u8ACB\\u6C42\\u66F8_#{(InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).year}\\u5E74_#{(InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).find do\n (s.user_id == InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).map(&:user).uniq.partition(&:admin?).flatten.first.id)\n end or InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\").approved.includes(:user, :received_purchase_order).first).month}\\u6708\\u5206.pdf\"), :disposition => ((params[:disposition] or \"attachment\")))",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::ExportsController",
+        "method": "merged_invoice"
+      },
+      "user_input": "InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\")",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
     }
   ],
   "updated": "2026-05-03 00:00:00 +0900",

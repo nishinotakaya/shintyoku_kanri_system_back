@@ -34,7 +34,7 @@ request.body = {
     reducers: { collection_group_results: { type: "results", limit: 200 } },
     filter: {
       operator: "and",
-      filters: [{
+      filters: [ {
         property: "ENlJ",
         filter: {
           operator: "person_contains",
@@ -43,7 +43,7 @@ request.body = {
             { type: "exact", value: { table: "notion_user", id: "e1c39454-24a8-4955-a538-58e0430f97b6" } }
           ]
         }
-      }]
+      } ]
     },
     sort: [], searchQuery: "", archiveStatus: "NON_ARCHIVED",
     userId: ACTIVE_USER_ID, userTimeZone: "Asia/Tokyo"
