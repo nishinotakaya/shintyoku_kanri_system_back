@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<style>
+  /* 青色申告決算書(一般用)・損益計算書の様式風レイアウト（転記/保管用）。実物FA3001の科目番号に準拠 */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; color: #14532d; font-size: 10px; }
+  .frame { border: 2px solid #15803d; padding: 8px 10px; }
+  h1 { text-align: center; font-size: 15px; letter-spacing: 2px; color: #166534; margin-bottom: 6px; }
+  h1 .year { border: 1px solid #15803d; padding: 0 6px; margin: 0 2px; }
+  .meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  .meta td { border: 1px solid #16a34a; padding: 3px 6px; font-size: 9px; }
+  .meta .lbl { background: #f0fdf4; width: 52px; text-align: center; color: #166534; }
+  h2 { text-align: center; font-size: 13px; letter-spacing: 8px; color: #166534; margin: 8px 0 6px; }
+  .pl { width: 100%; border-collapse: collapse; }
+  .pl th, .pl td { border: 1px solid #16a34a; padding: 3.5px 6px; font-size: 10px; }
+  .pl th { background: #f0fdf4; font-weight: 600; color: #166534; }
+  .pl .no { display: inline-block; width: 16px; height: 16px; line-height: 15px; border: 1px solid #16a34a; border-radius: 50%; text-align: center; font-size: 8.5px; margin-right: 4px; }
+  .pl .amount { text-align: right; font-variant-numeric: tabular-nums; width: 96px; }
+  .pl .kamoku { width: 128px; }
+  .pl .strong { background: #fefce8; font-weight: 700; }
+  .note { font-size: 8.5px; color: #4d7c0f; margin-top: 6px; }
+  .monthly { width: 46%; border-collapse: collapse; margin-top: 10px; float: left; }
+  .monthly th, .monthly td { border: 1px solid #16a34a; padding: 3px 8px; font-size: 9.5px; }
+  .monthly th { background: #f0fdf4; color: #166534; }
+  .monthly .amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .deduction-box { width: 50%; float: right; border-collapse: collapse; margin-top: 10px; }
+  .deduction-box th, .deduction-box td { border: 1px solid #16a34a; padding: 4px 8px; font-size: 9.5px; }
+  .deduction-box th { background: #f0fdf4; color: #166534; text-align: left; font-weight: 600; }
+  .deduction-box .amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .clear { clear: both; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <h1>令和<span class="year"><%= wareki_year %></span>年分所得税青色申告決算書（一般用）〔アプリ集計・転記用〕</h1>
+
+  <table class="meta">
+    <tr>
+      <td class="lbl">住所</td><td><%= address %></td>
+      <td class="lbl">氏名</td><td><%= name %></td>
+      <td class="lbl">業種名</td><td><%= industry %></td>
+      <td class="lbl">電話</td><td><%= tel %></td>
+    </tr>
+  </table>
+
+  <h2>損益計算書</h2>
+  <div style="text-align:center; font-size:9px; margin-bottom:4px;">（自 <%= year %>年1月1日　至 <%= year %>年12月31日）</div>
+
+  <table class="pl">
+    <tr><th class="kamoku">科目</th><th class="amount">金額(円)</th><th class="kamoku">科目</th><th class="amount">金額(円)</th></tr>
+    <% rows = pl_rows %>
+    <% left = rows[0...(rows.size + 1) / 2]; right = rows[((rows.size + 1) / 2)..] || [] %>
+    <% (0...[left.size, right.size].max).each do |i| %>
+      <tr>
+        <% [left[i], right[i]].each do |row| %>
+          <% if row %>
+            <td class="<%= row[:strong] ? 'strong' : '' %>"><% if row[:no] %><span class="no"><%= row[:no] %></span><% end %><%= row[:label] %></td>
+            <td class="amount <%= row[:strong] ? 'strong' : '' %>"><%= row[:amount] ? fmt(row[:amount]) : "" %></td>
+          <% else %>
+            <td></td><td></td>
+          <% end %>
+        <% end %>
+      </tr>
+    <% end %>
+  </table>
+
+  <table class="deduction-box">
+    <tr><th>青色申告特別控除前の所得金額 <span class="no">43</span></th><td class="amount strong"><%= fmt(profit_before_deduction) %></td></tr>
+    <tr><th>青色申告特別控除額 <span class="no">44</span></th><td class="amount"><%= fmt(deduction_applied) %></td></tr>
+    <tr><th>所得金額 <span class="no">45</span>（㊸−㊹）</th><td class="amount strong"><%= fmt(final_income) %></td></tr>
+  </table>
+
+  <table class="monthly">
+    <tr><th>月</th><th>売上（収入）金額</th><th>経費（按分後）</th></tr>
+    <% monthly.each do |m| %>
+      <tr><td style="text-align:center;"><%= m[:month] %>月</td><td class="amount"><%= m[:income].zero? ? "" : fmt(m[:income]) %></td><td class="amount"><%= m[:expense].zero? ? "" : fmt(m[:expense]) %></td></tr>
+    <% end %>
+    <tr><th style="text-align:center;">計</th><td class="amount strong"><%= fmt(income_total) %></td><td class="amount strong"><%= fmt(expense_total) %></td></tr>
+  </table>
+  <div class="clear"></div>
+
+  <div class="note">
+    ※ 本書はアプリ集計による転記・保管用です。減価償却費は定額法・月割（登録資産<%= assets_count %>件）。経費は家事按分適用後の金額。<br>
+    ※ e-Tax 提出は「確定申告書等作成コーナー」で本書の各科目金額を転記してください。生成: <%= generated_at %>
+  </div>
+</div>
+</body>
+</html>

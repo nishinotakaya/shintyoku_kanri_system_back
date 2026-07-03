@@ -13,6 +13,17 @@ module Api
         render json: build_summary(year)
       end
 
+      # GET /api/v1/tax_reports/export_pdf?year=2026&deduction=650000
+      # 青色申告決算書(損益計算書)の様式風PDF（転記・保管用）
+      def export_pdf
+        year = target_year
+        deduction = params[:deduction].presence&.to_i || 650_000
+        path = TaxReturnPdfRenderer.new(current_user, year: year, deduction: deduction).call
+        send_file path, type: "application/pdf", filename: "青色申告決算書_#{year}年分.pdf", disposition: "attachment"
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       # GET /api/v1/tax_reports/export_csv?year=2026&kind=summary|details
       # e-Tax(確定申告書等作成コーナー)転記用のCSV。Excelで開けるようBOM付きUTF-8。
       def export_csv
@@ -36,38 +47,8 @@ module Api
         current_user.business_expenses.where(expense_date: Date.new(year, 1, 1)..Date.new(year, 12, 31))
       end
 
-      def year_incomes(year)
-        InvoiceSubmission.where(user_id: current_user.id, kind: "invoice", status: "approved", year: year)
-      end
-
       def build_summary(year)
-        expenses = year_expenses(year).to_a
-        incomes = year_incomes(year).to_a
-        assets = current_user.fixed_assets.to_a
-        depreciation_total = assets.sum { |a| a.depreciation_for(year) }
-
-        by_category = expenses.group_by(&:account_category).map do |category, rows|
-          { category: category || "未分類", total: rows.sum(&:deductible_amount), count: rows.size }
-        end
-        by_category << { category: "減価償却費", total: depreciation_total, count: assets.size } if depreciation_total.positive?
-        by_category = by_category.sort_by { |row| -row[:total] }
-
-        income_by_month = (1..12).map { |m| incomes.select { |s| s.month == m }.sum { |s| s.total_override.to_i } }
-        expense_by_month = (1..12).map { |m| expenses.select { |e| e.expense_date&.month == m }.sum(&:deductible_amount) }
-        income_total = income_by_month.sum
-        expense_total = by_category.sum { |row| row[:total] }
-
-        {
-          year: year,
-          income_total: income_total,
-          expense_total: expense_total,
-          depreciation_total: depreciation_total,
-          profit: income_total - expense_total,
-          by_category: by_category,
-          monthly: (1..12).map { |m| { month: m, income: income_by_month[m - 1], expense: expense_by_month[m - 1] } },
-          expense_count: expenses.size,
-          needs_review_count: expenses.count { |e| e.status == "needs_review" }
-        }
+        TaxSummaryBuilder.call(current_user, year)
       end
 
       # 科目別集計CSV: 青色申告決算書の経費欄へそのまま転記できる形
