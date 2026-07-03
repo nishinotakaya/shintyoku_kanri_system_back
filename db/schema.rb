@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_03_000001) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_03_000003) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -114,7 +114,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_03_000001) do
     t.text "ai_raw"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "source", default: "receipt", null: false
+    t.string "import_hash"
     t.index ["user_id", "expense_date"], name: "index_business_expenses_on_user_id_and_expense_date"
+    t.index ["user_id", "import_hash"], name: "index_business_expenses_on_user_id_and_import_hash"
   end
 
   create_table "expenses", force: :cascade do |t|
@@ -136,6 +139,19 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_03_000001) do
     t.string "billing_month"
     t.index ["billing_month"], name: "index_expenses_on_billing_month"
     t.index ["user_id"], name: "index_expenses_on_user_id"
+  end
+
+  create_table "fixed_assets", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "name", null: false
+    t.date "acquired_on", null: false
+    t.integer "cost", null: false
+    t.integer "useful_life_years", null: false
+    t.integer "business_ratio", default: 100, null: false
+    t.string "memo"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_fixed_assets_on_user_id"
   end
 
   create_table "freee_connections", force: :cascade do |t|

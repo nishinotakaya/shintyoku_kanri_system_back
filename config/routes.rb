@@ -144,7 +144,15 @@ Rails.application.routes.draw do
         member do
           get :receipt
         end
+        collection do
+          post :import_csv     # 銀行/カード明細CSV → AI仕訳プレビュー
+          post :import_commit  # プレビューで選択した行を一括登録
+        end
       end
+      # 減価償却資産 + 確定申告集計 (admin専用)
+      resources :fixed_assets, only: [ :index, :create, :update, :destroy ]
+      get "tax_reports/summary",    to: "tax_reports#summary"
+      get "tax_reports/export_csv", to: "tax_reports#export_csv"
 
       resources :invoice_submissions, only: [ :index, :create, :update, :destroy ] do
         collection do

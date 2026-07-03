@@ -65,6 +65,58 @@ module Api
         send_data @record.receipt_data, type: @record.content_type.presence || "image/jpeg", disposition: "inline"
       end
 
+      # POST /api/v1/business_expenses/import_csv  (multipart: file=銀行/カード明細CSV)
+      # 解析→AI仕訳して「プレビュー」を返す（この時点では保存しない）。
+      def import_csv
+        file = params[:file]
+        return render(json: { error: "CSVファイルを添付してください" }, status: :unprocessable_entity) unless file.respond_to?(:read)
+
+        parsed = BankCsvParser.call(file.read)
+        return render(json: { error: parsed[:error] }, status: :unprocessable_entity) if parsed[:error]
+
+        categorized = TransactionCategorizer.call(parsed[:rows])
+        existing_hashes = current_user.business_expenses.where(import_hash: categorized.map { |r| r[:import_hash] }).pluck(:import_hash).to_set
+        rows = categorized.map { |r| r.merge(duplicate: existing_hashes.include?(r[:import_hash])) }
+        render json: { rows: rows, count: rows.size, duplicate_count: rows.count { |r| r[:duplicate] } }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/business_expenses/import_commit  { rows: [{date, description, amount, account_category, memo, import_hash}] }
+      # プレビューで選択された行を経費として一括登録（重複ハッシュはスキップ）。
+      def import_commit
+        rows = Array(params[:rows])
+        return render(json: { error: "取込対象がありません" }, status: :unprocessable_entity) if rows.empty?
+
+        imported = 0
+        skipped = 0
+        rows.each do |raw|
+          row = raw.respond_to?(:to_unsafe_h) ? raw.to_unsafe_h : raw.to_h
+          hash = row["import_hash"].to_s
+          if hash.present? && current_user.business_expenses.exists?(import_hash: hash)
+            skipped += 1
+            next
+          end
+          category = row["account_category"].to_s.presence
+          category = nil unless BusinessExpense::ACCOUNT_CATEGORIES.include?(category)
+          current_user.business_expenses.create!(
+            expense_date: (Date.iso8601(row["date"].to_s) rescue Date.current),
+            store_name: row["description"].to_s.presence,
+            amount: row["amount"].to_i,
+            tax_rate: 10,
+            account_category: category,
+            memo: row["memo"].to_s.presence,
+            status: "confirmed",
+            source: "csv",
+            import_hash: hash.presence
+          )
+          imported += 1
+        end
+        render json: { imported: imported, skipped: skipped }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
 
       def require_admin
