@@ -56,19 +56,23 @@ module Api
       end
 
       def create_task
-        task = current_user.backlog_tasks.create!(
+        attrs = {
           issue_key: "LOCAL-#{SecureRandom.hex(3).upcase}",
           summary: params[:summary],
           status_id: 1,
           status_name: "未対応",
           created_on: Date.current,
           memo: params[:memo],
-          due_date: params[:due_date],
+          due_date: params[:due_date].presence,
           deploy_note: params[:deploy_note],
           url: params[:url].presence || params[:deploy_note],
-          assignee_name: current_user.display_name,
+          assignee_name: params[:assignee_name].presence || current_user.display_name,
           source: "local"
-        )
+        }
+        # カレンダーから日付指定で作る場合は start_date/end_date を渡してその日だけ表示
+        attrs[:start_date] = params[:start_date] if params[:start_date].present?
+        attrs[:end_date]   = params[:end_date]   if params[:end_date].present?
+        task = current_user.backlog_tasks.create!(attrs)
         render json: serialize_task(task), status: :created
       end
 
@@ -97,7 +101,12 @@ module Api
         sheet = params[:sheet_name].presence
         return render(json: { error: "スプレッドシートURLを入力してください" }, status: :bad_request) unless url.present?
 
-        result = GoogleSheetsImporter.new(user: current_user, spreadsheet_url: url, sheet_name: sheet).call
+        result = GoogleSheetsImporter.new(
+          user: current_user,
+          spreadsheet_url: url,
+          sheet_name: sheet,
+          only_flagged: params[:only_flagged].to_s == "true"
+        ).call
         render json: { imported: result[:imported], sheets: result[:sheets] }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -107,7 +116,11 @@ module Api
         url = params[:spreadsheet_url]
         return render(json: { error: "スプレッドシートURLを入力してください" }, status: :bad_request) unless url.present?
 
-        result = GoogleSheetsExporter.new(user: current_user, spreadsheet_url: url).call
+        result = GoogleSheetsExporter.new(
+          user: current_user,
+          spreadsheet_url: url,
+          only_flagged: params[:only_flagged].to_s == "true"
+        ).call
         render json: { success: true, active: result[:active], completed: result[:completed] }
       rescue => e
         body = e.respond_to?(:body) ? e.body.to_s : ""
@@ -143,17 +156,142 @@ module Api
         s = current_user.backlog_setting
         return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
         comments = BacklogClient.new(s).fetch_comments(task.issue_key)
-        render json: comments.map { |c|
-          {
-            id: c["id"],
-            content: c["content"],
-            created_user_name: c.dig("createdUser", "name"),
-            created: c["created"],
-            updated: c["updated"]
-          }
-        }
+        render json: comments.map { |c| serialize_comment(c) }
       rescue ActiveRecord::RecordNotFound
         render json: { error: "タスクが見つかりません" }, status: :not_found
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/backlog/tasks/:issue_key/comments
+      # body: { content: "...", notified_user_ids: [...], attachment_ids: [...] }
+      def create_task_comment
+        task = current_user.backlog_tasks.find_by!(issue_key: params[:issue_key])
+        s = current_user.backlog_setting
+        return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
+        content = params.require(:content)
+        notified = (params[:notified_user_ids] || []).map(&:to_i)
+        atts = (params[:attachment_ids] || []).map(&:to_i)
+        c = BacklogClient.new(s).add_comment(task.issue_key, content: content, notified_user_ids: notified, attachment_ids: atts)
+        render json: serialize_comment(c), status: :created
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/backlog/ai_polish
+      # body: { content: "...", instruction: "..." (任意) }
+      # OpenAI に通して markdown 整形 / 文章添削した本文を返す。
+      def ai_polish
+        content = params.require(:content)
+        instruction = params[:instruction].to_s
+        api_key = OpenaiClient.api_key_for(current_user)
+        return render(json: { error: "OpenAI API キーが未設定です。設定画面で登録してください。" }, status: :bad_request) if api_key.blank?
+
+        sys = <<~SYS
+          あなたは Backlog コメントの添削アシスタントです。以下を 1 回の応答で全て行ってください。
+          1. 誤字脱字を修正
+          2. 文章を丁寧で読みやすい日本語に整える (主語/てにをは/語尾を統一)
+          3. 適切な箇所を markdown 化:
+             - 見出し (# / ## / ###)、箇条書き (- )、表 (| 列 | 列 |)、コードブロック (```)、強調 (**), インラインコード (`)
+             - URL は markdown リンクや生 URL のまま (自動でリンク化される)
+             - メンション (@名前) は壊さない
+             - 〔M0〕〔M1〕… のような 〔…〕 で囲まれたトークンは絶対にそのまま (改変・削除・翻訳・装飾せず) 残す
+          4. 元から markdown があれば尊重して維持
+          5. 文意は絶対に変えない (要約しない)
+          出力は本文のみ。"承知しました" 等の前置き、コードフェンスでの全体ラップは不要。
+        SYS
+        user_msg = instruction.present? ? "指示: #{instruction}\n\n本文:\n#{content}" : content
+
+        uri = URI("https://api.openai.com/v1/chat/completions")
+        http = Net::HTTP.new(uri.host, uri.port).tap { _1.use_ssl = true; _1.read_timeout = 60 }
+        req = Net::HTTP::Post.new(uri.path)
+        req["Content-Type"] = "application/json"
+        req["Authorization"] = "Bearer #{api_key}"
+        req.body = {
+          model: ENV.fetch("OPENAI_MODEL", "gpt-4o-mini"),
+          messages: [
+            { role: "system", content: sys },
+            { role: "user", content: user_msg }
+          ],
+          temperature: 0.3
+        }.to_json
+        res = http.request(req)
+        return render(json: { error: "OpenAI エラー (#{res.code}): #{res.body.to_s.slice(0, 200)}" }, status: :bad_request) unless res.code.start_with?("2")
+        result = JSON.parse(res.body).dig("choices", 0, "message", "content").to_s.strip
+        # コードフェンスで全体を囲まれる場合は剥がす
+        if result.start_with?("```") && result.end_with?("```")
+          result = result.sub(/\A```[a-zA-Z]*\n/, "").sub(/\n```\z/, "")
+        end
+        render json: { content: result }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/backlog/attachments
+      # multipart file アップロード → Backlog Space attachment 登録 → id 返却
+      def create_attachment
+        file = params[:file]
+        return render(json: { error: "ファイルを添付してください" }, status: :unprocessable_entity) unless file.respond_to?(:read)
+        s = current_user.backlog_setting
+        return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
+        io = file.tempfile.presence || file
+        io.rewind if io.respond_to?(:rewind)
+        content = io.read
+        result = BacklogClient.new(s).upload_attachment(
+          filename: file.original_filename,
+          content_type: (file.respond_to?(:content_type) ? file.content_type : nil),
+          content: content
+        )
+        render json: { id: result["id"], name: result["name"], size: result["size"] }, status: :created
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # PATCH /api/v1/backlog/tasks/:issue_key/comments/:comment_id
+      # body: { content: "..." }
+      def update_task_comment
+        task = current_user.backlog_tasks.find_by!(issue_key: params[:issue_key])
+        s = current_user.backlog_setting
+        return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
+        c = BacklogClient.new(s).update_comment(task.issue_key, params[:comment_id], content: params.require(:content))
+        render json: serialize_comment(c)
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # DELETE /api/v1/backlog/tasks/:issue_key/comments/:comment_id
+      def destroy_task_comment
+        task = current_user.backlog_tasks.find_by!(issue_key: params[:issue_key])
+        s = current_user.backlog_setting
+        return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
+        BacklogClient.new(s).delete_comment(task.issue_key, params[:comment_id])
+        head :no_content
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/v1/backlog/users
+      # メンション候補用の Backlog ユーザー一覧。
+      # 1) Backlog API から取得（admin 不要、project members 経由）
+      # 2) 取れない／取れたが少ない場合、DB の backlog_tasks.assignee_name から補完
+      def users
+        s = current_user.backlog_setting
+        api_users = s&.api_key.present? ? BacklogClient.new(s).fetch_users : []
+        result = api_users.map { |u| { id: u["id"], name: u["name"], mail_address: u["mailAddress"] } }
+
+        # DB に同期されている assignee を補完（admin 権限が無くて API で取れなかった人を救う）
+        existing_ids = result.map { |u| u[:id] }.compact
+        db_assignees = BacklogTask
+          .where.not(assignee_name: [ nil, "" ])
+          .where.not(assignee_id: existing_ids)
+          .distinct
+          .pluck(:assignee_id, :assignee_name)
+        db_assignees.each do |aid, aname|
+          next if aname.blank?
+          result << { id: aid, name: aname, mail_address: nil }
+        end
+
+        render json: result
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -180,6 +318,17 @@ module Api
       end
 
       private
+
+      def serialize_comment(c)
+        {
+          id: c["id"],
+          content: c["content"],
+          created_user_id: c.dig("createdUser", "id"),
+          created_user_name: c.dig("createdUser", "name"),
+          created: c["created"],
+          updated: c["updated"]
+        }
+      end
 
       def setting_params
         params.require(:backlog_setting).permit(

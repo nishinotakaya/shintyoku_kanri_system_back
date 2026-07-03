@@ -119,6 +119,79 @@ class EmailDrafter
         - 添付: 発注書 PDF
         本文には添付ファイル確認のお願いと、何かあれば連絡ください、を含めて。
       PROMPT
+    when :purchase_order_bulk
+      items = Array(@context[:items])
+      breakdown = items.map.with_index(1) do |it, i|
+        line = "  #{i}. #{it[:subject].presence || '(案件名未設定)'}（#{it[:period_start]}〜#{it[:period_end]} / ¥#{it[:total_amount].to_i}）"
+        if it[:hours_per_cycle].to_i > 0
+          line += "  月#{it[:hours_per_cycle]}h / 月額 ¥#{it[:monthly_tax_exc].to_i}(税抜) → ¥#{it[:monthly_tax_inc].to_i}(税込) / 時給 ¥#{it[:hourly_tax_exc].to_i}(税抜) → ¥#{it[:hourly_tax_inc].to_i}(税込)"
+        end
+        line
+      end.join("\n")
+      grand_total = items.sum { |it| it[:total_amount].to_i }
+      monthly_hours_sum   = items.sum { |it| it[:hours_per_cycle].to_i }
+      monthly_inc_sum     = items.sum { |it| it[:monthly_tax_inc].to_i }
+      monthly_exc_sum     = items.sum { |it| it[:monthly_tax_exc].to_i }
+      <<~PROMPT
+        以下情報で、川村卓也様 宛に複数の発注書を一括送付するメール下書きを作って。
+        - 件数: #{items.size}件
+        - 内訳:
+        #{breakdown}
+        - 1ヶ月あたり合計: 工数 #{monthly_hours_sum}h / 月額 ¥#{monthly_exc_sum}(税抜) → ¥#{monthly_inc_sum}(税込)
+        - 全期間 合計金額（税込）: ¥#{grand_total}
+        - 添付: 発注書 PDF × #{items.size}件
+
+        ★件名:
+        - 形式は「【発注書#{items.size}件】2026年X月〜Y月分 案件名 送付の件」のように、期間（請求月レンジ）と主要案件名を含めること
+        - 例: 「【発注書2件】2026年6月〜8月分 タマホーム・タマリビング案件 送付の件」
+        - 単月なら「2026年X月分」、複数月なら「2026年X月〜Y月分」
+
+        ★本文の構成:
+        1. 「川村卓也様」「お世話になっております。」
+        2. 「この度、#{period_label || 'XXXX年X月分'}の発注書を#{items.size}件お送りいたします。」のような導入文
+        3. 各案件の詳細（番号付き）: 案件名・期間・1ヶ月あたり工数(h)・月額(税抜と税込)・時給(税抜と税込)・小計(税込)
+        4. 「【1ヶ月あたり合計】」セクション: 工数h / 月額(税抜と税込)
+        5. 「合計金額（税込）はXXX円となります。」
+        6. 添付確認・連絡先案内
+        7. 「敬具」「西野 鷹也」
+        金額は ¥X,XXX,XXX のカンマ区切り。改行ゆるめで読みやすく。
+      PROMPT
+    when :payment_notice
+      grand_total = @context[:grand_total].to_i
+      paid_on = @context[:paid_on].to_s
+      sender = @context[:sender_name].to_s
+      sender_surname = sender.split(/[\s　]/).first.to_s
+      recipient_raw = @context[:recipient_name].to_s.strip.presence || "ご担当者"
+      recipient_line = if recipient_raw.end_with?("様", "御中")
+        recipient_raw
+      elsif recipient_raw.start_with?("株式会社")
+        "#{recipient_raw} 御中"
+      else
+        "#{recipient_raw} 様"
+      end
+      breakdown = Array(@context[:breakdown_items])
+        .select { |it| it[:label].to_s.strip.length > 0 }
+        .map { |it| "  ・#{it[:label]}：¥#{it[:amount].to_i}" }
+        .join("\n")
+      <<~PROMPT
+        以下情報で、#{recipient_line} 宛に「お振込のご案内」(支払通知書) のメール下書きを作って。
+        - 振込日: #{paid_on}
+        - 振込金額（税込・合計）: ¥#{grand_total}
+        - 内訳:
+        #{breakdown}
+        - 差出人: #{sender}
+        - 添付: 支払通知書 PDF（請求書と同じレイアウト・タイトルのみ「支払通知書」）
+
+        ★必ず守ること:
+        - 件名は「【お振込のご案内】#{@context[:year]}年#{@context[:month]}月分」のような明確な題名にすること（「ご請求」とは絶対に書かない、これは支払い側からの通知）
+        - 本文の宛名行は必ず「#{recipient_line}」で始める
+        - 自己紹介と署名は必ず「#{sender_surname}」（差出人）で書く
+        - 「下記の通りお振込いたしました」「ご確認のほどよろしくお願い申し上げます」のニュアンスを入れる
+        - 振込日と振込金額は本文中に明記する（金額は ¥X,XXX,XXX のカンマ区切り）
+        - 内訳が複数ある場合は箇条書きで本文に含める
+        - 添付の支払通知書 PDF にも同内容が記載されている旨を一言添える
+        - 「請求」「請求書」「請求金額」という表現は使わない（あくまで支払側からの通知）
+      PROMPT
     when :self_invoice
       cat_label = @context[:category_label].to_s
       include_expense = @context[:include_expense]
@@ -210,6 +283,91 @@ class EmailDrafter
           #{sender}
         BODY
       }
+    when :purchase_order_bulk
+      sender = @context[:sender_name].to_s
+      items = Array(@context[:items])
+      grand_total = items.sum { |it| it[:total_amount].to_i }
+      monthly_hours_sum = items.sum { |it| it[:hours_per_cycle].to_i }
+      monthly_inc_sum   = items.sum { |it| it[:monthly_tax_inc].to_i }
+      monthly_exc_sum   = items.sum { |it| it[:monthly_tax_exc].to_i }
+      fmt = ->(n) { "¥#{n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
+
+      # 件名用: 「請求月」(締日25基準) を計算して期間レンジを作る
+      billing_month = ->(iso) {
+        d = Date.parse(iso) rescue nil
+        next nil unless d
+        d.day <= 25 ? [ d.year, d.month ] : [ (d >> 1).year, (d >> 1).month ]
+      }
+      starts = items.map { |it| billing_month.call(it[:period_start].to_s) }.compact
+      ends   = items.map { |it| billing_month.call(it[:period_end].to_s) }.compact
+      first  = starts.min_by { |y, m| y * 12 + m }
+      last   = ends.max_by   { |y, m| y * 12 + m }
+      period_label =
+        if first && last
+          if first == last
+            "#{first[0]}年#{first[1]}月分"
+          elsif first[0] == last[0]
+            "#{first[0]}年#{first[1]}月〜#{last[1]}月分"
+          else
+            "#{first[0]}年#{first[1]}月〜#{last[0]}年#{last[1]}月分"
+          end
+        else
+          ""
+        end
+
+      # 件名用案件キーワード: subject の「様」or「（」の前まで、最大3件
+      subject_keywords = items
+        .map { |it| it[:subject].to_s.split(/様|（|\(/).first.to_s.strip }
+        .reject(&:empty?).uniq
+      subject_label =
+        case subject_keywords.size
+        when 0 then ""
+        when 1, 2 then "#{subject_keywords.join('・')}案件 "
+        else "#{subject_keywords.first(2).join('・')}ほか#{items.size}件 "
+        end
+
+      subject_str = "【発注書#{items.size}件】#{period_label} #{subject_label}送付の件".gsub(/ +/, " ").strip
+
+      detail_block = items.map.with_index(1) { |it, i|
+        lines = []
+        lines << "#{i}. #{it[:subject].presence || '(案件名未設定)'}"
+        lines << "   - 期間：#{it[:period_start]}〜#{it[:period_end]}"
+        if it[:hours_per_cycle].to_i > 0
+          lines << "   - 1ヶ月あたり：#{it[:hours_per_cycle]}h"
+          lines << "     - 月額：#{fmt.call(it[:monthly_tax_exc])}（税抜） / #{fmt.call(it[:monthly_tax_inc])}（税込）"
+          lines << "     - 時給：#{fmt.call(it[:hourly_tax_exc])}（税抜） / #{fmt.call(it[:hourly_tax_inc])}（税込）"
+        end
+        lines << "   - 小計（税込）：#{fmt.call(it[:total_amount])}"
+        lines.join("\n")
+      }.join("\n\n")
+
+      intro = period_label.empty? ? "発注書を#{items.size}件" : "#{period_label}の発注書を#{items.size}件"
+
+      {
+        subject: subject_str,
+        body: <<~BODY
+          川村卓也様
+
+          お世話になっております。
+
+          この度、#{intro}お送りいたします。
+
+          #{detail_block}
+
+          【1ヶ月あたり合計】
+          - 工数：#{monthly_hours_sum}h
+          - 月額：#{fmt.call(monthly_exc_sum)}（税抜） / #{fmt.call(monthly_inc_sum)}（税込）
+
+          合計金額（税込）は#{fmt.call(grand_total)}となります。
+
+          添付の発注書をご確認いただき、
+          何かご不明点等がございましたら、お気軽にご連絡ください。
+
+          敬具
+
+          #{sender}
+        BODY
+      }
     when :self_invoice
       sender = @context[:sender_name].to_s
       sender_surname = sender.split(/[\s　]/).first.to_s
@@ -219,6 +377,8 @@ class EmailDrafter
       expense_total = @context[:expense_total].to_i
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
       build_invoice_email(name_for_subject: sender_surname, cat_label: cat_label, invoice_total: invoice_total, expense_total: expense_total, grand_total: grand_total, include_expense: include_expense)
+    when :payment_notice
+      build_payment_notice_email
     else
       { subject: "送付の件", body: "ご確認のほどよろしくお願いいたします。" }
     end
@@ -282,6 +442,74 @@ class EmailDrafter
         ご不明点がございましたら、ご連絡ください。
         何卒よろしくお願い申し上げます。
       BODY
+    }
+  end
+
+  # 振込通知 (支払通知書) メールの固定テンプレート
+  # context: recipient_name, paid_on (Date or 'YYYY-MM-DD'), grand_total, breakdown_items, sender_name, year, month
+  def build_payment_notice_email
+    fmt = ->(n) { sign = n.to_i < 0 ? "-" : ""; "#{sign}¥#{n.to_i.abs.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
+
+    recipient_raw = @context[:recipient_name].to_s.strip
+    recipient_raw = "ご担当者" if recipient_raw.empty?
+    recipient_line = if recipient_raw.end_with?("様", "御中")
+      recipient_raw
+    elsif recipient_raw.start_with?("株式会社")
+      "#{recipient_raw} 御中"
+    else
+      "#{recipient_raw} 様"
+    end
+
+    paid_on_raw = @context[:paid_on].to_s
+    paid_on_label = if paid_on_raw.match?(/\A\d{4}-\d{2}-\d{2}\z/)
+      d = Date.parse(paid_on_raw)
+      "#{d.year}年#{d.month}月#{d.day}日"
+    else
+      paid_on_raw
+    end
+
+    grand_total = @context[:grand_total].to_i
+    sender = @context[:sender_name].to_s
+    sender_surname = sender.split(/[\s　]/).first.to_s
+
+    breakdown_items = Array(@context[:breakdown_items]).select { |it| it[:label].to_s.strip.length > 0 }
+    breakdown_block = if breakdown_items.any?
+      list = breakdown_items.map { |it| "・#{it[:label]}：#{fmt.call(it[:amount])}" }.join("\n")
+      <<~BD.strip
+        【内訳】
+        #{list}
+      BD
+    else
+      ""
+    end
+
+    subject_period = if @context[:year] && @context[:month]
+      "#{@context[:year]}年#{@context[:month]}月分"
+    else
+      ""
+    end
+
+    body_lines = [
+      recipient_line,
+      "",
+      "いつもお世話になっております。#{sender_surname.empty? ? '' : sender_surname + 'でございます。'}",
+      "",
+      "下記の通りお振込いたしましたので、ご確認のほどよろしくお願い申し上げます。",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      "振込日　：#{paid_on_label}",
+      "振込金額：#{fmt.call(grand_total)}（税込）",
+      "━━━━━━━━━━━━━━━━━━━━"
+    ]
+    body_lines += [ "", breakdown_block ] unless breakdown_block.empty?
+    body_lines += [
+      "",
+      "ご査収のほど、何卒よろしくお願い申し上げます。"
+    ]
+
+    {
+      subject: "【お振込のご案内】#{subject_period}".strip.sub(/\s+\z/, ""),
+      body: body_lines.join("\n") + "\n"
     }
   end
 end

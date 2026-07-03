@@ -2,5 +2,6 @@
 # 設定 (purchase_order_settings) は上書きされるので、過去の発注を再現できるようにこちらに保存。
 class PurchaseOrderHistory < ApplicationRecord
   belongs_to :user
+  belongs_to :recipient_user, class_name: "User", optional: true
   serialize :payload, coder: JSON
 end

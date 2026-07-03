@@ -1,17 +1,21 @@
 module Api
   module V1
     class InvoiceSettingsController < BaseController
+      # as_user_id を付ければ admin は対象ユーザーの設定を取得できる(viewing_user)。
+      # 非adminや as_user_id 無しは自分自身(= viewing_user は current_user)。
       def show
         cat = params[:category].presence || "wings"
-        render json: serialize(current_user.invoice_setting_for(cat))
+        render json: serialize(viewing_user.invoice_setting_for(cat)).merge(seal_image: viewing_user.seal_image)
       end
 
       def update
         cat = params.dig(:invoice_setting, :category).presence || params[:category].presence || "wings"
-        s = current_user.invoice_settings.find_or_initialize_by(category: cat)
+        s = viewing_user.invoice_settings.find_or_initialize_by(category: cat)
         s.assign_attributes(InvoiceSetting.defaults_for(cat)) if s.new_record?
         s.assign_attributes(setting_params)
         s.save!
+        # 印鑑画像はユーザー単位(全カテゴリ共通)。data URL を渡されたら保存、空文字なら削除。
+        viewing_user.update!(seal_image: params[:seal_image].presence) if params.key?(:seal_image)
         render json: serialize(s)
       end
 

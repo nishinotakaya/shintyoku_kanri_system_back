@@ -56,5 +56,6 @@ gem "omniauth-google-oauth2", "~> 1.2"
 
 gem "google-apis-sheets_v4", "~> 0.47.0"
 gem "google-apis-gmail_v1", "~> 0.36"
+gem "google-apis-slides_v1", "~> 0.31"
 
 gem "dockerfile-rails", ">= 1.7", group: :development

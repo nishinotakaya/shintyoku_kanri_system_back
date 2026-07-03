@@ -1,5 +1,6 @@
 class InvoiceSubmission < ApplicationRecord
-  STATUSES = %w[pending approved rejected].freeze
+  # draft = 作成のみ(未申請)。申請(submit)で pending(または admin自分宛は approved)へ。
+  STATUSES = %w[draft pending approved rejected].freeze
   KINDS = %w[invoice expense work_report].freeze
 
   belongs_to :user
@@ -13,6 +14,7 @@ class InvoiceSubmission < ApplicationRecord
   validates :status, inclusion: { in: STATUSES }
   validates :kind, inclusion: { in: KINDS }
 
+  scope :draft,    -> { where(status: "draft") }
   scope :pending,  -> { where(status: "pending") }
   scope :approved, -> { where(status: "approved") }
   scope :invoices, -> { where(kind: "invoice") }
@@ -35,7 +37,7 @@ class InvoiceSubmission < ApplicationRecord
   private
 
   def set_defaults
-    self.status ||= "pending"
-    self.submitted_at ||= Time.current
+    self.status ||= "draft"
+    # submitted_at は「申請した時刻」。draft では nil、申請(submit)時に入れる。
   end
 end

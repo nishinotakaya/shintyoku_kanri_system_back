@@ -1,5 +1,6 @@
 class PurchaseOrderSetting < ApplicationRecord
   belongs_to :user
+  belongs_to :recipient_user, class_name: "User", optional: true
 
   serialize :items, coder: JSON, type: Array
 

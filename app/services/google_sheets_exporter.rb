@@ -6,23 +6,29 @@ require "google/apis/sheets_v4"
 # シート2: 完了タスク
 class GoogleSheetsExporter
   # 色定義 (RGB 0-1)
+  # 「タスク名」ヘッダ + 「完了 / 処理済 / 処理中 / 未対応」セクション見出しを全部緑に統一。
+  GREEN_SECTION = { red: 0.6, green: 0.88, blue: 0.6 }.freeze
   COLORS = {
-    header_bg:    { red: 0.76, green: 0.76, blue: 0.9 },   # 紫ヘッダ
-    section_done: { red: 0.6, green: 0.88, blue: 0.6 },    # 緑（処理済）
-    section_wip:  { red: 0.6, green: 0.8, blue: 1.0 },     # 青（処理中）
-    section_todo: { red: 1.0, green: 0.88, blue: 0.55 },   # オレンジ（未対応）
-    completed:    { red: 0.5, green: 0.85, blue: 0.5 },    # 濃い緑（完了）
+    header_bg:    GREEN_SECTION,                            # ヘッダ (タスク名 ...) を緑
+    section_done: GREEN_SECTION,                            # 処理済
+    section_wip:  GREEN_SECTION,                            # 処理中
+    section_todo: GREEN_SECTION,                            # 未対応
+    completed:    GREEN_SECTION,                            # 完了
     # 行マーキング: 「本日行う」「前回行った」「両方」 — 淡めにして見づらくしない
     flag_today:    { red: 1.00, green: 0.97, blue: 0.70 }, # 淡い黄（本日行う）
-    flag_previous: { red: 1.00, green: 0.85, blue: 0.92 }, # 淡いピンク（前回行った）— 緑系セクションと被らない
+    flag_previous: { red: 1.00, green: 0.85, blue: 0.92 }, # 淡いピンク（前回行った）
     flag_both:     { red: 0.85, green: 0.72, blue: 1.00 }, # 紫（両方）
     white:        { red: 1.0, green: 1.0, blue: 1.0 }
   }.freeze
 
-  def initialize(user:, spreadsheet_url:)
+  # データはA〜Iの9列。これより右(J列以降)はスキルシート同様に列ごと削除してグリッド線を消す
+  DATA_COLUMN_COUNT = 9
+
+  def initialize(user:, spreadsheet_url:, only_flagged: false)
     @user = user
     @spreadsheet_id = extract_id(spreadsheet_url)
-    raise "Google アクセストークンがありません。再度 Google ログインしてください。" unless @user.google_access_token.present?
+    @only_flagged = only_flagged
+    raise "Google アクセストークンがありません。再度 Google ログインしてください。" if @user.google_access_token.blank? && @user.google_refresh_token.blank?
   end
 
   def call
@@ -32,24 +38,25 @@ class GoogleSheetsExporter
     spreadsheet = @service.get_spreadsheet(@spreadsheet_id)
     existing = spreadsheet.sheets.map { |s| s.properties.title }
 
-    active_sheet = "現在のタスク"
+    active_sheet = @only_flagged ? "前回/今日 (フラグ付)" : "現在のタスク"
     completed_sheet = "完了タスク"
 
     # シートがなければ作成
     ensure_sheet(existing, active_sheet)
-    ensure_sheet(existing, completed_sheet)
+    ensure_sheet(existing, completed_sheet) unless @only_flagged
 
-    # データ取得
-    done_tasks = @user.backlog_tasks.where(status_id: 3).order(:issue_key)    # 処理済
-    wip_tasks = @user.backlog_tasks.where(status_id: 2).order(:issue_key)     # 処理中
-    todo_tasks = @user.backlog_tasks.where(status_id: 1).order(:issue_key)    # 未対応
-    completed_tasks = @user.backlog_tasks.where(status_id: 4).order(completed_on: :desc) # 完了
+    # データ取得 (only_flagged=true なら do_today || did_previous のみ)
+    base = @user.backlog_tasks
+    if @only_flagged
+      base = base.where("do_today = ? OR did_previous = ?", true, true)
+    end
+    done_tasks = base.where(status_id: 3).order(:issue_key)    # 処理済
+    wip_tasks = base.where(status_id: 2).order(:issue_key)     # 処理中
+    todo_tasks = base.where(status_id: 1).order(:issue_key)    # 未対応
+    completed_tasks = @only_flagged ? [] : @user.backlog_tasks.where(status_id: 4).order(completed_on: :desc)
 
-    # シート1: 現在のタスク
     write_active_sheet(active_sheet, done_tasks, wip_tasks, todo_tasks)
-
-    # シート2: 完了タスク
-    write_completed_sheet(completed_sheet, completed_tasks)
+    write_completed_sheet(completed_sheet, completed_tasks) unless @only_flagged
 
     { active: done_tasks.size + wip_tasks.size + todo_tasks.size, completed: completed_tasks.size }
   end
@@ -62,19 +69,9 @@ class GoogleSheetsExporter
     m[1]
   end
 
+  # トークンが無い操作者は admin(西野) にフォールバック
   def build_auth
-    auth = Signet::OAuth2::Client.new(
-      token_credential_uri: "https://oauth2.googleapis.com/token",
-      client_id: ENV["GOOGLE_CLIENT_ID"],
-      client_secret: ENV["GOOGLE_CLIENT_SECRET"],
-      access_token: @user.google_access_token,
-      refresh_token: @user.google_refresh_token
-    )
-    if @user.google_token_expires_at && @user.google_token_expires_at < Time.current && @user.google_refresh_token.present?
-      auth.fetch_access_token!
-      @user.update!(google_access_token: auth.access_token, google_token_expires_at: Time.current + 3600)
-    end
-    auth
+    GoogleAuth.build_with_fallback(@user)
   end
 
   def ensure_sheet(existing, title)
@@ -300,6 +297,16 @@ class GoogleSheetsExporter
         fields: "pixelSize"
       }
     }
+
+    # J列以降の余分な列を削除（データ範囲外のグリッド線・旧罫線を消す）
+    grid_column_count = sheet.properties.grid_properties&.column_count.to_i
+    if grid_column_count > DATA_COLUMN_COUNT
+      requests << {
+        delete_dimension: {
+          range: { sheet_id: sheet_id, dimension: "COLUMNS", start_index: DATA_COLUMN_COUNT, end_index: grid_column_count }
+        }
+      }
+    end
 
     if requests.any?
       batch = Google::Apis::SheetsV4::BatchUpdateSpreadsheetRequest.new(requests: requests)

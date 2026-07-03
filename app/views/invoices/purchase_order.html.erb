@@ -5,12 +5,21 @@
   n.negative? ? "-#{s}" : s
 end
 require "base64"
-_issuer_surname = data[:issuer][:representative].to_s.split(/[\s　]/).first.to_s
+_issuer_rep_full = data[:issuer][:representative].to_s
+_issuer_surname = _issuer_rep_full.split(/[\s　]/).first.to_s
+# DB(発行者ユーザーの seal_image)優先。発行者名(代表者)に姓一致するユーザーの印鑑を使う。
+_db_seal = ""
+if _issuer_rep_full.present?
+  _seal_owner = User.where.not(seal_image: [ nil, "" ]).detect { |u| _issuer_rep_full.start_with?(u.display_name.to_s.split(/[\s　]/).first.to_s) }
+  _db_seal = _seal_owner&.seal_image.to_s
+end
 _hanko_map = { "西野" => "hanko_nishino.png", "川村" => "hanko_kawamura.svg" }
-_hanko_file = _hanko_map[_issuer_surname]
+# 完全一致 → だめなら姓 prefix で部分一致（"西野鷹也" のように空白なし表記も拾う）
+_hanko_file = _hanko_map[_issuer_surname] || _hanko_map.find { |k, _| _issuer_rep_full.start_with?(k) }&.last
 _hanko_path = _hanko_file ? "#{Rails.root}/public/#{_hanko_file}" : nil
 _mime = _hanko_file&.end_with?(".svg") ? "image/svg+xml" : "image/png"
-hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil %>
+_file_seal = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil
+hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
 <!doctype html>
 <html lang="ja">
 <head>
@@ -50,6 +59,7 @@ hanko_src = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Ba
   .hanko-img {
     position: absolute; top: -6px; right: -4px;
     width: 70px; height: 70px;
+    object-fit: contain;
   }
   .subject-row { display: flex; align-items: baseline; gap: 14px; margin: 10px 0 4px; }
   .subject-row .lbl { font-weight: 700; font-size: 12px; min-width: 52px; }

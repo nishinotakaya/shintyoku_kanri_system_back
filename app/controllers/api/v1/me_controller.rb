@@ -28,9 +28,9 @@ module Api
       private
 
       def me_params
-        params.require(:user).permit(:display_name, :company_name, :openai_api_key, :closing_day,
+        params.require(:user).permit(:display_name, :company_name, :openai_api_key, :heygen_api_key, :video_script_context, :closing_day,
           :default_transit_from, :default_transit_to, :default_transit_fee, :default_transit_line,
-          :postal_code, :address, :attendance_schedule_url, :local_save_dir,
+          :postal_code, :address, :attendance_schedule_url, :progress_sheet_url, :local_save_dir, :dev_language,
           custom_off_days: [], commute_days: [],
           transit_routes: [ :from, :to, :fee, :line ])
       end
@@ -43,6 +43,9 @@ module Api
           company_name: current_user.company_name,
           closing_day: current_user.closing_day,
           openai_api_key_set: current_user.openai_api_key.present?,
+          heygen_api_key_set: current_user.heygen_api_key.present?,
+          heygen_available: HeygenClient.api_key_for(current_user).present?,
+          video_script_context: current_user.video_script_context,
           custom_off_days: current_user.custom_off_days || [],
           default_transit_from: current_user.default_transit_from,
           default_transit_to: current_user.default_transit_to,
@@ -54,8 +57,16 @@ module Api
           postal_code: current_user.postal_code,
           address: current_user.address,
           attendance_schedule_url: current_user.attendance_schedule_url,
+          progress_sheet_url: current_user.progress_sheet_url,
           local_save_dir: current_user.local_save_dir,
-          admin: current_user.admin?
+          dev_language: current_user.dev_language,
+          admin: current_user.admin?,
+          feature_flags: current_user.feature_flags.to_h,
+          can_use_skill_sheet: current_user.can_use?(:skill_sheet),
+          can_use_interview_mindmap: current_user.can_use?(:interview_mindmap),
+          can_use_youtube_mindmap: current_user.can_use?(:youtube_mindmap),
+          can_use_mote_mindmap: current_user.can_use?(:mote_mindmap),
+          sub_admin: current_user.sub_admin?
         }
       end
     end

@@ -5,11 +5,12 @@ require "date"
 # 進捗管理_西野.xlsx と同じフォーマットを想定:
 # B列: タスク名(SAP-XXXX)、F:予定開始、G:予定終了、H:実績開始、I:実績終了、J:進捗率
 class GoogleSheetsImporter
-  def initialize(user:, spreadsheet_url:, sheet_name: nil)
+  def initialize(user:, spreadsheet_url:, sheet_name: nil, only_flagged: false)
     @user = user
     @spreadsheet_id = extract_id(spreadsheet_url)
     @sheet_name = sheet_name
-    raise "Google アクセストークンがありません。再度 Google ログインしてください。" unless @user.google_access_token.present?
+    @only_flagged = only_flagged
+    raise "Google アクセストークンがありません。再度 Google ログインしてください。" if @user.google_access_token.blank? && @user.google_refresh_token.blank?
   end
 
   def call
@@ -21,9 +22,13 @@ class GoogleSheetsImporter
     sheets = spreadsheet.sheets.map { |s| { title: s.properties.title, id: s.properties.sheet_id } }
 
     titles = sheets.map { |s| s[:title] }
-    # 指定があればそのシートのみ。なければ「現在のタスク」「完了タスク」両方（存在する方）を対象
+    # 指定があればそのシートのみ。なければ:
+    #  - only_flagged=true: 「前回/今日 (フラグ付)」シートのみ (存在すれば)
+    #  - その他: 「現在のタスク」「完了タスク」両方
     targets = if @sheet_name
                 [ @sheet_name ]
+    elsif @only_flagged
+                ([ "前回/今日 (フラグ付)" ] & titles).presence || [ titles.first ].compact
     else
                 defaults = [ "現在のタスク", "完了タスク" ] & titles
                 defaults.any? ? defaults : [ titles.first ].compact
@@ -54,25 +59,9 @@ class GoogleSheetsImporter
     m[1]
   end
 
+  # トークンが無い操作者は admin(西野) にフォールバック (進捗管理もスキルシートと同じ挙動)
   def build_auth
-    auth = Signet::OAuth2::Client.new(
-      token_credential_uri: "https://oauth2.googleapis.com/token",
-      client_id: ENV["GOOGLE_CLIENT_ID"],
-      client_secret: ENV["GOOGLE_CLIENT_SECRET"],
-      access_token: @user.google_access_token,
-      refresh_token: @user.google_refresh_token
-    )
-
-    # トークン期限切れなら refresh
-    if @user.google_token_expires_at && @user.google_token_expires_at < Time.current && @user.google_refresh_token.present?
-      auth.fetch_access_token!
-      @user.update!(
-        google_access_token: auth.access_token,
-        google_token_expires_at: Time.current + 3600
-      )
-    end
-
-    auth
+    GoogleAuth.build_with_fallback(@user)
   end
 
   def parse_and_import(rows, formula_rows = [])

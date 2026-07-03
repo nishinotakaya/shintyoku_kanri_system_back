@@ -1,0 +1,180 @@
+require "google/apis/sheets_v4"
+
+# 川村さん等の Backlog 対応ログ(BacklogActivity)を、ユーザーが手で整えた
+# 「月次サマリ」シートに【非破壊で】反映する。
+#   サマリ列: 月 / 課題 / 概要 / 状態推移 / 開始日 / 処理済日 / 完了日 / 備考
+#   ・既存行: 空いている日付セル(開始日/処理済日/完了日)だけ埋める。状態・概要・備考・手入力は一切触らない。
+#   ・新規課題(月×課題): 末尾に行を追加。
+#   詳細タブ(対応ログ詳細)は活動ログそのものなので全再生成する。
+class BacklogActivityExporter
+  include BacklogSheetAuth
+  DETAIL_TAB = "対応ログ詳細".freeze
+  HEADER_BG  = { red: 0.15, green: 0.22, blue: 0.33 }.freeze
+
+  # サマリの列位置 (0-indexed)
+  COL_MONTH = 0
+  COL_ISSUE = 1
+  COL_SUMMARY = 2
+  COL_STATUS = 3
+  COL_START = 4
+  COL_SHORI = 5  # 処理済日
+  COL_DONE  = 6  # 完了日
+  COL_NOTE  = 7  # 備考
+  DATE_COLS = [ COL_START, COL_SHORI, COL_DONE ].freeze
+  SUMMARY_NCOL = 8
+
+  def initialize(user:, operator:, spreadsheet_url:)
+    @user = user
+    @operator = operator
+    @spreadsheet_id = extract_spreadsheet_id(spreadsheet_url)
+    @backlog_url = user.backlog_setting&.backlog_url.to_s.chomp("/")
+  end
+
+  def call
+    service = authorized_sheets_service(@spreadsheet_id, @operator)
+    spreadsheet = service.get_spreadsheet(@spreadsheet_id)
+    summary_tab = spreadsheet.sheets.first.properties.title # 先頭タブ(gid=0)。名前は変えない。
+    ensure_detail_tab!(service, spreadsheet)
+    spreadsheet = service.get_spreadsheet(@spreadsheet_id)
+
+    result = update_summary(service, summary_tab)
+    rewrite_detail(service, spreadsheet)
+
+    { spreadsheet_id: @spreadsheet_id,
+      url: "https://docs.google.com/spreadsheets/d/#{@spreadsheet_id}/edit",
+      filled_dates: result[:filled], appended_rows: result[:appended] }
+  rescue Google::Apis::ClientError => e
+    raise "スプレッドシートへの書き込みに失敗しました（権限を確認してください）: #{e.message}"
+  end
+
+  private
+
+  def ensure_detail_tab!(service, spreadsheet)
+    return if spreadsheet.sheets.any? { |s| s.properties.title == DETAIL_TAB }
+    service.batch_update_spreadsheet(@spreadsheet_id, S::BatchUpdateSpreadsheetRequest.new(requests: [
+      S::Request.new(add_sheet: S::AddSheetRequest.new(properties: S::SheetProperties.new(title: DETAIL_TAB)))
+    ]))
+  end
+
+  # ── Backlog 由来の集計 ───────────────────────
+  def activities = @activities ||= @user.backlog_activities.order(:occurred_on, :activity_id).to_a
+
+  # 上司報告サマリ行（月/課題/概要/状態推移/開始日/処理済日/完了日/備考）の単一窓口。
+  def summary = @summary ||= BacklogActivitySummary.new(@user)
+  def summary_by_key = @summary_by_key ||= summary.rows.index_by { |r| [ r[:month], r[:issue_key] ] }
+
+  def issue_key_from(cell)
+    cell.to_s[/[A-Z]+-\d+/]
+  end
+
+  def link(issue_key)
+    return issue_key if @backlog_url.blank?
+    %Q(=HYPERLINK("#{@backlog_url}/view/#{issue_key}","#{issue_key}"))
+  end
+
+  # ── サマリ更新(非破壊) ───────────────────────
+  # 既存行: 空の「処理済日 / 完了日」を埋め、アプリに手入力がある備考だけ書き戻す（空で潰さない）。
+  #         月 / 課題 / 概要 / 状態推移 / 開始日 / 書式 は触らない。
+  # 新規行: シートに無い 月×課題 を末尾に追加し、テンプレートにデータが揃うようにする。
+  def update_summary(service, tab)
+    rows = service.get_spreadsheet_values(@spreadsheet_id, "#{tab}!A1:H1000").values || [] # FORMATTED(表示値)
+    header_idx = rows.index { |r| Array(r).include?("課題") }
+    raise "サマリシートに『課題』ヘッダが見つかりません（テンプレートを確認してください）。" unless header_idx
+
+    existing_keys = {}
+    updates = []
+    (header_idx + 1...rows.size).each do |i|
+      row = rows[i] || []
+      key = issue_key_from(row[COL_ISSUE])
+      next if key.blank?
+      month = row[COL_MONTH].to_s.strip
+      existing_keys[[ month, key ]] = i
+      info = summary_by_key[[ month, key ]] or next
+
+      { COL_SHORI => info[:shori_on], COL_DONE => info[:done_on] }.each do |col, val|
+        next if val.blank?
+        next if row[col].to_s.strip.present? # 既存値(手入力含む)は絶対に上書きしない
+        updates << S::ValueRange.new(range: "#{tab}!#{col_letter(col)}#{i + 1}", values: [ [ val.to_s ] ])
+      end
+      note = info[:note].to_s.strip
+      if note.present? && row[COL_NOTE].to_s.strip != note
+        updates << S::ValueRange.new(range: "#{tab}!#{col_letter(COL_NOTE)}#{i + 1}", values: [ [ note ] ])
+      end
+    end
+    unless updates.empty?
+      service.batch_update_values(@spreadsheet_id, S::BatchUpdateValuesRequest.new(
+        value_input_option: "USER_ENTERED", data: updates))
+    end
+
+    { filled: updates.size, appended: append_new_rows(service, tab, rows.size, existing_keys) }
+  end
+
+  # シートにまだ無い 月×課題 を末尾に追加する。
+  def append_new_rows(service, tab, sheet_row_count, existing_keys)
+    new_keys = summary_by_key.keys.reject { |key| existing_keys.key?(key) }.sort
+    return 0 if new_keys.empty?
+
+    values = new_keys.map do |month, key|
+      info = summary_by_key[[ month, key ]]
+      [ month, link(key), info[:summary], info[:status],
+        info[:start_on], info[:shori_on], info[:done_on], info[:note] ]
+    end
+    service.update_spreadsheet_value(@spreadsheet_id, "#{tab}!A#{sheet_row_count + 1}",
+      S::ValueRange.new(values: values), value_input_option: "USER_ENTERED")
+    values.size
+  end
+
+  # ── 詳細タブ(全再生成) ───────────────────────
+  def rewrite_detail(service, spreadsheet)
+    header = %w[月 日付 課題 概要 種別 内容]
+    rows = activities.sort_by { |a| [ a.month, a.occurred_on.to_s, a.activity_id ] }.map do |a|
+      [ a.month, a.occurred_on.to_s, link(a.issue_key), a.summary.to_s,
+        BacklogActivity::TYPE_LABELS[a.activity_type] || a.activity_type, a.content.to_s.gsub(/\s+/, " ") ]
+    end
+    values = [ header ] + rows
+    sheet = spreadsheet.sheets.find { |s| s.properties.title == DETAIL_TAB }
+    sheet_id = sheet.properties.sheet_id
+    set_text_columns(service, sheet_id, [ 0, 1 ]) # 月・日付
+    service.clear_values(@spreadsheet_id, "#{DETAIL_TAB}!A1:Z2000")
+    service.update_spreadsheet_value(@spreadsheet_id, "#{DETAIL_TAB}!A1",
+      S::ValueRange.new(values: values), value_input_option: "USER_ENTERED")
+    format_detail(service, sheet_id, values.size)
+  end
+
+  def format_detail(service, sheet_id, nrows)
+    reqs = []
+    reqs << S::Request.new(repeat_cell: S::RepeatCellRequest.new(
+      range: S::GridRange.new(sheet_id: sheet_id, start_row_index: 0, end_row_index: 1, start_column_index: 0, end_column_index: 6),
+      cell: S::CellData.new(user_entered_format: S::CellFormat.new(
+        background_color: S::Color.new(red: HEADER_BG[:red], green: HEADER_BG[:green], blue: HEADER_BG[:blue]),
+        text_format: S::TextFormat.new(bold: true, foreground_color: S::Color.new(red: 1, green: 1, blue: 1)))),
+      fields: "userEnteredFormat(backgroundColor,textFormat)"))
+    reqs << S::Request.new(repeat_cell: S::RepeatCellRequest.new(
+      range: S::GridRange.new(sheet_id: sheet_id, start_row_index: 1, end_row_index: [ nrows, 1 ].max, start_column_index: 0, end_column_index: 6),
+      cell: S::CellData.new(user_entered_format: S::CellFormat.new(wrap_strategy: "WRAP", vertical_alignment: "TOP")),
+      fields: "userEnteredFormat(wrapStrategy,verticalAlignment)"))
+    reqs << S::Request.new(update_sheet_properties: S::UpdateSheetPropertiesRequest.new(
+      properties: S::SheetProperties.new(sheet_id: sheet_id, grid_properties: S::GridProperties.new(frozen_row_count: 1)),
+      fields: "gridProperties.frozenRowCount"))
+    [ [ 0, 70 ], [ 1, 90 ], [ 2, 90 ], [ 3, 200 ], [ 4, 90 ], [ 5, 520 ] ].each do |i, px|
+      reqs << S::Request.new(update_dimension_properties: S::UpdateDimensionPropertiesRequest.new(
+        range: S::DimensionRange.new(sheet_id: sheet_id, dimension: "COLUMNS", start_index: i, end_index: i + 1),
+        properties: S::DimensionProperties.new(pixel_size: px), fields: "pixelSize"))
+    end
+    service.batch_update_spreadsheet(@spreadsheet_id, S::BatchUpdateSpreadsheetRequest.new(requests: reqs))
+  end
+
+  # 指定列を TEXT 書式に（"2026-04" 等を日付シリアルに変換させない）
+  def set_text_columns(service, sheet_id, col_indexes)
+    reqs = col_indexes.map do |i|
+      S::Request.new(repeat_cell: S::RepeatCellRequest.new(
+        range: S::GridRange.new(sheet_id: sheet_id, start_column_index: i, end_column_index: i + 1),
+        cell: S::CellData.new(user_entered_format: S::CellFormat.new(
+          number_format: S::NumberFormat.new(type: "TEXT", pattern: "@"))),
+        fields: "userEnteredFormat.numberFormat"))
+    end
+    service.batch_update_spreadsheet(@spreadsheet_id, S::BatchUpdateSpreadsheetRequest.new(requests: reqs))
+  end
+
+  def col_letter(idx) = ("A".ord + idx).chr
+end

@@ -5,6 +5,9 @@ require "fileutils"
 # シート名を対象月に合わせてリネーム（例: 業務報告（西野）_4月）。
 class WorkReportExporter
   TEMPLATE = Rails.root.join("app/templates/work_report_template.xlsx")
+  # リビング(living)専用テンプレート。時間欄が「日」単位・日付/合計の色・見出しが
+  # 通常テンプレと異なるため、書式ごと差し替える（openpyxl は値のみ上書きで書式保持）。
+  LIVING_TEMPLATE = Rails.root.join("app/templates/work_report_living_template.xlsx")
 
   HEADER_NAME_ROW = 4   # Excel 行 (1-indexed)
   HEADER_NAME_COL = 3   # C
@@ -69,7 +72,7 @@ class WorkReportExporter
     out_dir = Rails.root.join("tmp/exports")
     out = out_dir.join("work_report_#{@user.id}_#{@year}_#{@month}_#{SecureRandom.hex(4)}.xlsx").to_s
     XlsxFiller.call(
-      template: TEMPLATE,
+      template: template_path,
       output: out,
       sheet: 0,
       cells: cells,
@@ -77,5 +80,12 @@ class WorkReportExporter
       header_date: header_date
     )
     out
+  end
+
+  private
+
+  # リビングのみ専用テンプレート、それ以外は従来テンプレート。
+  def template_path
+    @category == "living" ? LIVING_TEMPLATE : TEMPLATE
   end
 end

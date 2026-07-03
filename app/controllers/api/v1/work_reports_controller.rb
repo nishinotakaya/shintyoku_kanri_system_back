@@ -18,7 +18,13 @@ module Api
       def create
         cat = params[:category].presence || "wings"
         report = viewing_user.work_reports.find_or_initialize_by(work_date: params[:work_date], category: cat)
-        report.assign_attributes(report_params)
+        attrs = report_params
+        # リビング案件は乗車区間・交通費を持たない (連携・保存ともに無効化)
+        if cat == "living"
+          attrs[:transit_section] = nil
+          attrs[:transit_fee] = nil
+        end
+        report.assign_attributes(attrs)
         report.save!
         sync_expense_from_report(report)
         render json: serialize(report), status: :created
@@ -175,6 +181,15 @@ module Api
         end
         cat = params[:category].presence || "wings"
         issue_key = params[:issue_key].to_s
+        # LOCAL-XXX (ローカル作成タスク) は summary をキーとして展開する。
+        # 理由: LOCAL-9ECA30 の hex 部分が SAP 形式 (LETTERS-NUMBERS) にマッチせず、
+        #       フロントの parseSapEntries で時間が認識されなくなるため。
+        if issue_key.start_with?("LOCAL-")
+          local_task = target.backlog_tasks.find_by(issue_key: issue_key)
+          if local_task&.summary.present?
+            issue_key = local_task.summary.gsub(%r{[/()]}, " ").squish[0..30]
+          end
+        end
         hours = params[:hours].to_f
         report = target.work_reports.find_or_initialize_by(work_date: params[:work_date], category: cat)
         existing_content = report.content.to_s
@@ -213,6 +228,9 @@ module Api
       def sync_expense_from_report(report)
         cat = report.category || "wings"
         owner = report.user
+
+        # リビング案件は乗車区間・交通費を持たない仕様 → 同期スキップ
+        return if cat == "living"
 
         if report.transit_section.present? && report.transit_fee.to_i > 0
           parts = report.transit_section.split(/\s*[~～〜\-\s]+/)

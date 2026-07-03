@@ -55,6 +55,7 @@ module Api
       def update
         record = TeamSchedule.find(params[:id])
         record.update!(params.permit(:status, :location, :memo))
+        sync_transit_if_attended(record)
         render json: serialize_record(record)
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -69,7 +70,7 @@ module Api
         total = 0
         target_year_months.each do |y, m|
           TeamScheduleImporter::PERSONS.each do |person_name|
-            target = User.where("display_name LIKE ?", "%#{person_name}%").find_each.find { |u| !u.display_name.to_s.start_with?("wing") }
+            target = TeamScheduleExpenseSync.user_for(person_name)
             next unless target
             created = TeamScheduleExpenseSync.new(user: target, year: y, month: m).call
             total += created.size
@@ -89,12 +90,24 @@ module Api
           year_month: date.strftime("%Y%m")
         )
         record.save!
+        sync_transit_if_attended(record)
         render json: serialize_record(record)
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
       private
+
+      # status が "出社" を含むなら、対応ユーザーの default_transit_* で
+      # その日の work_report + expense を upsert する。
+      # 各ユーザー (西野/川村/大隅) は自分の default_transit_* を持つので、
+      # 「誰が誰のカレンダーを操作したか」に依らずに正しい乗車区間が入る。
+      def sync_transit_if_attended(record)
+        return unless record.status.to_s.include?("出社")
+        target = TeamScheduleExpenseSync.user_for(record.person.to_s)
+        return unless target
+        TeamScheduleExpenseSync.new(user: target).sync_one(record.date)
+      end
 
       def serialize_record(record)
         {

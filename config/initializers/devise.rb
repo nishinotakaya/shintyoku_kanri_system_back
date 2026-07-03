@@ -284,7 +284,7 @@ Devise.setup do |config|
   config.omniauth :google_oauth2,
     ENV["GOOGLE_CLIENT_ID"],
     ENV["GOOGLE_CLIENT_SECRET"],
-    scope: "email,profile,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/gmail.send",
+    scope: "email,profile,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/presentations",
     access_type: "offline",
     # 「アカウント選択 + 同意画面」を強制 → 新しいスコープ (gmail.send) を追加同意してもらう
     prompt: "select_account consent",

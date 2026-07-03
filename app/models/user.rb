@@ -9,12 +9,30 @@ class User < ApplicationRecord
   has_many :invoice_settings, dependent: :destroy
   has_one  :backlog_setting, dependent: :destroy
   has_many :backlog_tasks, dependent: :destroy
+  has_many :backlog_activities, dependent: :destroy
+  has_many :backlog_summary_notes, dependent: :destroy
+  has_many :backlog_completions, dependent: :destroy
   has_many :todos, dependent: :destroy
   has_many :monthly_settings, dependent: :destroy
   has_many :purchase_order_settings, dependent: :destroy
   has_many :purchase_order_histories, dependent: :destroy
   has_many :received_purchase_orders, dependent: :destroy
   has_many :issued_invoice_pdfs, dependent: :destroy
+  has_one  :freee_connection, dependent: :destroy
+  has_many :scanned_invoices, dependent: :destroy
+  has_one  :skill_sheet, dependent: :destroy
+  has_many :interview_mindmaps, dependent: :destroy
+  has_many :interview_videos, dependent: :destroy
+  has_many :heygen_assets, dependent: :destroy
+
+  # サブ管理者の管理割当: manager → managee。
+  # 例: 加藤(manager) が 岩切(managee) を管理する。川村は割り当てない＝管理対象外。
+  has_many :manager_assignments, foreign_key: :manager_id, dependent: :destroy
+  has_many :managees, through: :manager_assignments, source: :managee
+  has_many :managed_by_assignments, class_name: "ManagerAssignment", foreign_key: :managee_id, dependent: :destroy
+
+  # 機能フラグ (例: {"skill_sheet" => true})。SQLite なので text + serialize JSON。
+  serialize :feature_flags, coder: JSON, type: Hash
 
   # 別アカウントを admin の同一人物としてリンク。
   # 例: wing西野 鷹也 (taka-nishino@tamahome.jp) を admin 西野 鷹也 (takaya314boxing@gmail.com) にリンク
@@ -30,6 +48,48 @@ class User < ApplicationRecord
   ADMIN_EMAILS = %w[takaya314boxing@gmail.com taka-nishino@tamahome.jp].freeze
   def admin?
     display_name.to_s.include?("西野") || ADMIN_EMAILS.include?(email.to_s.downcase)
+  end
+
+  # 機能を使えるか。admin は明示的に false にされた機能以外は使える、フラグ ON のユーザーも true。
+  def can_use?(feature)
+    return feature_flags.to_h[feature.to_s] != false if admin?
+    feature_flags.to_h[feature.to_s] == true
+  end
+
+  # 誰かを管理しているサブ管理者か (admin は別枠)。
+  def sub_admin?
+    !admin? && manager_assignments.exists?
+  end
+
+  # このユーザーが閲覧・編集できる対象ユーザーの id 一覧。
+  # - admin (西野): 全ユーザー
+  # - サブ管理者 (加藤): 割り当てられた managee + 自分
+  # - 一般ユーザー: 自分のみ
+  def manageable_user_ids
+    return ::User.ids if admin?
+    (managees.pluck(:id) + [ id ]).uniq
+  end
+
+  def can_manage_user?(target_user_id)
+    manageable_user_ids.include?(target_user_id.to_i)
+  end
+
+  # 請求書/立替金 PDF のデフォルト宛先名。
+  # - admin (西野): エンドの取引先「株式会社ラボップ」
+  # - 非admin (川村): 直接の発注元である admin (西野) の display_name
+  # 個別の上書き (シェアラウンジ宛名固定 / 明示 client_name_override) はこの結果を更に上書きする
+  def invoice_recipient_name
+    if admin?
+      I18n.t("companies.labop.name")
+    else
+      ::User.find_by(email: "takaya314boxing@gmail.com")&.display_name.to_s.strip.presence ||
+        ::User.where("display_name LIKE ?", "%西野%").first&.display_name.to_s.strip.presence ||
+        "西野 鷹也"
+    end
+  end
+
+  def invoice_recipient_honorific
+    admin? ? "御中" : "様"
   end
 
   def invoice_setting_for(category = "wings")

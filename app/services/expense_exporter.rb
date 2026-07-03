@@ -88,9 +88,10 @@ class ExpenseExporter
     user_expense_pairs = []
     target_users.each do |u|
       u_period = u.period_for(@year, @month)
-      u_scope = u.expenses.in_range(u_period)
+      u_scope = u.expenses.billed_in(format("%04d-%02d", @year, @month), u_period)
       u_scope = u_scope.where(category: @category) if @category
       u_scope = u_scope.where(company_burden: true) # 会社負担対象のみ
+      u_scope = u_scope.where(excel_excluded: false) # シェアラウンジ等は Excel から除外（PDF にのみ載せる）
       u_scope = (@mode == :negative) ? u_scope.where("amount < 0") : u_scope.where("amount > 0")
       u_scope.each { |e| user_expense_pairs << [ u, e ] }
     end

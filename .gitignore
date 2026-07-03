@@ -36,3 +36,4 @@
 /tmp/dump_seeds.rb
 /node_modules
 /vendor/bundle
+.vercel

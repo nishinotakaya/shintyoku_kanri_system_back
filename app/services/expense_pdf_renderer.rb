@@ -11,7 +11,7 @@ class ExpensePdfRenderer
 
   def initialize(user, year:, month:, application_date: nil, category: nil,
                  client_name_override: nil, issuer_user_override: nil,
-                 merged_users: nil, mode: :positive)
+                 merged_users: nil, mode: :positive, title_override: nil)
     @user = user
     @year = year
     @month = month
@@ -25,6 +25,8 @@ class ExpensePdfRenderer
     #   :positive (default) → amount > 0 の expense（通常立替金）
     #   :negative → amount < 0 の expense（シェアラウンジ相殺など）
     @mode = mode.to_sym
+    # 支払通知書モードで使う: H1 タイトルを「支払通知書」等に差替
+    @title_override = title_override.to_s.presence
   end
 
   def call
@@ -34,13 +36,25 @@ class ExpensePdfRenderer
     setting = @user.invoice_setting_for(@category || "wings")
     issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
     issuer_user = @issuer_user
-    client_name = @client_name_override || setting.client_name
+    # 宛先 (client_name) と敬称 (honorific) の決定: InvoicePdfRenderer と同じ規則
+    labop_name = I18n.t("companies.labop.name")
+    labop_forwarding_initial = @issuer_user && @issuer_user != @user
+    if @client_name_override.present?
+      client_name = @client_name_override
+      honorific = (client_name == labop_name) ? "御中" : "様"
+    elsif !labop_forwarding_initial
+      client_name = @user.invoice_recipient_name
+      honorific = @user.invoice_recipient_honorific
+    else
+      client_name = setting.client_name
+      honorific = setting.honorific.presence || "御中"
+    end
     # 集約モード: @user に加え @merged_users の expense も取り込む（複数ユーザー 1 通の通常立替金）
     target_users = [ @user, *@merged_users ].uniq
     user_expense_pairs = []
     target_users.each do |u|
       u_period = u.period_for(@year, @month)
-      u_scope = u.expenses.in_range(u_period)
+      u_scope = u.expenses.billed_in(format("%04d-%02d", @year, @month), u_period)
       u_scope = u_scope.where(category: @category) if @category
       u_scope = u_scope.where(company_burden: true) # 会社負担対象のみ
       # 通常モード: 正額のみ / 相殺モード: 負額のみ
@@ -54,17 +68,31 @@ class ExpensePdfRenderer
     labop_forwarding = @issuer_user && @issuer_user != @user
     multi_user = target_users.size > 1
     should_prefix_name = labop_forwarding || multi_user
-    grouped_pairs = user_expense_pairs.group_by { |(u, e)| [ u.id, "#{e.from_station}-#{e.to_station}" ] }
-    items = grouped_pairs.map do |(_uid, _route), pairs|
+    # グルーピングキー:
+    # - 駅情報があるもの: [user_id, "from-to"] でまとめる（同じ区間の往復を 1 行に集約）
+    # - 駅情報がない（purpose 主体: シェアラウンジ等）: [user_id, expense_id] で 1 件 1 行（金額の異なるレコードを混ぜない）
+    grouped_pairs = user_expense_pairs.group_by { |(u, e)|
+      if e.from_station.to_s.strip.present? || e.to_station.to_s.strip.present?
+        [ u.id, "#{e.from_station}-#{e.to_station}" ]
+      else
+        [ u.id, "purpose-#{e.id}" ]
+      end
+    }
+    items = grouped_pairs.map do |(_uid, route_key), pairs|
       grp_user, _ = pairs.first
       grp_exps = pairs.map { |(_, e)| e }
       unit_price = grp_exps.first.amount
       qty = grp_exps.size
       surname = grp_user.display_name.to_s.split(/[\s　]/).first.to_s
       prefix = (should_prefix_name && !surname.empty?) ? "#{surname} " : ""
-      route = "#{grp_exps.first.from_station}-#{grp_exps.first.to_station}"
+      label = if route_key.to_s.start_with?("purpose-")
+                "#{prefix}#{grp_exps.first.purpose.to_s}"
+              else
+                route = "#{grp_exps.first.from_station}-#{grp_exps.first.to_station}"
+                "#{prefix}#{route}"
+              end
       {
-        label: "#{prefix}#{route}",
+        label: label,
         qty: qty,
         unit: "回",
         unit_price: unit_price,
@@ -81,9 +109,10 @@ class ExpensePdfRenderer
     invoice_no = "#{issue_date.strftime('%Y%m%d')}#{format('%04d', @user.id)}"
 
     user = @user
+    title_text = @title_override || "請求書"
     data = { items: items, subtotal: subtotal, total: total,
              issue_date: issue_date, due_date: due_date, invoice_no: invoice_no,
-             application_date: application_date }
+             application_date: application_date, title_text: title_text }
 
     html_body = ERB.new(File.read(TEMPLATE)).result(binding)
 

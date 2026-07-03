@@ -92,8 +92,8 @@ module Api
         end
 
         attachments = []
-        # 申請日: 申請者の application_date_override は申請者が「申請した日」が入りがちなので
-        # ラボップ宛発行時は override を使わず、発行者(西野)の月別設定（無ければ末日）を採用する
+        # 申請日: 編集UIで設定した application_date_override があればそれを採用（PDF左上の申請日に反映）。
+        # 未設定(nil)なら各レンダラ側で発行者(西野)の月別設定（無ければ末日）にフォールバックする。
 
         # PO ごとにグルーピング: 同じ PO に複数申請あり (ORD-010014 西野+川村 等) → 1 PDF にマージ
         invoices_grouped = invoices_for_pdf.to_a.group_by(&:received_purchase_order_id)
@@ -112,6 +112,7 @@ module Api
             invoice_pdf = InvoicePdfRenderer.new(
               primary.user,
               year: primary.year, month: primary.month, category: primary.category,
+              application_date: group.map(&:application_date_override).compact.first,
               client_name_override: I18n.t("companies.labop.name"),
               issuer_user_override: current_user,
               total_override: combined_total,
@@ -123,7 +124,7 @@ module Api
             ).call
             surnames = group.map(&:user).map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
             cat_label = CATEGORY_LABELS[primary.category.to_s] || primary.category.to_s
-            fname = "#{surnames.presence || '集約'}_請求書_#{cat_label}_#{primary.year}年_#{primary.month}月分.pdf"
+            fname = "#{cat_label}_#{surnames.presence || '集約'}_請求書_#{primary.year}年_#{primary.month}月分.pdf"
             attachments << { filename: fname, content_type: "application/pdf", body: File.binread(invoice_pdf) }
           else
             # 単一申請（PO なし or PO に1件）→ 個別 PDF
@@ -134,6 +135,7 @@ module Api
               invoice_pdf = InvoicePdfRenderer.new(
                 invoice.user,
                 year: invoice.year, month: invoice.month, category: invoice.category,
+                application_date: invoice.application_date_override,
                 client_name_override: I18n.t("companies.labop.name"),
                 issuer_user_override: current_user,
                 total_override: invoice.total_override,
@@ -166,12 +168,13 @@ module Api
           others = users.drop(1)
           exp_pdf = ExpensePdfRenderer.new(
             primary, year: y, month: m, category: c,
+            application_date: subs.map(&:application_date_override).compact.first,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
             merged_users: others, mode: :positive
           ).call
           surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
           cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
-          fname = "立替金_#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.pdf"
+          fname = "#{cat_label}_#{surnames.presence || '集約'}_立替金_#{y}年_#{m}月分.pdf"
           attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
         end
 
@@ -182,12 +185,13 @@ module Api
           next if neg_total >= 0
           exp_pdf = ExpensePdfRenderer.new(
             s.user, year: s.year, month: s.month, category: s.category,
+            application_date: s.application_date_override,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
             mode: :negative
           ).call
           surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
           cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
-          fname = "立替金_#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.pdf"
+          fname = "#{cat_label}_#{surname}_立替金_相殺_#{s.year}年_#{s.month}月分.pdf"
           attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
         end
 
@@ -203,12 +207,13 @@ module Api
           next if total <= 0
           exp_xlsx = ExpenseExporter.new(
             user, year: s.year, month: s.month, category: s.category,
+            application_date: s.application_date_override,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
             mode: :positive
           ).call
           surname = user.display_name.to_s.split(/[\s　]/).first.to_s
           cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
-          fname = "立替金_#{surname}_#{cat_label}_#{s.year}年_#{s.month}月分.xlsx"
+          fname = "#{cat_label}_#{surname}_立替金_#{s.year}年_#{s.month}月分.xlsx"
           attachments << { filename: fname, content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
         end
 
@@ -219,12 +224,13 @@ module Api
           next if neg_total >= 0
           exp_xlsx = ExpenseExporter.new(
             s.user, year: s.year, month: s.month, category: s.category,
+            application_date: s.application_date_override,
             client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
             mode: :negative
           ).call
           surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
           cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
-          fname = "立替金_#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.xlsx"
+          fname = "#{cat_label}_#{surname}_立替金_相殺_#{s.year}年_#{s.month}月分.xlsx"
           attachments << { filename: fname, content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: File.binread(exp_xlsx) }
         end
 
@@ -312,7 +318,7 @@ module Api
           invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
             application_date: parse_application_date,
             client_name_override: labop_name).call
-          attachments << { filename: "#{surname}_#{cat_label}_請求書_#{year}年_#{month}月分.pdf",
+          attachments << { filename: "#{cat_label}_#{surname}_請求書_#{year}年_#{month}月分.pdf",
                            content_type: "application/pdf", body: File.binread(invoice_pdf) }
         end
 
@@ -320,7 +326,7 @@ module Api
           exp_pdf = ExpensePdfRenderer.new(current_user, year: year, month: month, category: cat,
             application_date: parse_application_date,
             client_name_override: labop_name).call
-          attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.pdf",
+          attachments << { filename: "#{cat_label}_#{surname}_立替金_#{year}年_#{month}月分.pdf",
                            content_type: "application/pdf", body: File.binread(exp_pdf) }
         end
 
@@ -328,7 +334,7 @@ module Api
           exp_xlsx = ExpenseExporter.new(current_user, year: year, month: month, category: cat,
             application_date: parse_application_date,
             client_name_override: labop_name).call
-          attachments << { filename: "#{surname}_#{cat_label}_立替金_#{year}年_#{month}月分.xlsx",
+          attachments << { filename: "#{cat_label}_#{surname}_立替金_#{year}年_#{month}月分.xlsx",
                            content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                            body: File.binread(exp_xlsx) }
         end
@@ -372,6 +378,35 @@ module Api
         render json: EmailDrafter.draft(kind: :purchase_order, context: ctx)
       end
 
+      # POST /api/v1/emails/purchase_order_bulk_draft
+      # 複数の発注書を一括送付するメールの件名/本文 下書き
+      # params: items[] (subject, order_no, period_start, period_end, total_amount)
+      def purchase_order_bulk_draft
+        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        items = Array(params[:items]).map do |it|
+          {
+            subject: it[:subject].to_s,
+            order_no: it[:order_no].to_s,
+            category: it[:category].to_s,
+            period_start: it[:period_start].to_s,
+            period_end: it[:period_end].to_s,
+            total_amount: it[:total_amount].to_i,
+            hours_per_cycle: it[:hours_per_cycle].to_i,
+            # 月額・時給はフロントで税抜/税込両方を確定済みで送ってくる（base_monthly のレコード混在問題を回避）
+            monthly_tax_inc: it[:monthly_tax_inc].to_i,
+            monthly_tax_exc: it[:monthly_tax_exc].to_i,
+            hourly_tax_inc: it[:hourly_tax_inc].to_i,
+            hourly_tax_exc: it[:hourly_tax_exc].to_i
+          }
+        end
+        ctx = {
+          items: items,
+          sender_name: current_user.display_name,
+          recipient_name: "川村 卓也"
+        }
+        render json: EmailDrafter.draft(kind: :purchase_order_bulk, context: ctx)
+      end
+
       # POST /api/v1/emails/purchase_order_send
       # multipart で発注書 PDF + 任意添付を受け取って川村宛に送信
       def purchase_order_send
@@ -399,7 +434,129 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/emails/payment_notice_draft
+      # 振込通知 (支払通知書) メールの件名/本文 下書き
+      # params: invoice_submission_ids[], paid_on (YYYY-MM-DD), recipient_name?, to?
+      def payment_notice_draft
+        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
+        subs = InvoiceSubmission.where(id: ids).includes(:user, :received_purchase_order)
+        breakdown_items = subs.map do |s|
+          surname = s.user&.display_name.to_s.split(/[\s　]/).first.to_s
+          po = s.purchase_order_no_override.presence || s.received_purchase_order&.order_no
+          po_label = po.present? ? "#{po} " : ""
+          cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
+          kind_label = s.kind == "expense" ? "立替金" : "請求書"
+          amt = s.total_override.to_i.nonzero? || calc_total_for_submission(s)
+          {
+            label: "#{po_label}#{surname} #{s.year}年#{s.month}月 #{cat_label} #{kind_label}",
+            amount: amt
+          }
+        end
+        grand_total = breakdown_items.sum { |it| it[:amount].to_i }
+        first = subs.first
+        # 宛名が指定されていなければ、対象 submission の user 名を採用 (e.g., 川村 卓也)
+        default_recipient = first&.user&.display_name
+        ctx = {
+          recipient_name: params[:recipient_name].presence || default_recipient,
+          paid_on: params[:paid_on].to_s.presence || Date.current.iso8601,
+          grand_total: grand_total,
+          breakdown_items: breakdown_items,
+          sender_name: current_user.display_name,
+          year: first&.year,
+          month: first&.month
+        }
+        render json: EmailDrafter.draft(kind: :payment_notice, context: ctx)
+      end
+
+      # POST /api/v1/emails/payment_notice_send
+      # 振込通知メールを送信し、対象 invoice_submissions の paid_at を更新
+      # 添付: 各 submission につき 支払通知書 PDF (請求書テンプレ流用、タイトルだけ差替)
+      def payment_notice_send
+        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
+        return render(json: { error: "対象がありません" }, status: :unprocessable_entity) if ids.empty?
+        to_value = params[:to].to_s.strip
+        return render(json: { error: "宛先が空です" }, status: :unprocessable_entity) if to_value.empty?
+
+        paid_on = begin
+          params[:paid_on].present? ? Date.parse(params[:paid_on].to_s) : Date.current
+        rescue ArgumentError
+          Date.current
+        end
+
+        # 支払通知書 PDF: 川村さんの請求書をそのまま使い、タイトルだけ「支払通知書」に差替
+        # (発行者=川村、振込先=川村の口座、宛先=川村側の請求書クライアント のまま)
+        subs = InvoiceSubmission.where(id: ids).includes(:user, :received_purchase_order)
+        attachments = []
+        subs.each do |s|
+          surname = s.user&.display_name.to_s.split(/[\s　]/).first.to_s
+          cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
+
+          if s.kind == "expense"
+            # 立替金の支払通知書 PDF (ExpensePdfRenderer 経由)
+            exp_pdf = ExpensePdfRenderer.new(
+              s.user, year: s.year, month: s.month, category: s.category,
+              issuer_user_override: current_user,
+              client_name_override: s.user.display_name,
+              title_override: "支払通知書"
+            ).call
+            fname = "#{cat_label}_#{surname.presence || '通知'}_支払通知書_立替金_#{s.year}年_#{s.month}月分.pdf"
+            attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
+            next
+          end
+
+          # 通常の請求書ベース 支払通知書
+          effective_no = s.purchase_order_no_override.presence || s.received_purchase_order&.order_no
+          po_line = effective_no.present? ? "注文番号: #{effective_no}" : nil
+          composed_note = [ po_line, s.note ].compact.reject(&:blank?).join("\n")
+          pdf_path = InvoicePdfRenderer.new(
+            s.user,
+            year: s.year, month: s.month, category: s.category,
+            total_override: s.total_override,
+            item_label_override: s.item_label_override,
+            subject_override: s.subject_override,
+            items_override: s.items_override,
+            note: composed_note.presence,
+            title_override: "支払通知書",
+            # 支払通知書は「支払い側」が「受領側」に出すもの。
+            # 発行者(及び印影)は payer=current_user(西野)、宛名(client)は payee=s.user(川村)。
+            issuer_user_override: current_user,
+            client_name_override: s.user.display_name
+          ).call
+          fname = "#{cat_label}_#{surname.presence || '通知'}_支払通知書_#{s.year}年_#{s.month}月分.pdf"
+          attachments << { filename: fname, content_type: "application/pdf", body: File.binread(pdf_path) }
+        end
+
+        msg_id = GmailSender.new(user: current_user).send_mail(
+          to: to_value,
+          subject: params[:subject].to_s,
+          body: params[:body].to_s,
+          attachments: attachments,
+          from_name: current_user.display_name
+        )
+
+        # 送信成功 → 対象 submission の paid_at を更新（既に paid_at 入っていても上書き）
+        InvoiceSubmission.where(id: ids).update_all(paid_at: paid_on.beginning_of_day, updated_at: Time.current)
+
+        render json: { ok: true, message_id: msg_id, sent_to: to_value, paid_at: paid_on.iso8601, count: ids.size, attachments: attachments.map { |a| a[:filename] } }
+      rescue => e
+        Rails.logger.error("[payment_notice_send] #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
+
+      def calc_total_for_submission(s)
+        if s.kind == "expense"
+          period = s.user.period_for(s.year, s.month)
+          s.user.expenses.in_range(period).where(category: s.category, company_burden: true).sum(:amount).to_i
+        else
+          invoice_calc_total(s)
+        end
+      rescue
+        0
+      end
 
       # ラボップ宛メール本文の「請求金額の内訳」用に、添付ファイルと金額のリストを組み立てる。
       # labop_send の attachments 生成ロジックと同じ単位で1行ずつ並べる:
@@ -433,7 +590,7 @@ module Api
             effective_no = primary.purchase_order_no_override.presence || primary.received_purchase_order&.order_no
             surnames = group.map(&:user).map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
             cat_label = CATEGORY_LABELS[primary.category.to_s] || primary.category.to_s
-            base = "#{surnames.presence || '集約'}_請求書_#{cat_label}_#{primary.year}年_#{primary.month}月分.pdf"
+            base = "#{cat_label}_#{surnames.presence || '集約'}_請求書_#{primary.year}年_#{primary.month}月分.pdf"
             label = effective_no.present? ? "#{effective_no}: #{base}" : base
             amount = group.sum { |s| s.total_override.to_i.nonzero? || invoice_calc_total(s) }
             items << { label: label, amount: amount }
@@ -457,7 +614,7 @@ module Api
           next if total <= 0
           surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
           cat_label = CATEGORY_LABELS[c.to_s] || c.to_s
-          base = "#{surnames.presence || '集約'}_#{cat_label}_#{y}年_#{m}月分.pdf"
+          base = "#{cat_label}_#{surnames.presence || '集約'}_立替金_#{y}年_#{m}月分.pdf"
           items << { label: "立替金: #{base}", amount: total }
         end
 
@@ -467,29 +624,32 @@ module Api
           next if neg_total >= 0
           surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
           cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
-          base = "#{surname}_#{cat_label}_相殺_#{s.year}年_#{s.month}月分.pdf"
+          base = "#{cat_label}_#{surname}_立替金_相殺_#{s.year}年_#{s.month}月分.pdf"
           items << { label: "立替金: #{base}", amount: neg_total }
         end
 
         items
       end
 
+      # カテゴリラベルを先頭に置く帳票ファイル名（カテゴリ_苗字_帳票名_…）
+      def category_label_for(category)
+        CATEGORY_LABELS[category.to_s] || category.to_s
+      end
+      def category_named_file(submission, body)
+        surname = submission.user.display_name.to_s.split(/[\s　]/).first
+        [ category_label_for(submission.category), surname, body ].map { |part| part.to_s.strip }.reject(&:blank?).join("_")
+      end
       def invoice_filename(s)
-        surname = s.user.display_name.to_s.split(/[\s　]/).first
-        "#{surname}_請求書_#{s.year}年_#{s.month}月分_株式会社ラボップ.pdf"
+        category_named_file(s, "請求書_#{s.year}年_#{s.month}月分_株式会社ラボップ.pdf")
       end
       def expense_pdf_filename(s)
-        surname = s.user.display_name.to_s.split(/[\s　]/).first
-        "#{surname}_立替金_#{s.year}年_#{s.month}月分_株式会社ラボップ.pdf"
+        category_named_file(s, "立替金_#{s.year}年_#{s.month}月分_株式会社ラボップ.pdf")
       end
       def expense_xlsx_filename(s)
-        surname = s.user.display_name.to_s.split(/[\s　]/).first
-        "#{surname}_立替金_#{s.year}年_#{s.month}月分_株式会社ラボップ.xlsx"
+        category_named_file(s, "立替金_#{s.year}年_#{s.month}月分_株式会社ラボップ.xlsx")
       end
       def work_report_filename(s)
-        surname = s.user.display_name.to_s.split(/[\s　]/).first
-        cat_label = { "wings" => "Wings", "living" => "リビング", "techleaders" => "テックリーダーズ", "resystems" => "REシステムズ" }[s.category] || s.category.to_s
-        "#{surname}_#{cat_label}_業務報告書_#{s.year}年_#{s.month}月分.xlsx"
+        category_named_file(s, "業務報告書_#{s.year}年_#{s.month}月分.xlsx")
       end
     end
   end
