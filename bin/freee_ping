@@ -1,0 +1,49 @@
+#!/usr/bin/env ruby
+# 用途: 本番 freee accounts API に対して 200 が返ってくるか手動確認する。
+# 使い方:
+#   bin/freee_ping                        # ENV 変数 / Rails credentials から認証情報を読む
+#   bin/freee_ping <email> <password>     # 引数で認証情報を渡す
+#
+# 終了コード: 200 取得時 0、それ以外 1
+
+require_relative "../config/environment"
+
+identity = ARGV[0] ||
+           ENV["FREEE_IDENTITY"] ||
+           Rails.application.credentials.dig(:freee, :identity)
+password = ARGV[1] ||
+           ENV["FREEE_PASSWORD"] ||
+           Rails.application.credentials.dig(:freee, :password)
+
+abort "ERROR: identity / password が見つかりません。引数か ENV (FREEE_IDENTITY / FREEE_PASSWORD) か credentials を設定してください。" unless identity && password
+
+puts "=== freee sessions API ping ==="
+puts "identity: #{identity}"
+puts "endpoint: #{Freee::SessionLogin::SESSIONS_URL}"
+puts ""
+
+started_at = Time.current
+result = Freee::SessionLogin.new(identity: identity, password: password).call
+elapsed = (Time.current - started_at).round(3)
+
+puts "status:           #{result.status}"
+puts "ok?:              #{result.ok?}"
+puts "elapsed:          #{elapsed}s"
+puts "company_id:       #{result.company_id || '(なし)'}"
+puts "csrf_token:       #{result.csrf_token&.slice(0, 20)}#{result.csrf_token ? '…' : '(なし)'}"
+puts "session_cookie:   #{result.session_cookie ? result.session_cookie.slice(0, 80) + '…' : '(なし)'}"
+puts "error:            #{result.error || '(なし)'}"
+puts ""
+puts "--- response body (先頭 500 char) ---"
+puts result.body.to_s.slice(0, 500)
+puts "--- end ---"
+
+if result.ok?
+  puts ""
+  puts "✅ 200 OK — freee 接続成功"
+  exit 0
+else
+  puts ""
+  puts "❌ 200 を取得できませんでした"
+  exit 1
+end

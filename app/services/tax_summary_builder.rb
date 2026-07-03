@@ -113,8 +113,18 @@ class TaxSummaryBuilder
     end
 
     purchase_tax = expense_tax + subcontract_tax
-    special20 = (sales_tax * 0.2).floor / 100 * 100
     general_estimate = [ sales_tax - purchase_tax, 0 ].max / 100 * 100
+
+    # 2割特例の正式計算(付表6・実申告と同一方式):
+    # 税抜対価 → 課税標準額(千円切捨て) → 国税7.8% → 特別控除80% → 差引(百円切捨て) → 地方22/78(百円切捨て)
+    taxable_base_raw = (income_total * 100 / 110.0).floor   # 課税資産の譲渡等の対価の額(税抜)
+    taxable_base = taxable_base_raw / 1000 * 1000            # 課税標準額
+    national_tax = (taxable_base * 0.078).floor              # 消費税額(国税7.8%)
+    special_deduction = (national_tax * 0.8).floor           # 特別控除税額(80%)
+    national_payment = (national_tax - special_deduction) / 100 * 100 # 差引税額(百円切捨て)
+    local_payment = (national_payment * 22 / 78.0).floor / 100 * 100  # 地方消費税(22/78)
+    special20 = national_payment + local_payment
+
     {
       taxable_sales: income_total,
       sales_tax: sales_tax,
@@ -122,7 +132,17 @@ class TaxSummaryBuilder
       special20_payment: special20,
       general_estimate: general_estimate,
       recommended: special20 <= general_estimate ? "special20" : "general",
-      partner_invoice_registered: subcontract_incomes.map(&:user).uniq.all?(&:invoice_registered?)
+      partner_invoice_registered: subcontract_incomes.map(&:user).uniq.all?(&:invoice_registered?),
+      # 消費税申告書(2割特例)の記載値
+      breakdown: {
+        taxable_base_raw: taxable_base_raw,
+        taxable_base: taxable_base,
+        national_tax: national_tax,
+        special_deduction: special_deduction,
+        national_payment: national_payment,
+        local_payment: local_payment,
+        total_payment: special20
+      }
     }
   end
 end

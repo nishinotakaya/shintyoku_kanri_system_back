@@ -21,9 +21,13 @@ module Api
         year = target_year
         deduction = params[:deduction].presence&.to_i || 650_000
         renderer = OfficialTaxFormRenderer.new(current_user, year: year, deduction: deduction)
-        if params[:doc] == "shinkokusho"
+        case params[:doc]
+        when "shinkokusho"
           path = renderer.render_shinkokusho
           filename = "確定申告書第一表_#{year}年分.pdf"
+        when "shohi"
+          path = renderer.render_shohi
+          filename = "消費税申告書_#{year}年分.pdf"
         else
           path = renderer.render_kessansho
           filename = "青色申告決算書_#{year}年分.pdf"
