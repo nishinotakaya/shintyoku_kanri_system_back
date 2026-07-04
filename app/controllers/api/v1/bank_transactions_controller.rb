@@ -45,6 +45,14 @@ module Api
         txn = current_user.bank_transactions.find(params[:id])
         return render(json: { error: "登録済みです" }, status: :unprocessable_entity) if txn.registered && txn.business_expense_id
 
+        # 冪等化: 同じ明細の business_expense が既にあれば二重作成しない（二重計上防止）
+        hash = "freee_wtxn:#{txn.freee_wallet_txn_id}"
+        existing = current_user.business_expenses.find_by(import_hash: hash)
+        if existing
+          txn.update!(registered: true, business_expense_id: existing.id)
+          return render json: { registered: true, business_expense_id: existing.id, message: "既に登録済み" }
+        end
+
         category = params[:account_category].to_s.presence
         category = Freee::ExpenseImporter::ACCOUNT_ALIASES[txn.suggested_account_item] || txn.suggested_account_item if category.nil?
         category = nil unless BusinessExpense::ACCOUNT_CATEGORIES.include?(category)
@@ -59,7 +67,7 @@ module Api
           business_ratio: (params[:business_ratio].presence || 100).to_i,
           status: category ? "confirmed" : "needs_review",
           source: "freee",
-          import_hash: "freee_wtxn:#{txn.freee_wallet_txn_id}",
+          import_hash: hash,
           payment_source: txn.walletable_name,
           payment_method: txn.payment_method,
           freee_synced: false
