@@ -31,6 +31,17 @@ module TaxFormTlfLayouts
       raise(ArgumentError, "comb not found: #{page_key}/#{id}")
   end
 
+  # コーム欄(1マス1桁)への桁割り。右端の記入可能マス(_d0)から下位桁を詰め、
+  # マス数を超えた上位桁は幅広マス(_ov)にまとめて書く。
+  def self.comb_digits(page_key, id, number)
+    spec = comb(page_key, id)
+    digits = number.to_i.to_s.chars.reverse
+    fillable = spec[:cells] - spec.fetch(:skip, 0)
+    values = digits.first(fillable).each_with_index.to_h { |digit, i| [ :"#{id}_d#{i}", digit ] }
+    values[:"#{id}_ov"] = digits.drop(fillable).reverse.join if digits.size > fillable
+    values
+  end
+
   def self.build_pages
     pages = {}
 

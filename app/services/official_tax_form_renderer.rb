@@ -72,16 +72,7 @@ class OfficialTaxFormRenderer
   def fmt0(n) = n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
   def wareki = @year - 2018
 
-  # コーム欄(1マス1桁)への桁割り。右端の記入可能マス(_d0)から下位桁を詰め、
-  # マス数を超えた上位桁は幅広マス(_ov)にまとめて書く。
-  def comb(page_key, id, number)
-    spec = TaxFormTlfLayouts.comb(page_key, id)
-    digits = number.to_i.to_s.chars.reverse
-    fillable = spec[:cells] - spec.fetch(:skip, 0)
-    values = digits.first(fillable).each_with_index.to_h { |digit, i| [ :"#{id}_d#{i}", digit ] }
-    values[:"#{id}_ov"] = digits.drop(fillable).reverse.join if digits.size > fillable
-    values
-  end
+  def comb(page_key, id, number) = TaxFormTlfLayouts.comb_digits(page_key, id, number)
 
   def category_totals
     @summary[:by_category].to_h { |row| [ row[:category], row[:total] ] }
