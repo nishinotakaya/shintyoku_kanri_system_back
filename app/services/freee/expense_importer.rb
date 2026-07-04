@@ -132,6 +132,47 @@ module Freee
     end
     alias sync_accounts! sync_banks!
 
+    # 銀行/カードの入出金明細を bank_transactions テーブルに同期する（このシステムの DB で管理）。
+    # freee の wallet_txns（主に未登録=未取引化の明細）を upsert。registered は freee 側の状態から判定。
+    # 戻り値: { synced:, unregistered: }
+    def sync_bank_transactions!(start_date:, end_date:)
+      ctx!
+      synced = 0
+      syncable_accounts.each do |account|
+        path_type = account[:type] == "CreditCard" ? "credit_card" : "bank_account"
+        method = account[:type] == "CreditCard" ? "credit_card" : "bank"
+        offset = 0
+        loop do
+          uri = URI("https://secure.freee.co.jp/api/p/wallet_txns?" + URI.encode_www_form(
+            company_id: @company_id, walletable_type: path_type, walletable_id: account[:id],
+            start_date: start_date.to_s, end_date: end_date.to_s, limit: PAGE, offset: offset
+          ))
+          body = json(get(uri))
+          models = body&.dig("models") || []
+          models.each do |txn|
+            next unless txn["entry_side_str"] == "expense"
+            next if txn["get_spent_amount"].to_i.zero?
+            rec = @user.bank_transactions.find_or_initialize_by(freee_wallet_txn_id: txn["id"])
+            # 既にこっちで登録済み(business_expense リンクあり)なら registered は維持
+            already = rec.registered && rec.business_expense_id.present?
+            rec.assign_attributes(
+              walletable_id: account[:id], walletable_name: account[:name], payment_method: method,
+              txn_date: txn["txn_date"], amount: txn["get_spent_amount"].to_i, entry_side: "expense",
+              description: txn["description"].to_s, suggested_account_item: txn["suggested_account_item"],
+              suggested_tax_code: txn["suggested_tax_code"], status_str: txn["status_str"],
+              registered: already || (txn["status_str"] != "unreconciled"), synced_at: Time.current
+            )
+            rec.save!
+            synced += 1
+          end
+          total = body&.dig("info", "total").to_i
+          offset += PAGE
+          break if offset >= total || models.empty?
+        end
+      end
+      { synced: synced, unregistered: @user.bank_transactions.unregistered.count }
+    end
+
     # 未処理(未登録)の入出金明細を import_commit 行フォーマットで返す。
     # freee の「自動で経理」相当: 銀行/カードの明細に freee 推奨科目を割り当てて提示する。
     def unreconciled_txns(start_date:, end_date:, side: "expense")

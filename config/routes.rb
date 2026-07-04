@@ -152,6 +152,11 @@ Rails.application.routes.draw do
           get  :freee_wallet_txns  # freee「自動で経理」: 未処理明細+推奨科目
         end
       end
+      # freee連携口座の明細台帳(銀行/カード)。同期→未登録明細→経費登録
+      resources :bank_transactions, only: [ :index ] do
+        member { post :register }
+        collection { post :sync }
+      end
       # 減価償却資産 + 確定申告集計 (admin専用)
       resources :fixed_assets, only: [ :index, :create, :update, :destroy ]
       get "tax_reports/summary",    to: "tax_reports#summary"
