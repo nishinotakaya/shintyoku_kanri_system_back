@@ -6,6 +6,7 @@ module ThumbnailPrompts
 
   # スタイルの key とフロント表示ラベル。プロンプト本文(template)は I18n から取得する。
   STYLE_DEFS = [
+    { key: "proaka",        label: "プロアカ(未経験×AI開発×実績)" },
     { key: "anime_journey", label: "アニメ3コマ(感情変化オチ)" },
     { key: "graphic_only",  label: "人物なし(グラフィック)" },
     { key: "real_person",   label: "実写エンジニア(人物あり)" }
