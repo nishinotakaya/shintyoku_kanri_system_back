@@ -207,6 +207,8 @@ module Api
           has_receipt: r.receipt_data.present?,
           payment_source: r.payment_source,
           payment_method: r.payment_method,
+          freee_synced: r.freee_synced,
+          source: r.source,
           created_at: r.created_at&.iso8601
         }
       end
