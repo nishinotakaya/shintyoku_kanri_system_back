@@ -49,7 +49,7 @@ class HeygenClient
   #   speed:   0.5〜1.5 (1.0が標準。0.9前後で落ち着いた自然な話速)
   # 返り値: HeyGen の video_id
   def generate_video(text:, voice_id:, avatar_kind: "avatar", avatar_id: nil, talking_photo_id: nil,
-                     width: 1280, height: 720, emotion: "Friendly", speed: 0.92, caption: true)
+                     width: 1280, height: 720, emotion: nil, speed: 0.95, caption: false)
     character =
       if avatar_kind == "talking_photo"
         raise Error, "talking_photo_id がありません" if talking_photo_id.blank?
