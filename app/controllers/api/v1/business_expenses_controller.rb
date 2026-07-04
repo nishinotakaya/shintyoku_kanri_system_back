@@ -11,6 +11,7 @@ module Api
         scope = current_user.business_expenses.order(expense_date: :desc, id: :desc)
         scope = scope.in_month(params[:month])
         scope = scope.where(account_category: params[:account_category]) if params[:account_category].present?
+        scope = scope.where(status: params[:status]) if params[:status].present?
         records = scope.to_a
         render json: { expenses: records.map { |r| serialize(r) }, summary: summarize(records) }
       end
