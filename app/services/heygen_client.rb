@@ -44,8 +44,12 @@ class HeygenClient
   end
 
   # 動画生成。avatar_kind: "avatar" or "talking_photo"
+  # ロボット感を減らす: emotion(抑揚) + speed(話速) + 自然化した台本 + caption(字幕焼込)。
+  #   emotion: Excited/Friendly/Serious/Soothing/Broadcaster (対応ボイスのみ有効)
+  #   speed:   0.5〜1.5 (1.0が標準。0.9前後で落ち着いた自然な話速)
   # 返り値: HeyGen の video_id
-  def generate_video(text:, voice_id:, avatar_kind: "avatar", avatar_id: nil, talking_photo_id: nil, width: 1280, height: 720)
+  def generate_video(text:, voice_id:, avatar_kind: "avatar", avatar_id: nil, talking_photo_id: nil,
+                     width: 1280, height: 720, emotion: "Friendly", speed: 0.92, caption: true)
     character =
       if avatar_kind == "talking_photo"
         raise Error, "talking_photo_id がありません" if talking_photo_id.blank?
@@ -55,17 +59,26 @@ class HeygenClient
         { type: "avatar", avatar_id: avatar_id, avatar_style: "normal" }
       end
 
+    voice = { type: "text", input_text: humanize_script(text), voice_id: voice_id }
+    voice[:speed] = speed if speed
+    voice[:emotion] = emotion if emotion.present?
+
     payload = {
-      video_inputs: [
-        {
-          character: character,
-          voice: { type: "text", input_text: text, voice_id: voice_id }
-        }
-      ],
-      dimension: { width: width, height: height }
+      video_inputs: [ { character: character, voice: voice } ],
+      dimension: { width: width, height: height },
+      caption: caption # 字幕を焼き込む
     }
     res = post("/v2/video/generate", payload)
     res.dig("data", "video_id") or raise Error, "video_id が取得できませんでした: #{res.inspect}"
+  end
+
+  # 書き言葉→話し言葉寄りに軽く整えてロボット感を減らす。
+  # 文末や句読点に自然な間が入るよう調整（過剰な整形はしない）。
+  def humanize_script(text)
+    text.to_s
+        .gsub(/([。！？])(?=\S)/, "\\1 ")   # 文の切れ目に半角スペース=わずかな間
+        .gsub(/、/, "、")                     # 読点はそのまま(間として機能)
+        .strip
   end
 
   # 生成ステータス。{status:, video_url:, duration:, error:}
