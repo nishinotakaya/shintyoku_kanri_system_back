@@ -73,6 +73,17 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/bank_transactions/:id/mark_private  { private: true|false }
+      # プライベート(私的支出)印。true で未登録一覧から外す（経費計上しない）。
+      def mark_private
+        txn = current_user.bank_transactions.find(params[:id])
+        is_private = params.key?(:private) ? ActiveModel::Type::Boolean.new.cast(params[:private]) : true
+        txn.update!(is_private: is_private)
+        render json: { id: txn.id, is_private: txn.is_private, unregistered_count: current_user.bank_transactions.unregistered.expense_side.count }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
 
       def require_keihi

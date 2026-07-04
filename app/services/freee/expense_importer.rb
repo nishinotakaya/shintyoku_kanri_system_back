@@ -137,40 +137,49 @@ module Freee
     # 戻り値: { synced:, unregistered: }
     def sync_bank_transactions!(start_date:, end_date:)
       ctx!
+      # wallet_txns API は walletable_id を無視して全口座共通の一覧を返す。
+      # なので1回だけ取得し、各明細が持つ walletable_id/walletable_name で口座を判定する。
+      types = wallet_type_map # walletable_id => "CreditCard"|"BankAccount"|"Wallet"
       synced = 0
-      syncable_accounts.each do |account|
-        path_type = account[:type] == "CreditCard" ? "credit_card" : "bank_account"
-        method = account[:type] == "CreditCard" ? "credit_card" : "bank"
-        offset = 0
-        loop do
-          uri = URI("https://secure.freee.co.jp/api/p/wallet_txns?" + URI.encode_www_form(
-            company_id: @company_id, walletable_type: path_type, walletable_id: account[:id],
-            start_date: start_date.to_s, end_date: end_date.to_s, limit: PAGE, offset: offset
-          ))
-          body = json(get(uri))
-          models = body&.dig("models") || []
-          models.each do |txn|
-            next unless txn["entry_side_str"] == "expense"
-            next if txn["get_spent_amount"].to_i.zero?
-            rec = @user.bank_transactions.find_or_initialize_by(freee_wallet_txn_id: txn["id"])
-            # 既にこっちで登録済み(business_expense リンクあり)なら registered は維持
-            already = rec.registered && rec.business_expense_id.present?
-            rec.assign_attributes(
-              walletable_id: account[:id], walletable_name: account[:name], payment_method: method,
-              txn_date: txn["txn_date"], amount: txn["get_spent_amount"].to_i, entry_side: "expense",
-              description: txn["description"].to_s, suggested_account_item: txn["suggested_account_item"],
-              suggested_tax_code: txn["suggested_tax_code"], status_str: txn["status_str"],
-              registered: already || (txn["status_str"] != "unreconciled"), synced_at: Time.current
-            )
-            rec.save!
-            synced += 1
+      offset = 0
+      loop do
+        uri = URI("https://secure.freee.co.jp/api/p/wallet_txns?" + URI.encode_www_form(
+          company_id: @company_id, walletable_type: "bank_account", walletable_id: 0,
+          start_date: start_date.to_s, end_date: end_date.to_s, limit: PAGE, offset: offset
+        ))
+        body = json(get(uri))
+        models = body&.dig("models") || []
+        models.each do |txn|
+          next unless txn["entry_side_str"] == "expense"
+          next if txn["get_spent_amount"].to_i.zero?
+          wid = txn["walletable_id"]
+          method = case types[wid]
+          when "CreditCard" then "credit_card"
+          when "Wallet" then "cash"
+          else "bank"
           end
-          total = body&.dig("info", "total").to_i
-          offset += PAGE
-          break if offset >= total || models.empty?
+          rec = @user.bank_transactions.find_or_initialize_by(freee_wallet_txn_id: txn["id"])
+          already = rec.registered && rec.business_expense_id.present?
+          rec.assign_attributes(
+            walletable_id: wid, walletable_name: txn["walletable_name"], payment_method: method,
+            txn_date: txn["txn_date"], amount: txn["get_spent_amount"].to_i, entry_side: "expense",
+            description: txn["description"].to_s, suggested_account_item: txn["suggested_account_item"],
+            suggested_tax_code: txn["suggested_tax_code"], status_str: txn["status_str"],
+            registered: already || (txn["status_str"] != "unreconciled"), synced_at: Time.current
+          )
+          rec.save!
+          synced += 1
         end
+        total = body&.dig("info", "total").to_i
+        offset += PAGE
+        break if offset >= total || models.empty?
       end
       { synced: synced, unregistered: @user.bank_transactions.unregistered.count }
+    end
+
+    def wallet_type_map
+      list = json(get(URI("https://secure.freee.co.jp/api/p/v2/walletables?company_id=#{@company_id}")))&.dig("walletables") || []
+      list.to_h { |w| [ w["id"], w["type"] ] }
     end
 
     # 未処理(未登録)の入出金明細を import_commit 行フォーマットで返す。

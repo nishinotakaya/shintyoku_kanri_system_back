@@ -154,7 +154,10 @@ Rails.application.routes.draw do
       end
       # freee連携口座の明細台帳(銀行/カード)。同期→未登録明細→経費登録
       resources :bank_transactions, only: [ :index ] do
-        member { post :register }
+        member do
+          post :register
+          post :mark_private
+        end
         collection { post :sync }
       end
       # 減価償却資産 + 確定申告集計 (admin専用)

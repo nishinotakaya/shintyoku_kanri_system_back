@@ -4,7 +4,8 @@ class BankTransaction < ApplicationRecord
   belongs_to :user
   belongs_to :business_expense, optional: true
 
-  scope :unregistered, -> { where(registered: false) }
+  # 未登録 = まだ取引化しておらず、プライベート印も付いていない明細（一覧に出す対象）
+  scope :unregistered, -> { where(registered: false, is_private: false) }
   scope :expense_side, -> { where(entry_side: "expense") }
 
   def payment_label
