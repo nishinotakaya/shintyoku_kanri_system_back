@@ -205,6 +205,8 @@ module Api
           status: r.status,
           ai_confidence: r.ai_confidence,
           has_receipt: r.receipt_data.present?,
+          payment_source: r.payment_source,
+          payment_method: r.payment_method,
           created_at: r.created_at&.iso8601
         }
       end

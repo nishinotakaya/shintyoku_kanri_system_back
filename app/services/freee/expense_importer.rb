@@ -86,7 +86,9 @@ module Freee
           business_ratio: 100,
           status: row[:account_category] ? "confirmed" : "needs_review",
           source: "freee",
-          import_hash: row[:import_hash]
+          import_hash: row[:import_hash],
+          payment_source: row[:payment_source],
+          payment_method: row[:payment_method]
         }
         if download_receipts && row[:receipt_id]
           image = fetch_receipt_image(row[:receipt_id])
@@ -226,6 +228,10 @@ module Freee
 
     def rows_from_deal(deal)
       receipt_id = (deal["receipts"] || []).first&.dig("id")
+      # 支払元(貸方=creditの wallet)。カード/口座から読み取った経費を判別するため。
+      payment = (deal["payments"] || []).first
+      payment_source = payment&.dig("walletable_name")
+      payment_method = wallet_method(payment&.dig("walletable_id"))
       details = deal["details"] || []
       # 費用側(借方)の明細のみ。account_item が P&L 経費でないものは除外。
       details.select { |d| d["entry_side"] == "debit" }.filter_map do |detail|
@@ -244,8 +250,24 @@ module Freee
           tax_rate: tax_rate_from(detail["tax_name"]),
           memo: [ "freee", raw_name, deal["partner_name"] ].compact.reject(&:blank?).uniq.join(" / "),
           import_hash: "freee_deal:#{deal['id']}:#{detail['id']}",
-          receipt_id: receipt_id
+          receipt_id: receipt_id,
+          payment_source: payment_source,
+          payment_method: payment_method
         }
+      end
+    end
+
+    # walletable_id → 支払方法(cash|credit_card|bank)。全 walletables の type から判定。
+    def wallet_method(walletable_id)
+      return nil unless walletable_id
+      @wallet_types ||= begin
+        list = json(get(URI("https://secure.freee.co.jp/api/p/v2/walletables?company_id=#{@company_id}")))&.dig("walletables") || []
+        list.to_h { |w| [ w["id"], w["type"] ] }
+      end
+      case @wallet_types[walletable_id]
+      when "CreditCard" then "credit_card"
+      when "BankAccount" then "bank"
+      when "Wallet" then "cash"
       end
     end
 
