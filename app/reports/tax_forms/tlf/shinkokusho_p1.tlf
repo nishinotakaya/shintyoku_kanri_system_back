@@ -16,6 +16,38 @@
       }
     },
     {
+      "id": "tax_office",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 47.8,
+      "y": 29.5,
+      "width": 57.1,
+      "height": 12.0,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 8.3,
+        "color": "#000000",
+        "text-align": "right",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
       "id": "address",
       "type": "text-block",
       "display": true,

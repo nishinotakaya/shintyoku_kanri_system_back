@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_03_000004) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_04_053926) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -116,6 +116,9 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_03_000004) do
     t.datetime "updated_at", null: false
     t.string "source", default: "receipt", null: false
     t.string "import_hash"
+    t.string "payment_source"
+    t.string "payment_method"
+    t.boolean "freee_synced", default: false, null: false
     t.index ["user_id", "expense_date"], name: "index_business_expenses_on_user_id_and_expense_date"
     t.index ["user_id", "import_hash"], name: "index_business_expenses_on_user_id_and_import_hash"
   end
@@ -681,6 +684,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_03_000004) do
     t.string "canva_oauth_verifier"
     t.text "seal_image"
     t.boolean "invoice_registered", default: false, null: false
+    t.string "tax_office"
     t.index ["canva_oauth_state"], name: "index_users_on_canva_oauth_state"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"

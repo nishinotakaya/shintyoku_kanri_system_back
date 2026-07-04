@@ -87,23 +87,28 @@ class OfficialTaxFormRenderer
   def kessansho_p1_values
     totals = category_totals
     values = {
-      wareki: wareki, address: @setting&.address, name: @user.display_name,
-      job: "ソフトウェア・情報サービス業", tel: @setting&.tel,
-      from_month: 1, from_day: 1, to_month: 12, to_day: 31,
-      sales: fmt(@summary[:income_total]), sales_diff: fmt(@summary[:income_total]),
-      misc_expense: fmt(totals["雑費"]),
-      expense_total: fmt0(@summary[:expense_total]),
-      profit_33: fmt0(profit_before_deduction),
-      profit_43: fmt0(profit_before_deduction),
-      deduction_44: fmt0(deduction_applied),
-      income_45: fmt0(final_income)
+      address: taxpayer_address, doujou: "同上", name: @user.display_name,
+      job: "ソフトウェア・情報サービス業", tel: formatted_tel,
+      from_month: 1, from_day: 1, to_month: 12, to_day: 31
     }
-    FIXED_CATEGORIES.each_value do |no|
-      values[:"cat_#{no}"] = fmt(totals[FIXED_CATEGORIES.key(no)])
+    values.merge!(
+      comb(:kessansho_p1, :wareki, format("%02d", wareki)),
+      comb(:kessansho_p1, :sales, @summary[:income_total]),
+      comb(:kessansho_p1, :sales_diff, @summary[:income_total]),
+      comb(:kessansho_p1, :expense_total, @summary[:expense_total]),
+      comb(:kessansho_p1, :profit_33, profit_before_deduction),
+      comb(:kessansho_p1, :profit_43, profit_before_deduction),
+      comb(:kessansho_p1, :deduction_44, deduction_applied),
+      comb(:kessansho_p1, :income_45, final_income)
+    )
+    values.merge!(comb(:kessansho_p1, :misc_expense, totals["雑費"])) if totals["雑費"].to_i.positive?
+    FIXED_CATEGORIES.each do |category, no|
+      total = totals[category].to_i
+      values.merge!(comb(:kessansho_p1, :"cat_#{no}", total)) if total.positive?
     end
     extra_categories.first(6).each_with_index do |row, i|
       values[:"slot_#{i + 1}_label"] = row[:category]
-      values[:"slot_#{i + 1}_amount"] = fmt(row[:total])
+      values.merge!(comb(:kessansho_p1, :"slot_#{i + 1}_amount", row[:total])) if row[:total].to_i.positive?
     end
     values
   end
@@ -111,15 +116,37 @@ class OfficialTaxFormRenderer
   # ============ 決算書 P2: 月別売上 + 青色申告特別控除の計算 ============
   def kessansho_p2_values
     values = {
-      wareki: wareki, name: @user.display_name,
-      monthly_total: fmt0(@summary[:income_total]),
+      name: @user.display_name,
       profit_8: fmt0(profit_before_deduction),
       deduction_9: fmt0(deduction_applied)
     }
+    values.merge!(
+      comb(:kessansho_p2, :wareki, format("%02d", wareki)),
+      comb(:kessansho_p2, :monthly_total, @summary[:income_total])
+    )
     @summary[:monthly].each_with_index do |m, i|
       values[:"month_#{i + 1}"] = fmt(m[:income])
     end
     values
+  end
+
+  # 納税地 = ユーザー設定の住所を優先、無ければ請求書設定(wings)の住所
+  def taxpayer_address
+    @user.address.presence || @setting&.address
+  end
+
+  # 電話番号を様式の印字例 (090 - 6311 - 5200) に合わせて区切る
+  def formatted_tel
+    digits = @setting&.tel.to_s.delete("^0-9")
+    return @setting&.tel if digits.length != 11
+    "#{digits[0, 3]} - #{digits[3, 4]} - #{digits[7, 4]}"
+  end
+
+  # 消費税様式の「（電話番号　－　－　）」プレ印字に合わせた3分割
+  def tel_values
+    digits = @setting&.tel.to_s.delete("^0-9")
+    return {} if digits.length != 11
+    { tel_a: digits[0, 3], tel_b: digits[3, 4], tel_c: digits[7, 4] }
   end
 
   # ============ 決算書 P3: 売上明細 + 減価償却費の計算 ============
@@ -163,7 +190,8 @@ class OfficialTaxFormRenderer
     total_tax = tax + reconstruction
     payment = (total_tax / 100) * 100
 
-    { address: @setting&.address, name: @user.display_name, job: "ソフトウェア・情報サービス業" }.merge(
+    { tax_office: @user.tax_office, address: taxpayer_address,
+      name: @user.display_name, job: "ソフトウェア・情報サービス業" }.merge(
       comb(:shinkokusho_p1, :income_total, @summary[:income_total]),
       comb(:shinkokusho_p1, :business_income, final_income),
       comb(:shinkokusho_p1, :total_income, final_income),
@@ -185,7 +213,10 @@ class OfficialTaxFormRenderer
   def ct = @summary[:consumption_tax][:breakdown]
 
   def shohi_p1_values
-    { year_from: wareki, year_to: wareki }.merge(
+    { year_from: wareki, year_to: wareki,
+      tax_office: @user.tax_office, address: taxpayer_address, name: @user.display_name }
+      .merge(tel_values)
+      .merge(
       comb(:shohi_p1, :taxable_base, ct[:taxable_base]),
       comb(:shohi_p1, :national_tax, ct[:national_tax]),
       comb(:shohi_p1, :deduction, ct[:special_deduction]),
@@ -200,7 +231,10 @@ class OfficialTaxFormRenderer
   end
 
   def shohi_p2_values
-    { year_from: wareki, year_to: wareki }.merge(
+    { year_from: wareki, year_to: wareki,
+      address: taxpayer_address, name: @user.display_name }
+      .merge(tel_values)
+      .merge(
       comb(:shohi_p2, :taxable_base_1, ct[:taxable_base]),
       comb(:shohi_p2, :taxable_raw_6, ct[:taxable_base_raw]),
       comb(:shohi_p2, :taxable_raw_7, ct[:taxable_base_raw]),
@@ -212,7 +246,7 @@ class OfficialTaxFormRenderer
   end
 
   def shohi_p3_values
-    values = { period: "令#{wareki}・ 1・ 1 〜 令#{wareki}・12・31" }
+    values = { period: "令#{wareki}・ 1・ 1 〜 令#{wareki}・12・31", name: @user.display_name }
     { raw_1: ct[:taxable_base_raw], base_2: ct[:taxable_base], tax_3: ct[:national_tax],
       basis_6: ct[:national_tax], special_deduction_7: ct[:special_deduction] }.each do |id, v|
       values[:"#{id}_b"] = fmt0(v)

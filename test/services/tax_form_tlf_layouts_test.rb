@@ -5,7 +5,7 @@ require "json"
 # 生成済み .tlf が座標マスタ(TaxFormTlfLayouts)と同期しているかも検証する
 # （レイアウト変更後に script/build_tax_form_tlfs.rb を回し忘れると落ちる）。
 class TaxFormTlfLayoutsTest < Minitest::Test
-  COMB_PAGES = %i[shinkokusho_p1 shohi_p1 shohi_p2].freeze
+  COMB_PAGES = %i[shinkokusho_p1 shohi_p1 shohi_p2 kessansho_p1 kessansho_p2].freeze
 
   # ============ 桁割り (comb_digits) ============
 

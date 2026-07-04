@@ -49,13 +49,22 @@ TaxFormTlfLayouts.pages.each do |key, page|
     size_pt = (field[:size] * PX_TO_PT).round(1)
     # HTML overlay の y はラインボックス上端(ハーフレディング込み)で較正済みのため、
     # グリフ上端から描く Prawn では size×0.18 だけ下げて揃える
-    items << text_block.call(
+    item = text_block.call(
       field[:id].to_s,
       field[:x] / 100.0 * page_w,
       field[:y] / 100.0 * page_h + size_pt * 0.18,
       field[:w] / 100.0 * page_w,
       size_pt, field[:align] || :left, field[:ja]
     )
+    if (lines = field[:lines]) && lines > 1
+      item["multiple-line"] = true
+      item["height"] = (size_pt * 1.6 * lines).round(1)
+      item["style"]["line-height-ratio"] = 1.6
+      item["style"]["overflow"] = "truncate"
+      item["style"]["word-wrap"] = "break-word"
+    end
+    item["style"]["overflow"] = "fit" if field[:fit] # 枠に収まらない場合は縮小
+    items << item
   end
 
   # コーム欄: マスごとに1桁の text-block を生成する。
