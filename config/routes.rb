@@ -145,8 +145,11 @@ Rails.application.routes.draw do
           get :receipt
         end
         collection do
-          post :import_csv     # 銀行/カード明細CSV → AI仕訳プレビュー
-          post :import_commit  # プレビューで選択した行を一括登録
+          post :import_csv         # 銀行/カード明細CSV → AI仕訳プレビュー
+          post :import_commit      # プレビューで選択した行を一括登録
+          post :import_freee       # freee登録済み経費(deal)を取込
+          post :sync_freee_banks   # freee連携の全口座(銀行+クレカ)を同期
+          get  :freee_wallet_txns  # freee「自動で経理」: 未処理明細+推奨科目
         end
       end
       # 減価償却資産 + 確定申告集計 (admin専用)

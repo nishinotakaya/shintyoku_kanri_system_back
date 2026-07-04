@@ -117,6 +117,57 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/business_expenses/import_freee  { start_date?, end_date? }
+      # freee に登録済みの経費(deal)を取得し、勘定科目を割り当てて business_expenses に保存。
+      def import_freee
+        conn = current_user.freee_connection
+        return render(json: { error: "freee 未接続。設定から接続してください。" }, status: :bad_request) unless conn&.identity
+
+        importer = Freee::ExpenseImporter.new(connection: conn, user: current_user)
+        return render(json: { error: "freee 再ログインに失敗しました" }, status: :bad_request) unless importer.refresh_session!
+
+        result = importer.import!(
+          start_date: params[:start_date].presence || "2025-01-01",
+          end_date: params[:end_date].presence || Date.current.to_s
+        )
+        render json: result
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/business_expenses/sync_freee_banks
+      # freee に連携済みの全口座(銀行 + クレカ/VISA)を金融機関と同期(最新明細を取り込む)。
+      def sync_freee_banks
+        conn = current_user.freee_connection
+        return render(json: { error: "freee 未接続。設定から接続してください。" }, status: :bad_request) unless conn&.identity
+
+        importer = Freee::ExpenseImporter.new(connection: conn, user: current_user)
+        return render(json: { error: "freee 再ログインに失敗しました" }, status: :bad_request) unless importer.refresh_session!
+
+        render json: { results: importer.sync_accounts! }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/v1/business_expenses/freee_wallet_txns?start_date=&end_date=
+      # freeeの「自動で経理」相当: 銀行/カードの未処理明細に推奨科目を付けて返す(保存はしない)。
+      # フロントで科目を選び import_commit で確定する。
+      def freee_wallet_txns
+        conn = current_user.freee_connection
+        return render(json: { error: "freee 未接続。設定から接続してください。" }, status: :bad_request) unless conn&.identity
+
+        importer = Freee::ExpenseImporter.new(connection: conn, user: current_user)
+        return render(json: { error: "freee 再ログインに失敗しました" }, status: :bad_request) unless importer.refresh_session!
+
+        rows = importer.unreconciled_txns(
+          start_date: params[:start_date].presence || 3.months.ago.to_date.to_s,
+          end_date: params[:end_date].presence || Date.current.to_s
+        )
+        render json: { rows: rows, count: rows.size, duplicate_count: rows.count { |r| r[:duplicate] } }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
 
       def require_admin
