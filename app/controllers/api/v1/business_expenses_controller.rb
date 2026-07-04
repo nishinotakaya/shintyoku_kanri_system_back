@@ -170,8 +170,10 @@ module Api
 
       private
 
+      # admin は常に可。非 admin は feature_flags["keihi"] が ON のユーザーも利用可。
       def require_admin
-        render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        return if current_user.can_use?(:keihi)
+        render(json: { error: "経費計上の利用権限がありません" }, status: :forbidden)
       end
 
       def set_record

@@ -33,7 +33,8 @@ module Api
       private
 
       def require_admin
-        render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        return if current_user.can_use?(:keihi)
+        render(json: { error: "経費計上の利用権限がありません" }, status: :forbidden)
       end
 
       def asset_params
