@@ -2,11 +2,16 @@ require "open3"
 require "shellwords"
 
 # Backlog の git リポジトリを shallow clone してローカルにミラーし、
-# ファイルツリー・ファイル内容・ブランチ一覧を返す（GitHub風レビュー画面用）。
+# ファイルツリー・ファイル内容・ブランチ一覧・PR差分を返す（GitHub風レビュー画面用）。
 # Backlog REST API にはファイル内容のエンドポイントが無いため、git 経由で取得する。
+#
+# 並行リクエストで同じミラーに同時 fetch が走ると
+# "fatal: shallow file has changed since we read it" になるため、
+# リポジトリ単位の flock で git 操作を直列化する。
 class BacklogGitMirror
   CACHE_ROOT = Rails.root.join("tmp", "backlog_git")
   MAX_FILE_BYTES = 500_000 # これ以上のファイルは中身を返さない（UI が固まるため）
+  FETCH_INTERVAL = 60 # 秒。直近に fetch 済みなら省略（PR を開くたびの fetch 連打を防ぐ）
 
   class Error < StandardError; end
 
@@ -19,11 +24,75 @@ class BacklogGitMirror
 
   def cloned? = File.directory?(@dir.join(".git"))
 
-  # clone（初回）or fetch（同期ボタン）。shallow で高速に。
-  def sync!
+  # clone（初回）or fetch（同期）。force: false なら直近 FETCH_INTERVAL 秒以内の fetch を省略。
+  def sync!(force: true)
+    with_lock { sync_unlocked!(force: force) }
+  end
+
+  # リモートブランチ一覧（origin/HEAD は除外、デフォルトブランチを先頭に）
+  def branches
+    with_lock do
+      ensure_cloned_unlocked!
+      out = run_git("branch", "-r", "--format", "%(refname:short)")
+      names = out.lines.map(&:strip).reject { |n| n.include?("HEAD") }.map { |n| n.delete_prefix("origin/") }
+      default = default_branch
+      ([ default ] + (names - [ default ])).compact
+    end
+  end
+
+  # ファイルツリー: [{ path:, size: }]（blob のみ、パス昇順）
+  def tree(branch)
+    with_lock do
+      ensure_cloned_unlocked!
+      tree_unlocked(branch)
+    end
+  end
+
+  # ファイル内容（テキスト前提。バイナリ/巨大ファイルはエラー扱い）
+  def file(branch, path)
+    with_lock do
+      ensure_cloned_unlocked!
+      raise Error, "不正なパスです" if path.include?("..")
+      entry = tree_unlocked(branch).find { |f| f[:path] == path }
+      raise Error, "ファイルが見つかりません: #{path}" unless entry
+      raise Error, "ファイルが大きすぎます(#{entry[:size]} bytes)" if entry[:size] > MAX_FILE_BYTES
+
+      content = run_git("show", "origin/#{branch}:#{path}")
+      raise Error, "バイナリファイルは表示できません" unless content.valid_encoding? || content.force_encoding("UTF-8").valid_encoding?
+      content.force_encoding("UTF-8").scrub("�")
+    end
+  end
+
+  # PR の差分を構造化して返す: [{ path:, lines: [{type: add/del/ctx/hunk, old_no:, new_no:, text:}] }]
+  # GitHub の PR 表示と同じく merge-base 起点(three-dot)。shallow で merge-base が無い場合は直接比較にフォールバック。
+  def parsed_diff(base_branch, head_branch)
+    with_lock do
+      ensure_cloned_unlocked!
+      raw = begin
+        run_git("diff", "origin/#{base_branch}...origin/#{head_branch}")
+      rescue Error
+        run_git("diff", "origin/#{base_branch}", "origin/#{head_branch}")
+      end
+      parse_unified_diff(raw.force_encoding("UTF-8").scrub("�"))
+    end
+  end
+
+  private
+
+  # リポジトリ単位の排他ロック。git 操作の並行実行による shallow ファイル競合を防ぐ。
+  def with_lock
     FileUtils.mkdir_p(CACHE_ROOT)
+    File.open(CACHE_ROOT.join("#{@project_key}_#{@repo_name}.lock"), File::RDWR | File::CREAT) do |lock_file|
+      lock_file.flock(File::LOCK_EX)
+      yield
+    end
+  end
+
+  def sync_unlocked!(force:)
     if cloned?
+      return true if !force && recently_fetched?
       run_git("fetch", "--depth", "50", "origin")
+      FileUtils.touch(fetch_marker)
     else
       url = @client.git_https_url(@project_key, @repo_name)
       out, status = Open3.capture2e("git", "clone", "--depth", "50", "--no-single-branch", url, @dir.to_s)
@@ -31,22 +100,22 @@ class BacklogGitMirror
         FileUtils.rm_rf(@dir)
         raise Error, "clone失敗: #{sanitize(out).lines.last.to_s.strip[0, 200]}"
       end
+      FileUtils.touch(fetch_marker)
     end
     true
   end
 
-  # リモートブランチ一覧（origin/HEAD は除外、デフォルトブランチを先頭に）
-  def branches
-    ensure_cloned!
-    out = run_git("branch", "-r", "--format", "%(refname:short)")
-    names = out.lines.map(&:strip).reject { |n| n.include?("HEAD") }.map { |n| n.delete_prefix("origin/") }
-    default = default_branch
-    ([ default ] + (names - [ default ])).compact
+  def ensure_cloned_unlocked!
+    sync_unlocked!(force: true) unless cloned?
   end
 
-  # ファイルツリー: [{ path:, size: }]（blob のみ、パス昇順）
-  def tree(branch)
-    ensure_cloned!
+  def fetch_marker = CACHE_ROOT.join("#{@project_key}_#{@repo_name}.last_fetch")
+
+  def recently_fetched?
+    File.exist?(fetch_marker) && (Time.zone.now - File.mtime(fetch_marker)) < FETCH_INTERVAL
+  end
+
+  def tree_unlocked(branch)
     out = run_git("ls-tree", "-r", "-l", "origin/#{branch}")
     out.lines.filter_map do |line|
       # 形式: <mode> <type> <object> <size>\t<path>
@@ -57,33 +126,6 @@ class BacklogGitMirror
       { path: path, size: parts[3].to_i }
     end.sort_by { |f| f[:path] }
   end
-
-  # ファイル内容（テキスト前提。バイナリ/巨大ファイルはエラー扱い）
-  def file(branch, path)
-    ensure_cloned!
-    raise Error, "不正なパスです" if path.include?("..")
-    entry = tree(branch).find { |f| f[:path] == path }
-    raise Error, "ファイルが見つかりません: #{path}" unless entry
-    raise Error, "ファイルが大きすぎます(#{entry[:size]} bytes)" if entry[:size] > MAX_FILE_BYTES
-
-    content = run_git("show", "origin/#{branch}:#{path}")
-    raise Error, "バイナリファイルは表示できません" unless content.valid_encoding? || content.force_encoding("UTF-8").valid_encoding?
-    content.force_encoding("UTF-8").scrub("�")
-  end
-
-  # PR の差分を構造化して返す: [{ path:, lines: [{type: add/del/ctx/hunk, old_no:, new_no:, text:}] }]
-  # GitHub の PR 表示と同じく merge-base 起点(three-dot)。shallow で merge-base が無い場合は直接比較にフォールバック。
-  def parsed_diff(base_branch, head_branch)
-    ensure_cloned!
-    raw = begin
-      run_git("diff", "origin/#{base_branch}...origin/#{head_branch}")
-    rescue Error
-      run_git("diff", "origin/#{base_branch}", "origin/#{head_branch}")
-    end
-    parse_unified_diff(raw.force_encoding("UTF-8").scrub("�"))
-  end
-
-  private
 
   def parse_unified_diff(raw)
     files = []
@@ -129,10 +171,6 @@ class BacklogGitMirror
   def default_branch
     out = run_git("symbolic-ref", "refs/remotes/origin/HEAD") rescue nil
     out&.strip&.delete_prefix("refs/remotes/origin/") || "master"
-  end
-
-  def ensure_cloned!
-    sync! unless cloned?
   end
 
   def run_git(*args)
