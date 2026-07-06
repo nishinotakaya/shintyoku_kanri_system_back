@@ -8,6 +8,7 @@ class BacklogClient
   def initialize(setting)
     @base_url = setting.backlog_url.chomp("/")
     @api_key = setting.api_key
+    @setting_email = setting.backlog_email
     @user_id = setting.user_backlog_id
     @assignee_ids = JSON.parse(setting.assignee_ids || "[]") rescue [ setting.user_backlog_id ]
     @assignee_ids = [ @user_id ] if @assignee_ids.empty?
@@ -157,6 +158,42 @@ class BacklogClient
     all.values
   rescue
     []
+  end
+
+  # --- Git（GitHub風レビュー画面用） ---
+
+  # プロジェクト一覧
+  def projects
+    get("/api/v2/projects")
+  end
+
+  # プロジェクトの git リポジトリ一覧（git 無効プロジェクトは例外→呼び元で握る）
+  def git_repositories(project_key)
+    get("/api/v2/projects/#{project_key}/git/repositories")
+  end
+
+  # PR 一覧（オープンのみ、最新順）
+  def pull_requests(project_key, repo_name, status_ids: [ 1 ])
+    get("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests",
+        { "statusId[]" => status_ids, "count" => 50 })
+  end
+
+  # PR 詳細
+  def pull_request(project_key, repo_name, number)
+    get("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests/#{number}")
+  end
+
+  # PR コメント投稿（一斉レビューの結合markdownを1件で送る）
+  def add_pull_request_comment(project_key, repo_name, number, content)
+    post_form("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests/#{number}/comments",
+              { "content" => content })
+  end
+
+  # git HTTPS クローン用のクレデンシャル付き URL（メール:APIキーの Basic 認証）
+  def git_https_url(project_key, repo_name)
+    uri = URI(@base_url)
+    email = CGI.escape(@setting_email.to_s)
+    "https://#{email}:#{@api_key}@#{uri.host}/git/#{project_key}/#{repo_name}.git"
   end
 
   # 自分にアサインされたイシューを取得（全ステータス）

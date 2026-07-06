@@ -279,6 +279,12 @@ Rails.application.routes.draw do
       post  "backlog/export_sheet", to: "backlog#export_sheet"
       get   "backlog/sheet_tabs",   to: "backlog#sheet_tabs"
       post  "backlog/sync_to_work_reports", to: "backlog#sync_to_work_reports"
+      # Backlog Git（GitHub風レビュー画面）
+      get  "backlog_git/repositories",  to: "backlog_git#repositories"
+      get  "backlog_git/pull_requests", to: "backlog_git#pull_requests"
+      get  "backlog_git/tree",          to: "backlog_git#tree"
+      get  "backlog_git/file",          to: "backlog_git#file"
+      post "backlog_git/review",        to: "backlog_git#post_review"
       # Backlog 対応ログ（活動履歴）月次ビュー
       get   "backlog_activities/targets", to: "backlog_activities#targets"
       post  "backlog_activities/sync",    to: "backlog_activities#sync"

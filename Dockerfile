@@ -17,7 +17,7 @@ WORKDIR /rails
 # Install base packages（Node + Python + Chromium ランタイム依存 + 日本語フォント）
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y \
-      curl libjemalloc2 sqlite3 \
+      curl libjemalloc2 sqlite3 git \
       python3 python3-openpyxl \
       ca-certificates gnupg \
       libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 \
