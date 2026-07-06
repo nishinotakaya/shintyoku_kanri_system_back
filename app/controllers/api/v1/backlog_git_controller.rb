@@ -42,7 +42,7 @@ module Api
         branches = mirror.branches
         branch = params[:branch].presence || branches.first
         render json: { branches: branches, branch: branch, files: mirror.tree(branch) }
-      rescue BacklogGitMirror::Error => e
+      rescue BacklogGitMirror::Error, RuntimeError => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
@@ -51,7 +51,7 @@ module Api
         mirror = build_mirror
         content = mirror.file(params.require(:branch), params.require(:path))
         render json: { path: params[:path], content: content }
-      rescue BacklogGitMirror::Error => e
+      rescue BacklogGitMirror::Error, RuntimeError => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
