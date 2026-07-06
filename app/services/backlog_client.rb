@@ -9,6 +9,7 @@ class BacklogClient
     @base_url = setting.backlog_url.chomp("/")
     @api_key = setting.api_key
     @setting_email = setting.backlog_email
+    @setting_password = setting.backlog_password
     @user_id = setting.user_backlog_id
     @assignee_ids = JSON.parse(setting.assignee_ids || "[]") rescue [ setting.user_backlog_id ]
     @assignee_ids = [ @user_id ] if @assignee_ids.empty?
@@ -189,11 +190,14 @@ class BacklogClient
               { "content" => content })
   end
 
-  # git HTTPS クローン用のクレデンシャル付き URL（メール:APIキーの Basic 認証）
+  # git HTTPS クローン用のクレデンシャル付き URL。
+  # Backlog の git は APIキー認証不可（メール＋パスワードの Basic 認証のみ）。
   def git_https_url(project_key, repo_name)
+    raise "Backlog パスワードが未設定です。設定画面のバックログタブで登録してください（git 取得に必要）" if @setting_password.blank?
     uri = URI(@base_url)
     email = CGI.escape(@setting_email.to_s)
-    "https://#{email}:#{@api_key}@#{uri.host}/git/#{project_key}/#{repo_name}.git"
+    password = CGI.escape(@setting_password.to_s)
+    "https://#{email}:#{password}@#{uri.host}/git/#{project_key}/#{repo_name}.git"
   end
 
   # 自分にアサインされたイシューを取得（全ステータス）
