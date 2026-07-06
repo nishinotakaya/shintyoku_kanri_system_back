@@ -71,7 +71,60 @@ class BacklogGitMirror
     content.force_encoding("UTF-8").scrub("�")
   end
 
+  # PR の差分を構造化して返す: [{ path:, lines: [{type: add/del/ctx/hunk, old_no:, new_no:, text:}] }]
+  # GitHub の PR 表示と同じく merge-base 起点(three-dot)。shallow で merge-base が無い場合は直接比較にフォールバック。
+  def parsed_diff(base_branch, head_branch)
+    ensure_cloned!
+    raw = begin
+      run_git("diff", "origin/#{base_branch}...origin/#{head_branch}")
+    rescue Error
+      run_git("diff", "origin/#{base_branch}", "origin/#{head_branch}")
+    end
+    parse_unified_diff(raw.force_encoding("UTF-8").scrub("�"))
+  end
+
   private
+
+  def parse_unified_diff(raw)
+    files = []
+    current = nil
+    old_no = new_no = 0
+    raw.each_line do |raw_line|
+      line = raw_line.chomp
+      if line.start_with?("diff --git")
+        current = { path: nil, deleted: false, lines: [] }
+        files << current
+      elsif line.start_with?("--- a/")
+        current[:path] ||= line.delete_prefix("--- a/")
+      elsif line.start_with?("+++ b/")
+        current[:path] = line.delete_prefix("+++ b/")
+      elsif line.start_with?("+++ /dev/null")
+        current[:deleted] = true
+      elsif line.start_with?("Binary files")
+        current[:lines] << { type: "hunk", text: "(バイナリファイル)" }
+      elsif line.start_with?("@@")
+        if line =~ /@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/
+          old_no = Regexp.last_match(1).to_i
+          new_no = Regexp.last_match(2).to_i
+        end
+        current[:lines] << { type: "hunk", text: line }
+      elsif current && current[:path]
+        case line[0]
+        when "+"
+          current[:lines] << { type: "add", new_no: new_no, text: line[1..].to_s }
+          new_no += 1
+        when "-"
+          current[:lines] << { type: "del", old_no: old_no, text: line[1..].to_s }
+          old_no += 1
+        when " "
+          current[:lines] << { type: "ctx", old_no: old_no, new_no: new_no, text: line[1..].to_s }
+          old_no += 1
+          new_no += 1
+        end
+      end
+    end
+    files.select { |f| f[:path] }
+  end
 
   def default_branch
     out = run_git("symbolic-ref", "refs/remotes/origin/HEAD") rescue nil

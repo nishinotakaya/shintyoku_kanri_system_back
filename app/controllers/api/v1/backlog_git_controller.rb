@@ -40,9 +40,50 @@ module Api
         mirror = build_mirror
         mirror.sync! if params[:sync].present? || !mirror.cloned?
         branches = mirror.branches
-        branch = params[:branch].presence || branches.first
+        # リポジトリ切替などで存在しないブランチ名が来ても落とさずデフォルトにフォールバック
+        branch = branches.include?(params[:branch]) ? params[:branch] : branches.first
         render json: { branches: branches, branch: branch, files: mirror.tree(branch) }
       rescue BacklogGitMirror::Error, RuntimeError => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # PR 詳細: 説明・既存コメント・変更ファイル(diff) をまとめて返す
+      def pr_detail
+        project = params.require(:project)
+        repo = params.require(:repo)
+        number = params.require(:number)
+        pr = client.pull_request(project, repo, number)
+        comments = client.pull_request_comments(project, repo, number)
+        mirror = build_mirror
+        mirror.sync! # PR ブランチが clone 後にできた場合に備えて毎回 fetch
+        diff_error = nil
+        files = begin
+          mirror.parsed_diff(pr["base"], pr["branch"])
+        rescue BacklogGitMirror::Error => e
+          diff_error = e.message
+          []
+        end
+        render json: {
+          number: pr["number"], summary: pr["summary"], description: pr["description"],
+          base: pr["base"], branch: pr["branch"], status: pr.dig("status", "name"),
+          created_user: pr.dig("created_user", "name"), created: pr["created"],
+          comments: comments.filter_map { |c|
+            next if c["content"].blank?
+            { id: c["id"], user: c.dig("createdUser", "name"), content: c["content"], created: c["created"] }
+          },
+          files: files, diff_error: diff_error
+        }
+      rescue BacklogGitMirror::Error, RuntimeError => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # PR への単発コメント投稿
+      def post_comment
+        result = client.add_pull_request_comment(
+          params.require(:project), params.require(:repo), params.require(:number), params.require(:content)
+        )
+        render json: { comment_id: result["id"] }
+      rescue RuntimeError => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
@@ -69,6 +110,8 @@ module Api
           params.require(:project), params.require(:repo), params.require(:number), content
         )
         render json: { posted: comments.size, comment_id: result["id"] }
+      rescue RuntimeError => e
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       private

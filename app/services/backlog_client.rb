@@ -184,6 +184,12 @@ class BacklogClient
     get("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests/#{number}")
   end
 
+  # PR コメント一覧（古い順）
+  def pull_request_comments(project_key, repo_name, number)
+    get("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests/#{number}/comments",
+        { "count" => 100, "order" => "asc" })
+  end
+
   # PR コメント投稿（一斉レビューの結合markdownを1件で送る）
   def add_pull_request_comment(project_key, repo_name, number, content)
     post_form("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests/#{number}/comments",
