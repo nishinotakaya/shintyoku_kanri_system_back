@@ -115,29 +115,6 @@
     {
       "warning_type": "File Access",
       "warning_code": 16,
-      "fingerprint": "dc1752667d586426fe1eca196645df80d2875aa2ef35c04b8921bcb2ef12fd88",
-      "check_name": "SendFile",
-      "message": "Parameter value used in file name",
-      "file": "app/controllers/api/v1/exports_controller.rb",
-      "line": 21,
-      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
-      "code": "send_file(WorkReportExporter.new(viewing_user, :year => year, :month => month, :category => params[:category]).call, :type => \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\", :filename => category_prefixed(\"\\u696D\\u52D9\\u5831\\u544A\\u66F8_#{year}\\u5E74_#{month}\\u6708\\u5206.xlsx\", params[:category], :user => viewing_user, :default_label => \"Wing\"), :disposition => \"attachment\")",
-      "render_path": null,
-      "location": {
-        "type": "method",
-        "class": "Api::V1::ExportsController",
-        "method": "work_report"
-      },
-      "user_input": "params[:category]",
-      "confidence": "Weak",
-      "cwe_id": [
-        22
-      ],
-      "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
-    },
-    {
-      "warning_type": "File Access",
-      "warning_code": 16,
       "fingerprint": "e1ad0becb5a3f1080a76ca7a3a1e66907634f5232edb7b027b48022aa210bbd1",
       "check_name": "SendFile",
       "message": "Parameter value used in file name",
@@ -203,6 +180,18 @@
         22
       ],
       "note": "send_file のパスはレンダラーが tmp/exports に生成した固定パス。モデル属性/パラメータは filename(ダウンロード名)にのみ使用。誤検知。"
+    },
+    {
+      "fingerprint": "8fbd92a0483beb93ca1da6bad58a485ca7d62ac22f6be29799c1f70c6f2301c8",
+      "note": "BacklogGitMirror#sync_unlocked!: Open3.capture2e を配列引数で呼び shell 解釈なし。project/repo は initialize で /\\A[\\w.-]+\\z/ を検証済み。偽陽性"
+    },
+    {
+      "fingerprint": "56e410ea1c54468d4dc55c897564e9e01c6c2cd68229d182e8a46280fb8bfe0f",
+      "note": "BacklogGitMirror#run_git: 同上、配列引数 + initialize で入力検証済み。args は内部固定値のみ。偽陽性"
+    },
+    {
+      "fingerprint": "5ec8bd6cf2801e4cd6dedecaa384e52fa4dc181469884f2432e6f06324594a91",
+      "note": "exports#work_report の send_file: パスは WorkReportExporter が生成する一時ファイルで params 非依存。params[:category] は Content-Disposition のファイル名表示のみ。偽陽性"
     }
   ],
   "updated": "2026-05-03 00:00:00 +0900",

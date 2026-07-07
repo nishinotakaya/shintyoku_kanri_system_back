@@ -16,6 +16,13 @@ class BacklogGitMirror
   class Error < StandardError; end
 
   def initialize(client, project_key, repo_name)
+    # project/repo は params 直渡しなので、パス結合(CACHE_ROOT.join)や clone URL に使う前に書式を検証する
+    # ("/" 等を許すと clone 先やロックファイルがキャッシュ外へ逃げられる)
+    [ project_key, repo_name ].each do |repository_identifier|
+      unless repository_identifier.to_s.match?(/\A[\w.-]+\z/)
+        raise Error, "不正なリポジトリ指定です: #{repository_identifier}"
+      end
+    end
     @client = client
     @project_key = project_key
     @repo_name = repo_name
