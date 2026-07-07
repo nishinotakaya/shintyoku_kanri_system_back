@@ -9,7 +9,11 @@ module ThumbnailPrompts
     { key: "proaka",        label: "未経験×AI開発(実績訴求)" },
     { key: "anime_journey", label: "アニメ3コマ(感情変化オチ)" },
     { key: "graphic_only",  label: "人物なし(グラフィック)" },
-    { key: "real_person",   label: "実写エンジニア(人物あり)" }
+    { key: "real_person",   label: "実写エンジニア(人物あり)" },
+    { key: "anime_talking",     label: "アニメ3コマ(喋り実況)" },
+    { key: "semi_real_talking", label: "セミリアル(カメラに喋る)" },
+    { key: "dekiru_danshi",     label: "できる系男子(知的・爽やか)" },
+    { key: "nikushoku_danshi",  label: "肉食系男子(ギラギラ情熱)" }
   ].freeze
 
   # フロント Canvas の文字スタイル初期値(色・フォント等)。フロントはこれを上書き可能。

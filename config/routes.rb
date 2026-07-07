@@ -54,6 +54,7 @@ Rails.application.routes.draw do
           post  :export_sheet
           post  :reset
           post  :reset_bank
+          post  :generate_kanpe
           post  "nodes",                 action: :create_node
           post  "nodes/:node_id/expand", action: :expand_node
           post  "nodes/:node_id/speech", action: :speech

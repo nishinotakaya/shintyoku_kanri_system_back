@@ -56,6 +56,7 @@ module Api
       def update
         m = find_map or return
         m.update!(title: params[:title]) if params[:title].present?
+        m.update!(kanpe_script: params[:kanpe_script].to_s) if params.key?(:kanpe_script)
         m.nodes.find_by(kind: "root")&.update!(text: m.title) if m.youtube?
         render json: m.reload.as_payload.merge(user: user_brief(m.user))
       rescue => e
@@ -126,6 +127,18 @@ module Api
         m.update!(spreadsheet_url: url)
         result = InterviewMindmapSheetExporter.new(mindmap: m, user: current_user, spreadsheet_url: url).call
         render json: result.merge(spreadsheet_url: url)
+      rescue => e
+        render_error(e.message)
+      end
+
+      # POST /api/v1/interview_mindmaps/:id/generate_kanpe
+      # 西野式テンプレに沿った撮影用カンペを AI 生成して保存する。
+      def generate_kanpe
+        m = find_map or return
+        kanpe = InterviewKanpeGenerator.new(user: current_user, mindmap: m).call
+        return render_error("カンペを生成できませんでした") if kanpe.blank?
+        m.update!(kanpe_script: kanpe)
+        render json: m.reload.as_payload.merge(user: user_brief(m.user))
       rescue => e
         render_error(e.message)
       end

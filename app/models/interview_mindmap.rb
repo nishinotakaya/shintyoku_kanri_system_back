@@ -62,6 +62,7 @@ class InterviewMindmap < ApplicationRecord
       title: title,
       mode: mode,
       spreadsheet_url: spreadsheet_url,
+      kanpe_script: kanpe_script,
       nodes: nodes.map(&:as_payload)
     }
   end
