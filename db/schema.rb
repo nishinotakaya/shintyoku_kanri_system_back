@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_04_053926) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_07_054525) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -95,6 +95,29 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_04_053926) do
     t.boolean "did_previous", default: false, null: false
     t.boolean "do_today", default: false, null: false
     t.index ["user_id"], name: "index_backlog_tasks_on_user_id"
+  end
+
+  create_table "bank_transactions", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.bigint "freee_wallet_txn_id", null: false
+    t.integer "walletable_id"
+    t.string "walletable_name"
+    t.string "payment_method"
+    t.date "txn_date"
+    t.integer "amount", default: 0, null: false
+    t.string "entry_side"
+    t.string "description"
+    t.string "suggested_account_item"
+    t.integer "suggested_tax_code"
+    t.string "status_str"
+    t.boolean "registered", default: false, null: false
+    t.integer "business_expense_id"
+    t.datetime "synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "is_private", default: false, null: false
+    t.index ["user_id", "freee_wallet_txn_id"], name: "idx_bank_txns_user_wallet_txn", unique: true
+    t.index ["user_id", "registered"], name: "index_bank_transactions_on_user_id_and_registered"
   end
 
   create_table "business_expenses", force: :cascade do |t|
@@ -191,6 +214,17 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_04_053926) do
     t.binary "clean_background"
     t.index ["interview_mindmap_id"], name: "index_generated_thumbnails_on_interview_mindmap_id"
     t.index ["user_id"], name: "index_generated_thumbnails_on_user_id"
+  end
+
+  create_table "git_pr_notes", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "project_key", null: false
+    t.string "repo_name", null: false
+    t.integer "pr_number", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_key", "repo_name", "pr_number"], name: "index_git_pr_notes_on_project_key_and_repo_name_and_pr_number"
   end
 
   create_table "heygen_assets", force: :cascade do |t|

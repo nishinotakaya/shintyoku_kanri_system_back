@@ -287,6 +287,9 @@ Rails.application.routes.draw do
       get  "backlog_git/pr_detail",     to: "backlog_git#pr_detail"
       post "backlog_git/comment",       to: "backlog_git#post_comment"
       post "backlog_git/review",        to: "backlog_git#post_review"
+      get    "backlog_git/notes",       to: "backlog_git#notes"
+      post   "backlog_git/notes",       to: "backlog_git#create_note"
+      delete "backlog_git/notes/:id",   to: "backlog_git#destroy_note"
       # Backlog 対応ログ（活動履歴）月次ビュー
       get   "backlog_activities/targets", to: "backlog_activities#targets"
       post  "backlog_activities/sync",    to: "backlog_activities#sync"

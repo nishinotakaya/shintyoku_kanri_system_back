@@ -77,6 +77,28 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # ── システム内のみの PR メモ（Backlog には送らない） ──
+      def notes
+        notes = GitPrNote.for_pr(params.require(:project), params.require(:repo), params.require(:number))
+        render json: notes.map { |n| serialize_note(n) }
+      end
+
+      def create_note
+        note = GitPrNote.create!(
+          user: current_user,
+          project_key: params.require(:project), repo_name: params.require(:repo),
+          pr_number: params.require(:number), content: params.require(:content)
+        )
+        render json: serialize_note(note), status: :created
+      end
+
+      def destroy_note
+        note = GitPrNote.find(params[:id])
+        return render(json: { error: "自分のメモだけ削除できます" }, status: :forbidden) unless note.user_id == current_user.id
+        note.destroy!
+        render json: { ok: true }
+      end
+
       # PR への単発コメント投稿
       def post_comment
         result = client.add_pull_request_comment(
@@ -115,6 +137,11 @@ module Api
       end
 
       private
+
+      def serialize_note(note)
+        { id: note.id, user: note.user.display_name, mine: note.user_id == current_user.id,
+          content: note.content, created: note.created_at.iso8601 }
+      end
 
       def require_setting!
         s = current_user.backlog_setting
