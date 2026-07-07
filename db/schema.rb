@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_07_054525) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_07_090341) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -719,6 +719,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_07_054525) do
     t.text "seal_image"
     t.boolean "invoice_registered", default: false, null: false
     t.string "tax_office"
+    t.string "tax_status", default: "taxable", null: false
     t.index ["canva_oauth_state"], name: "index_users_on_canva_oauth_state"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"

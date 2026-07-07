@@ -63,6 +63,7 @@ module Api
           dev_language: current_user.dev_language,
           admin: current_user.admin?,
           feature_flags: current_user.feature_flags.to_h,
+          tax_status: current_user.tax_status,
           can_use_skill_sheet: current_user.can_use?(:skill_sheet),
           can_use_interview_mindmap: current_user.can_use?(:interview_mindmap),
           can_use_youtube_mindmap: current_user.can_use?(:youtube_mindmap),

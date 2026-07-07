@@ -42,7 +42,7 @@ module Api
       def advice
         year = target_year
         summary = build_summary(year)
-        result = TaxAdvisor.call(user: current_user, summary: summary)
+        result = TaxAdvisor.call(user: current_user, summary: summary, question: params[:question])
         render json: result
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity

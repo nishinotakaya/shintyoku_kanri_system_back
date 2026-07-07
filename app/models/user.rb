@@ -54,6 +54,9 @@ class User < ApplicationRecord
   end
 
   # 機能を使えるか。admin は明示的に false にされた機能以外は使える、フラグ ON のユーザーも true。
+  # 免税事業者か（消費税の納税なし・インボイス未登録前提）。税務アドバイス等の前提を切り替える。
+  def exempt_business? = tax_status == "exempt"
+
   def can_use?(feature)
     return feature_flags.to_h[feature.to_s] != false if admin?
     feature_flags.to_h[feature.to_s] == true
