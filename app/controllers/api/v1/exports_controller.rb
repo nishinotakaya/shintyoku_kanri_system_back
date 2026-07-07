@@ -4,7 +4,7 @@ module Api
   module V1
     class ExportsController < BaseController
       CATEGORY_LABELS = {
-        "wings" => "Wing",
+        "wings" => "Wings",
         "living" => "リビング",
         "techleaders" => "テックリーダーズ",
         "resystems" => "REシステムズ",
@@ -16,7 +16,7 @@ module Api
         cat = params[:category].presence
         target_user = viewing_user  # admin が as_user_id を渡したらそのユーザーで生成
         path = WorkReportExporter.new(target_user, year: year, month: month, category: cat).call
-        filename = category_prefixed("業務報告書_#{year}年_#{month}月分.xlsx", cat, user: target_user, default_label: "Wing")
+        filename = category_prefixed("業務報告書_#{year}年_#{month}月分.xlsx", cat, user: target_user, default_label: "Wings")
         return respond_save_local(:work_report, path, filename, cat, year, month) if save_local?
         send_file path,
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -415,7 +415,7 @@ module Api
 
       # 帳票ファイル名: カテゴリラベル_苗字_<本体> （カテゴリを先頭に置く）
       # 例: "リビング_西野_業務報告書_2026年_6月分.xlsx"
-      # default_label: カテゴリ未指定時に使うラベル（業務報告書は "Wing" を既定にする）
+      # default_label: カテゴリ未指定時に使うラベル（業務報告書は "Wings" を既定にする）
       def category_prefixed(body, category, user: current_user, default_label: nil)
         label = CATEGORY_LABELS[category.to_s] || default_label
         surname = user.display_name.to_s.split(/[\s　]/).first
