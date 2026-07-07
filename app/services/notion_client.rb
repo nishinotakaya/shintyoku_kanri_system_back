@@ -62,6 +62,43 @@ class NotionClient
     end
   end
 
+  # 任意のコレクション(DB)を view 指定で取得する汎用クエリ（ドキュメントハブ等）。
+  def query_collection(collection_id:, view_id:, limit: 200)
+    uri = URI("https://www.notion.so/api/v3/queryCollection?src=initial_load")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    http.read_timeout = 30
+
+    request = Net::HTTP::Post.new(uri)
+    request["accept"] = "*/*"
+    request["content-type"] = "application/json"
+    request["cookie"] = @cookie
+    request["origin"] = "https://www.notion.so"
+    request["user-agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    request["x-notion-active-user-header"] = ACTIVE_USER_ID
+    request["x-notion-space-id"] = SPACE_ID
+    request.body = {
+      clientType: "notion_app",
+      source: { type: "collection", id: collection_id, spaceId: SPACE_ID },
+      collectionView: { id: view_id, spaceId: SPACE_ID },
+      loader: {
+        reducers: { collection_group_results: { type: "results", limit: limit } },
+        sort: [], searchQuery: "", archiveStatus: "NON_ARCHIVED",
+        userId: ACTIVE_USER_ID, userTimeZone: "Asia/Tokyo"
+      }
+    }.to_json
+
+    response = http.request(request)
+    case response.code
+    when "200"
+      JSON.parse(response.body)
+    when "401", "403"
+      raise AuthError, "Notion 認証失敗 (HTTP #{response.code})。token_v2 を更新してください"
+    else
+      raise ApiError, "Notion API エラー HTTP #{response.code}: #{response.body[0, 300]}"
+    end
+  end
+
   private
 
   def build_body

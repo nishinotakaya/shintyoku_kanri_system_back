@@ -293,6 +293,7 @@ Rails.application.routes.draw do
       post  "backlog_activities/export",  to: "backlog_activities#export"
       post  "backlog_activities/export_notion", to: "backlog_activities#export_notion"
       post  "backlog_activities/import_notion", to: "backlog_activities#import_notion"
+      post  "backlog_activities/import_doc_hub", to: "backlog_activities#import_doc_hub"
       post  "backlog_activities/import",  to: "backlog_activities#import"
       patch "backlog_activities/note",    to: "backlog_activities#update_note"
       patch "backlog_activities/notion_task", to: "backlog_activities#update_notion_task"

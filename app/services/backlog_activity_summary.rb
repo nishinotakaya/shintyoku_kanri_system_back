@@ -20,6 +20,7 @@ class BacklogActivitySummary
   end
 
   # 上司報告サマリの行（月×課題の出現順）。
+  # 活動が無い「備考だけの行」（例: Notion ドキュメントハブの資料リンク集）も末尾に出す。
   def rows
     @rows ||= month_issue_pairs.map do |month, issue_key|
       info = issue_data.fetch(issue_key)
@@ -39,7 +40,7 @@ class BacklogActivitySummary
         notion_block_id: note&.notion_block_id.to_s,
         url:             issue_url(issue_key)
       }
-    end
+    end + note_only_rows
   end
 
   def issue_url(issue_key)
@@ -48,6 +49,24 @@ class BacklogActivitySummary
   end
 
   private
+
+  # 活動に紐づかない備考行（月×キーが activities に存在しない BacklogSummaryNote）。
+  # Notion ドキュメントハブの資料リンク集(「資料:○○」行)などがここに出る。
+  def note_only_rows
+    existing = month_issue_pairs
+    notes.filter_map do |(month, issue_key), note|
+      next if existing.include?([ month, issue_key ])
+      next if note.note.blank?
+      {
+        month: month, issue_key: issue_key,
+        summary: "", status: note.status_override.to_s, computed_status: "",
+        status_override: note.status_override.to_s,
+        start_on: "", shori_on: "", done_on: "",
+        note: note.note.to_s, notion_block_id: note.notion_block_id.to_s,
+        url: nil
+      }
+    end.sort_by { |row| [ row[:month].to_s, row[:issue_key].to_s ] }
+  end
 
   def activities
     @activities ||= @user.backlog_activities.order(:occurred_on, :activity_id).to_a

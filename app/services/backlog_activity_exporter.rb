@@ -37,6 +37,7 @@ class BacklogActivityExporter
     ensure_detail_tab!(service, spreadsheet)
     spreadsheet = service.get_spreadsheet(@spreadsheet_id)
 
+    @summary_sheet_id = spreadsheet.sheets.first.properties.sheet_id
     result = update_summary(service, summary_tab)
     rewrite_detail(service, spreadsheet)
 
@@ -64,11 +65,13 @@ class BacklogActivityExporter
   def summary_by_key = @summary_by_key ||= summary.rows.index_by { |r| [ r[:month], r[:issue_key] ] }
 
   def issue_key_from(cell)
-    cell.to_s[/[A-Z]+-\d+/]
+    text = cell.to_s
+    text[/[A-Z]+-\d+/] || (text.strip.start_with?("資料:") ? text.strip : nil) # 「資料:カテゴリ」の備考専用行も突合対象
   end
 
   def link(issue_key)
     return issue_key if @backlog_url.blank?
+    return issue_key unless issue_key =~ /\A[A-Z]+-\d+\z/ # Backlog課題キー以外(資料行など)はリンクにしない
     %Q(=HYPERLINK("#{@backlog_url}/view/#{issue_key}","#{issue_key}"))
   end
 
@@ -98,7 +101,11 @@ class BacklogActivityExporter
       end
       note = info[:note].to_s.strip
       if note.present? && row[COL_NOTE].to_s.strip != note
-        updates << S::ValueRange.new(range: "#{tab}!#{col_letter(COL_NOTE)}#{i + 1}", values: [ [ note ] ])
+        if note =~ URL_RE
+          note_link_cells << [ i, note ] # URL入り備考はリッチテキストリンクで書く
+        else
+          updates << S::ValueRange.new(range: "#{tab}!#{col_letter(COL_NOTE)}#{i + 1}", values: [ [ note ] ])
+        end
       end
     end
     unless updates.empty?
@@ -106,7 +113,39 @@ class BacklogActivityExporter
         value_input_option: "USER_ENTERED", data: updates))
     end
 
-    { filled: updates.size, appended: append_new_rows(service, tab, rows.size, existing_keys) }
+    appended = append_new_rows(service, tab, rows.size, existing_keys)
+    linkify_note_cells(service)
+    { filled: updates.size + note_link_cells.size, appended: appended }
+  end
+
+  # ── 備考セル内の URL をクリック可能なリンク(リッチテキスト)にする ──
+  URL_RE = %r{https?://[^\s)"'　]+}
+
+  def note_link_cells = @note_link_cells ||= []
+
+  def linkify_note_cells(service)
+    requests = note_link_cells.filter_map do |row_index, text|
+      matches = []
+      text.scan(URL_RE) { matches << [ Regexp.last_match.begin(0), Regexp.last_match(0) ] }
+      next if matches.empty?
+      runs = []
+      matches.each do |start_index, url|
+        runs << S::TextFormatRun.new(start_index: start_index, format: S::TextFormat.new(
+          link: S::Link.new(uri: url),
+          foreground_color: S::Color.new(red: 0.06, green: 0.45, blue: 0.87), underline: true))
+        end_index = start_index + url.length
+        runs << S::TextFormatRun.new(start_index: end_index, format: S::TextFormat.new) if end_index < text.length
+      end
+      S::Request.new(update_cells: S::UpdateCellsRequest.new(
+        start: S::GridCoordinate.new(sheet_id: @summary_sheet_id, row_index: row_index, column_index: COL_NOTE),
+        rows: [ S::RowData.new(values: [ S::CellData.new(
+          user_entered_value: S::ExtendedValue.new(string_value: text),
+          text_format_runs: runs,
+          user_entered_format: S::CellFormat.new(wrap_strategy: "WRAP", vertical_alignment: "TOP")) ]) ],
+        fields: "userEnteredValue,textFormatRuns,userEnteredFormat(wrapStrategy,verticalAlignment)"))
+    end
+    return if requests.empty?
+    service.batch_update_spreadsheet(@spreadsheet_id, S::BatchUpdateSpreadsheetRequest.new(requests: requests))
   end
 
   # シートにまだ無い 月×課題 を末尾に追加する。
@@ -121,6 +160,11 @@ class BacklogActivityExporter
     end
     service.update_spreadsheet_value(@spreadsheet_id, "#{tab}!A#{sheet_row_count + 1}",
       S::ValueRange.new(values: values), value_input_option: "USER_ENTERED")
+    # 追加行の備考にURLがあればリンク化対象に積む(0-based行index = 追加開始行 + オフセット)
+    new_keys.each_with_index do |key_pair, offset|
+      note = summary_by_key[key_pair][:note].to_s
+      note_link_cells << [ sheet_row_count + offset, note ] if note =~ URL_RE
+    end
     values.size
   end
 

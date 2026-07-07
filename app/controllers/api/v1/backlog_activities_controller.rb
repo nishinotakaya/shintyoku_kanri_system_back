@@ -89,6 +89,16 @@ module Api
       end
 
       # PATCH /api/v1/backlog_activities/note?user_id=  サマリ1行の備考/状態上書きを保存
+      # POST /api/v1/backlog_activities/import_doc_hub?user_id=
+      # Notion ドキュメントハブの資料URL(ファイル&メディア)を備考「資料:カテゴリ」行にまとめて保存
+      def import_doc_hub
+        user = resolve_target_user or return
+        result = NotionDocHubImporter.new(user).call
+        render json: payload(user).merge(doc_hub: result)
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       def update_note
         user = resolve_target_user or return
         note = user.backlog_summary_notes
