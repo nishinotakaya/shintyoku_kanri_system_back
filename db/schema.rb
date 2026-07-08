@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_08_140000) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_08_150000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -233,6 +233,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_08_140000) do
     t.text "default_repos"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "display_name"
     t.index ["user_id"], name: "index_github_settings_on_user_id"
   end
 

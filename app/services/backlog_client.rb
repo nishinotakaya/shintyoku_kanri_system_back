@@ -184,6 +184,12 @@ class BacklogClient
     get("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests/#{number}")
   end
 
+  # PR のコメント件数（一覧のバッジ表示用）
+  def pull_request_comment_count(project_key, repo_name, number)
+    res = get("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests/#{number}/comments/count")
+    res.is_a?(Hash) ? res["count"].to_i : 0
+  end
+
   # PR コメント一覧（古い順）
   def pull_request_comments(project_key, repo_name, number)
     get("/api/v2/projects/#{project_key}/git/repositories/#{repo_name}/pullRequests/#{number}/comments",

@@ -69,6 +69,7 @@ class GithubClient
       user: pr.dig("user", "login"),
       html_url: pr["html_url"],
       merged: pr["merged"],
+      head_sha: pr.dig("head", "sha"), # ファイル単位レビューコメント投稿に必要な commit_id
       comments: Array(comments).map { |c|
         {
           id: c["id"],
@@ -90,6 +91,30 @@ class GithubClient
     }
   end
 
+  # 自分宛ての通知(メンション・レビュー依頼・参加スレッドの新着コメント等)を取得。
+  # reason: mention / review_requested / comment / assign など。
+  # mention/comment はそのコメント本文も取得して一緒に返す。
+  def notifications(limit: 30)
+    items = Array(get("/notifications", { "all" => "false", "per_page" => 50 }))
+    items.first(limit).map do |item|
+      subject = item["subject"] || {}
+      repo_full_name = item.dig("repository", "full_name")
+      number = subject["url"].to_s[%r{/(?:pulls|issues)/(\d+)\z}, 1]&.to_i
+      comment = latest_comment_for(item, subject)
+      {
+        id: item["id"],
+        reason: item["reason"],
+        repo_full_name: repo_full_name,
+        title: subject["title"],
+        type: subject["type"], # PullRequest / Issue
+        number: number,
+        updated_at: item["updated_at"],
+        html_url: comment&.dig(:html_url) || web_url_for(repo_full_name, subject["type"], number),
+        comment: comment
+      }
+    end
+  end
+
   # PR(issue) へのコメント投稿
   def create_comment(full_name, number, body)
     full_name = validated_full_name(full_name)
@@ -98,6 +123,24 @@ class GithubClient
     {
       id: data["id"],
       user: data.dig("user", "login"),
+      body: data["body"],
+      created_at: data["created_at"],
+      html_url: data["html_url"]
+    }
+  end
+
+  # 変更ファイル単位のレビューコメントを PR に投稿する(公開・即時)。
+  # subject_type: "file" で行指定なしのファイル全体コメントにする。commit_id は PR の head_sha。
+  def create_review_comment(full_name, number, commit_id, path, body)
+    full_name = validated_full_name(full_name)
+    number = validated_number(number)
+    data = post("/repos/#{full_name}/pulls/#{number}/comments", {
+      body: body, commit_id: commit_id, path: path, subject_type: "file"
+    })
+    {
+      id: data["id"],
+      user: data.dig("user", "login"),
+      path: data["path"],
       body: data["body"],
       created_at: data["created_at"],
       html_url: data["html_url"]
@@ -123,6 +166,30 @@ class GithubClient
     Integer(number.to_s.strip)
   rescue ArgumentError, TypeError
     raise "不正なPR番号です: #{number}"
+  end
+
+  # 通知に紐づく最新コメント(あれば)を取得して整形。無ければ nil。
+  def latest_comment_for(item, subject)
+    url = subject["latest_comment_url"].to_s
+    return nil unless url.start_with?("https://api.github.com/") # 想定外URLは叩かない
+    return nil unless %w[mention comment review_requested team_mention author].include?(item["reason"])
+
+    data = request(method: :get, path: url.sub("https://api.github.com", ""))
+    return nil if data.blank?
+    {
+      user: data.dig("user", "login"),
+      body: data["body"].to_s.slice(0, 2000),
+      html_url: data["html_url"]
+    }
+  rescue StandardError
+    nil # コメント取得失敗は通知一覧自体を止めない
+  end
+
+  # 通知アイテムのブラウザ表示URL(コメントが無いとき用)。
+  def web_url_for(repo_full_name, type, number)
+    return nil if repo_full_name.blank? || number.blank?
+    kind = type == "Issue" ? "issues" : "pull"
+    "https://github.com/#{repo_full_name}/#{kind}/#{number}"
   end
 
   def get(path, params = {})

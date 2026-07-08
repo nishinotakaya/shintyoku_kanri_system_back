@@ -41,6 +41,27 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # 変更ファイル単位のレビューコメント投稿
+      def create_review_comment
+        body = params[:body].to_s
+        return render(json: { error: "コメント本文を入力してください" }, status: :unprocessable_entity) if body.blank?
+
+        comment = client.create_review_comment(
+          params.require(:full_name), params.require(:number),
+          params.require(:commit_id), params.require(:path), body
+        )
+        render json: comment, status: :created
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # 自分宛ての通知(メンション・レビュー依頼・コメント等)
+      def notifications
+        render json: client.notifications
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
 
       def default_repo_names

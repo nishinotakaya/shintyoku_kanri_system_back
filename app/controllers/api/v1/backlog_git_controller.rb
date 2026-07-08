@@ -25,12 +25,16 @@ module Api
 
       # PR 一覧（オープン）
       def pull_requests
-        prs = client.pull_requests(params.require(:project), params.require(:repo))
+        project = params.require(:project)
+        repo = params.require(:repo)
+        prs = client.pull_requests(project, repo)
         render json: prs.map { |pr|
           {
             number: pr["number"], summary: pr["summary"], description: pr["description"],
             base: pr["base"], branch: pr["branch"],
-            created_user: pr.dig("created_user", "name"), created: pr["created"]
+            created_user: pr.dig("created_user", "name"), created: pr["created"],
+            # 一覧のコメント数バッジ。件数取得失敗は 0 扱いにして一覧自体は返す
+            comment_count: (client.pull_request_comment_count(project, repo, pr["number"]) rescue 0)
           }
         }
       end

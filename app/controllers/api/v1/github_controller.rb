@@ -29,13 +29,14 @@ module Api
       private
 
       def setting_params
-        params.require(:github_setting).permit(:personal_access_token, :default_repos)
+        params.require(:github_setting).permit(:personal_access_token, :default_repos, :display_name)
       end
 
       def serialize_setting(s)
         {
           has_token: s.personal_access_token.present?,
-          default_repos: s.default_repos
+          default_repos: s.default_repos,
+          display_name: s.display_name
         }
       end
     end
