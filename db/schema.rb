@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_08_000001) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_08_140000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -225,6 +225,15 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_08_000001) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["project_key", "repo_name", "pr_number"], name: "index_git_pr_notes_on_project_key_and_repo_name_and_pr_number"
+  end
+
+  create_table "github_settings", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.text "personal_access_token"
+    t.text "default_repos"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_github_settings_on_user_id"
   end
 
   create_table "heygen_assets", force: :cascade do |t|
@@ -753,6 +762,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_08_000001) do
   add_foreign_key "freee_connections", "users"
   add_foreign_key "generated_thumbnails", "interview_mindmaps"
   add_foreign_key "generated_thumbnails", "users"
+  add_foreign_key "github_settings", "users"
   add_foreign_key "invoice_settings", "users"
   add_foreign_key "invoice_submissions", "users"
   add_foreign_key "purchase_order_histories", "users"

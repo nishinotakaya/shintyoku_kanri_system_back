@@ -11,6 +11,7 @@ class User < ApplicationRecord
   has_many :bank_transactions, dependent: :destroy
   has_many :invoice_settings, dependent: :destroy
   has_one  :backlog_setting, dependent: :destroy
+  has_one  :github_setting, dependent: :destroy
   has_many :backlog_tasks, dependent: :destroy
   has_many :backlog_activities, dependent: :destroy
   has_many :backlog_summary_notes, dependent: :destroy

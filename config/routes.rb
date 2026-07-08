@@ -291,6 +291,14 @@ Rails.application.routes.draw do
       get    "backlog_git/notes",       to: "backlog_git#notes"
       post   "backlog_git/notes",       to: "backlog_git#create_note"
       delete "backlog_git/notes/:id",   to: "backlog_git#destroy_note"
+      # GitHub 連携（PAT 方式）
+      get   "github/setting",        to: "github#show_setting"
+      patch "github/setting",        to: "github#update_setting"
+      post  "github/test",           to: "github#test_connection"
+      get   "github/repositories",   to: "github_repos#repositories"
+      get   "github/pull_requests",  to: "github_repos#pull_requests"
+      get   "github/pr_detail",      to: "github_repos#pr_detail"
+      post  "github/comment",        to: "github_repos#create_comment"
       # Backlog 対応ログ（活動履歴）月次ビュー
       get   "backlog_activities/targets", to: "backlog_activities#targets"
       post  "backlog_activities/sync",    to: "backlog_activities#sync"
