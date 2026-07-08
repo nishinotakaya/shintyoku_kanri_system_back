@@ -173,12 +173,16 @@ class EmailDrafter
         .select { |it| it[:label].to_s.strip.length > 0 }
         .map { |it| "  ・#{it[:label]}：¥#{it[:amount].to_i}" }
         .join("\n")
+      # お振込先: 受取人(申請者)の請求書設定に保存された振込先。空でなければ本文に載せる。
+      bank_info = @context[:bank_info].to_s.strip
+      bank_block = bank_info.empty? ? "" : "\n        - お振込先:\n#{bank_info.split("\n").map { |line| "          #{line.strip}" }.join("\n")}"
+      bank_rule = bank_info.empty? ? "" : "\n        - 「お振込先：」として上記の口座情報を本文の振込金額の近くに、改行を保って明記する（勝手に変えない）"
       <<~PROMPT
         以下情報で、#{recipient_line} 宛に「お振込のご案内」(支払通知書) のメール下書きを作って。
         - 振込日: #{paid_on}
         - 振込金額（税込・合計）: ¥#{grand_total}
         - 内訳:
-        #{breakdown}
+        #{breakdown}#{bank_block}
         - 差出人: #{sender}
         - 添付: 支払通知書 PDF（請求書と同じレイアウト・タイトルのみ「支払通知書」）
 
@@ -188,7 +192,7 @@ class EmailDrafter
         - 自己紹介と署名は必ず「#{sender_surname}」（差出人）で書く
         - 「下記の通りお振込いたしました」「ご確認のほどよろしくお願い申し上げます」のニュアンスを入れる
         - 振込日と振込金額は本文中に明記する（金額は ¥X,XXX,XXX のカンマ区切り）
-        - 内訳が複数ある場合は箇条書きで本文に含める
+        - 内訳が複数ある場合は箇条書きで本文に含める#{bank_rule}
         - 添付の支払通知書 PDF にも同内容が記載されている旨を一言添える
         - 「請求」「請求書」「請求金額」という表現は使わない（あくまで支払側からの通知）
       PROMPT
@@ -489,6 +493,10 @@ class EmailDrafter
       ""
     end
 
+    # お振込先: 受取人(申請者)の請求書設定 bank_info を自動で載せる。外部APIは使わず保存値を使う。
+    bank_info = @context[:bank_info].to_s.strip
+    bank_block = bank_info.empty? ? "" : "お振込先：\n#{bank_info.split("\n").map { |line| "　#{line.strip}" }.join("\n")}"
+
     body_lines = [
       recipient_line,
       "",
@@ -498,9 +506,10 @@ class EmailDrafter
       "",
       "━━━━━━━━━━━━━━━━━━━━",
       "振込日　：#{paid_on_label}",
-      "振込金額：#{fmt.call(grand_total)}（税込）",
-      "━━━━━━━━━━━━━━━━━━━━"
+      "振込金額：#{fmt.call(grand_total)}（税込）"
     ]
+    body_lines += [ "", bank_block ] unless bank_block.empty?
+    body_lines << "━━━━━━━━━━━━━━━━━━━━"
     body_lines += [ "", breakdown_block ] unless breakdown_block.empty?
     body_lines += [
       "",

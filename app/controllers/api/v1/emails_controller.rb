@@ -457,12 +457,16 @@ module Api
         first = subs.first
         # 宛名が指定されていなければ、対象 submission の user 名を採用 (e.g., 川村 卓也)
         default_recipient = first&.user&.display_name
+        # お振込先: 受取人(申請者)の請求書設定 bank_info を自動で載せる。外部APIは不要(保存値を使う)。
+        # 複数申請でも受取人は同一想定なので先頭申請の申請者・カテゴリで解決する。
+        payee_bank_info = first&.user&.invoice_setting_for(first.category)&.bank_info.to_s
         ctx = {
           recipient_name: params[:recipient_name].presence || default_recipient,
           paid_on: params[:paid_on].to_s.presence || Date.current.iso8601,
           grand_total: grand_total,
           breakdown_items: breakdown_items,
           sender_name: current_user.display_name,
+          bank_info: payee_bank_info,
           year: first&.year,
           month: first&.month
         }
