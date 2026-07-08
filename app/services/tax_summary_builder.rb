@@ -11,9 +11,9 @@ class TaxSummaryBuilder
     @year = year
   end
 
-  # 2026年4月以降、ラボップは統合請求書で西野に全額(川村分込み)を振り込む運用。
-  # → 4月以降の川村さんの承認済み請求は「西野の売上」に合算し、同額を「外注工賃」として経費計上する。
-  SUBCONTRACT_FROM = { 2026 => 4 }.freeze # 年 => 合算開始月
+  # ラボップは統合請求書で西野に全額(外注パートナー分込み)を振り込む運用。
+  # → 対象パートナーと合算開始月は users.subcontract_from で管理する(川村=2026-04〜、須崎=2026-06〜)。
+  # 開始月以降の承認済み請求は「西野の売上」に合算し、同額を「外注工賃」として経費計上する。
 
   def call
     expenses = @user.business_expenses.where(expense_date: Date.new(@year, 1, 1)..Date.new(@year, 12, 31)).to_a
@@ -84,15 +84,20 @@ class TaxSummaryBuilder
 
   private
 
-  # 4月以降の川村さん(非admin)の承認済み請求 = 西野の売上に合算 & 外注工賃で控除する対象
+  # 承認済み請求を admin の売上に合算 & 外注工賃で控除する対象パートナー。
+  # 対象と開始月は users.subcontract_from で管理する(null=対象外)。
   def subcontract_incomes
     return @subcontract_incomes if defined?(@subcontract_incomes)
-    from_month = SUBCONTRACT_FROM[@year]
-    return @subcontract_incomes = [] unless from_month && @user.admin?
-    partner_ids = User.where("display_name LIKE ?", "%川村%").pluck(:id)
-    return @subcontract_incomes = [] if partner_ids.empty?
-    @subcontract_incomes = InvoiceSubmission.where(user_id: partner_ids, kind: "invoice", status: "approved", year: @year)
-                                            .where("month >= ?", from_month).includes(:user).to_a
+    return @subcontract_incomes = [] unless @user.admin?
+    partners = User.where.not(subcontract_from: nil).where.not(id: @user.id)
+    return @subcontract_incomes = [] if partners.empty?
+    @subcontract_incomes = partners.flat_map do |partner|
+      started_year = partner.subcontract_from.year
+      next [] if started_year > @year
+      scope = InvoiceSubmission.where(user_id: partner.id, kind: "invoice", status: "approved", year: @year)
+      scope = scope.where("month >= ?", partner.subcontract_from.month) if started_year == @year
+      scope.includes(:user).to_a
+    end
   end
 
   # 小規模事業者の特例納税割合（納付税額 = 売上税額 × この割合）。
