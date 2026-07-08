@@ -503,7 +503,8 @@ module Api
               s.user, year: s.year, month: s.month, category: s.category,
               issuer_user_override: current_user,
               client_name_override: s.user.display_name,
-              title_override: "支払通知書"
+              title_override: "支払通知書",
+              application_date: paid_on # 発行日=振込済にした当日
             ).call
             fname = "#{cat_label}_#{surname.presence || '通知'}_支払通知書_立替金_#{s.year}年_#{s.month}月分.pdf"
             attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
@@ -526,7 +527,10 @@ module Api
             # 支払通知書は「支払い側」が「受領側」に出すもの。
             # 発行者(及び印影)は payer=current_user(西野)、宛名(client)は payee=s.user(川村)。
             issuer_user_override: current_user,
-            client_name_override: s.user.display_name
+            client_name_override: s.user.display_name,
+            # 発行日=振込済にした当日、お振込日=同日(支払期限の計算値ではなく実際の振込日を出す)
+            application_date: paid_on,
+            due_date_override: paid_on
           ).call
           fname = "#{cat_label}_#{surname.presence || '通知'}_支払通知書_#{s.year}年_#{s.month}月分.pdf"
           attachments << { filename: fname, content_type: "application/pdf", body: File.binread(pdf_path) }
