@@ -2,9 +2,10 @@ require "google/apis/sheets_v4"
 
 # 川村さん等の Backlog 対応ログ(BacklogActivity)を、ユーザーが手で整えた
 # 「月次サマリ」シートに【非破壊で】反映する。
-#   サマリ列: 月 / 課題 / 概要 / 状態推移 / 開始日 / 処理済日 / 完了日 / 備考
-#   ・既存行: 空いている日付セル(開始日/処理済日/完了日)だけ埋める。状態・概要・備考・手入力は一切触らない。
+#   サマリ列: 月 / 課題 / 概要 / 状態推移 / 開始日 / 処理済日 / 完了日 / 備考 / 担当者
+#   ・既存行: 空いている日付セル(開始日/処理済日/完了日)と空の担当者だけ埋める。状態・概要・備考・手入力は一切触らない。
 #   ・新規課題(月×課題): 末尾に行を追加。
+#   担当者列(末尾)は、そのログの持ち主(西野 or 川村)を入れて、シート上で担当者フィルタできるようにする。
 #   詳細タブ(対応ログ詳細)は活動ログそのものなので全再生成する。
 class BacklogActivityExporter
   include BacklogSheetAuth
@@ -20,8 +21,9 @@ class BacklogActivityExporter
   COL_SHORI = 5  # 処理済日
   COL_DONE  = 6  # 完了日
   COL_NOTE  = 7  # 備考
+  COL_ASSIGNEE = 8 # 担当者(末尾。西野 or 川村でフィルタするため)
   DATE_COLS = [ COL_START, COL_SHORI, COL_DONE ].freeze
-  SUMMARY_NCOL = 8
+  SUMMARY_NCOL = 9
 
   def initialize(user:, operator:, spreadsheet_url:)
     @user = user
@@ -57,6 +59,9 @@ class BacklogActivityExporter
     ]))
   end
 
+  # 担当者列に入れる名前(このログの持ち主)。西野 or 川村でフィルタするために使う。
+  def assignee_name = @user.display_name.to_s
+
   # ── Backlog 由来の集計 ───────────────────────
   def activities = @activities ||= @user.backlog_activities.order(:occurred_on, :activity_id).to_a
 
@@ -80,12 +85,16 @@ class BacklogActivityExporter
   #         月 / 課題 / 概要 / 状態推移 / 開始日 / 書式 は触らない。
   # 新規行: シートに無い 月×課題 を末尾に追加し、テンプレートにデータが揃うようにする。
   def update_summary(service, tab)
-    rows = service.get_spreadsheet_values(@spreadsheet_id, "#{tab}!A1:H1000").values || [] # FORMATTED(表示値)
+    rows = service.get_spreadsheet_values(@spreadsheet_id, "#{tab}!A1:I1000").values || [] # FORMATTED(表示値)
     header_idx = rows.index { |r| Array(r).include?("課題") }
     raise "サマリシートに『課題』ヘッダが見つかりません（テンプレートを確認してください）。" unless header_idx
 
     existing_keys = {}
     updates = []
+    # 担当者ヘッダが未設定なら書く(既存テンプレは 備考 までの8列想定)
+    if rows[header_idx].to_a[COL_ASSIGNEE].to_s.strip != "担当者"
+      updates << S::ValueRange.new(range: "#{tab}!#{col_letter(COL_ASSIGNEE)}#{header_idx + 1}", values: [ [ "担当者" ] ])
+    end
     (header_idx + 1...rows.size).each do |i|
       row = rows[i] || []
       key = issue_key_from(row[COL_ISSUE])
@@ -98,6 +107,10 @@ class BacklogActivityExporter
         next if val.blank?
         next if row[col].to_s.strip.present? # 既存値(手入力含む)は絶対に上書きしない
         updates << S::ValueRange.new(range: "#{tab}!#{col_letter(col)}#{i + 1}", values: [ [ val.to_s ] ])
+      end
+      # 担当者が空の既存行だけ、このログの持ち主名で埋める(手入力は潰さない)
+      if row[COL_ASSIGNEE].to_s.strip.blank?
+        updates << S::ValueRange.new(range: "#{tab}!#{col_letter(COL_ASSIGNEE)}#{i + 1}", values: [ [ assignee_name ] ])
       end
       note = info[:note].to_s.strip
       if note.present? && row[COL_NOTE].to_s.strip != note
@@ -156,7 +169,7 @@ class BacklogActivityExporter
     values = new_keys.map do |month, key|
       info = summary_by_key[[ month, key ]]
       [ month, link(key), info[:summary], info[:status],
-        info[:start_on], info[:shori_on], info[:done_on], info[:note] ]
+        info[:start_on], info[:shori_on], info[:done_on], info[:note], assignee_name ]
     end
     service.update_spreadsheet_value(@spreadsheet_id, "#{tab}!A#{sheet_row_count + 1}",
       S::ValueRange.new(values: values), value_input_option: "USER_ENTERED")
