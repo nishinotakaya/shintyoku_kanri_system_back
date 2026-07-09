@@ -59,8 +59,15 @@ class BacklogActivityExporter
     ]))
   end
 
-  # 担当者列に入れる名前(このログの持ち主)。西野 or 川村でフィルタするために使う。
-  def assignee_name = @user.display_name.to_s
+  # 担当者列に入れる名前 = その課題の Backlog 上の実担当者(ログの持ち主ではない)。
+  # 課題キーごとに Backlog から取得してキャッシュする。未アサイン/取得失敗は ""。
+  def assignee_for(issue_key)
+    key = issue_key.to_s[/[A-Z]+-\d+/]
+    return "" if key.blank?
+    (@assignee_cache ||= {})[key] ||= backlog_client.fetch_assignee_name(key)
+  end
+
+  def backlog_client = @backlog_client ||= BacklogClient.new(@user.backlog_setting)
 
   # ── Backlog 由来の集計 ───────────────────────
   def activities = @activities ||= @user.backlog_activities.order(:occurred_on, :activity_id).to_a
@@ -108,9 +115,10 @@ class BacklogActivityExporter
         next if row[col].to_s.strip.present? # 既存値(手入力含む)は絶対に上書きしない
         updates << S::ValueRange.new(range: "#{tab}!#{col_letter(col)}#{i + 1}", values: [ [ val.to_s ] ])
       end
-      # 担当者が空の既存行だけ、このログの持ち主名で埋める(手入力は潰さない)
-      if row[COL_ASSIGNEE].to_s.strip.blank?
-        updates << S::ValueRange.new(range: "#{tab}!#{col_letter(COL_ASSIGNEE)}#{i + 1}", values: [ [ assignee_name ] ])
+      # 担当者(派生列)は Backlog の実担当者に合わせる。誤り(旧ロジックのログ持ち主名)や空を上書き修正する。
+      real_assignee = assignee_for(key)
+      if real_assignee.present? && row[COL_ASSIGNEE].to_s.strip != real_assignee
+        updates << S::ValueRange.new(range: "#{tab}!#{col_letter(COL_ASSIGNEE)}#{i + 1}", values: [ [ real_assignee ] ])
       end
       note = info[:note].to_s.strip
       if note.present? && row[COL_NOTE].to_s.strip != note
@@ -169,7 +177,7 @@ class BacklogActivityExporter
     values = new_keys.map do |month, key|
       info = summary_by_key[[ month, key ]]
       [ month, link(key), info[:summary], info[:status],
-        info[:start_on], info[:shori_on], info[:done_on], info[:note], assignee_name ]
+        info[:start_on], info[:shori_on], info[:done_on], info[:note], assignee_for(key) ]
     end
     service.update_spreadsheet_value(@spreadsheet_id, "#{tab}!A#{sheet_row_count + 1}",
       S::ValueRange.new(values: values), value_input_option: "USER_ENTERED")
@@ -181,23 +189,18 @@ class BacklogActivityExporter
     values.size
   end
 
-  # ── 詳細タブ(担当者列つき・他ユーザー行は保持) ───────────────────────
-  #   このユーザー分だけ作り直し、他ユーザー(担当者列が自分以外)の既存行は残す。
-  #   → 西野/川村の詳細が同居し、担当者(G列)でフィルタできる。
-  #   ※旧フォーマット(担当者列なし)の行は作り直しで消えるので、各人が一度エクスポートし直せば揃う。
+  # ── 詳細タブ(全再生成・担当者列つき) ───────────────────────
+  #   詳細タブは「そのユーザーの活動ログ」なので単一ユーザーで全再生成する。
+  #   担当者(G列)は各課題の Backlog 実担当者を入れる(ログ持ち主ではない)。
   def rewrite_detail(service, spreadsheet)
     header = %w[月 日付 課題 概要 種別 内容 担当者]
-    this_user_rows = activities.sort_by { |a| [ a.month, a.occurred_on.to_s, a.activity_id ] }.map do |a|
+    rows = activities.sort_by { |a| [ a.month, a.occurred_on.to_s, a.activity_id ] }.map do |a|
       [ a.month, a.occurred_on.to_s, link(a.issue_key), a.summary.to_s,
-        BacklogActivity::TYPE_LABELS[a.activity_type] || a.activity_type, a.content.to_s.gsub(/\s+/, " "), assignee_name ]
+        BacklogActivity::TYPE_LABELS[a.activity_type] || a.activity_type, a.content.to_s.gsub(/\s+/, " "), assignee_for(a.issue_key) ]
     end
+    values = [ header ] + rows
     sheet = spreadsheet.sheets.find { |s| s.properties.title == DETAIL_TAB }
     sheet_id = sheet.properties.sheet_id
-    # 他ユーザーの既存行を残す。ハイパーリンク式を壊さないよう FORMULA で読む。
-    existing = service.get_spreadsheet_values(@spreadsheet_id, "#{DETAIL_TAB}!A2:G5000", value_render_option: "FORMULA").values || []
-    kept = existing.select { |row| owner = row.to_a[6].to_s.strip; owner.present? && owner != assignee_name }
-
-    values = [ header ] + kept + this_user_rows
     set_text_columns(service, sheet_id, [ 0, 1 ]) # 月・日付
     service.clear_values(@spreadsheet_id, "#{DETAIL_TAB}!A1:Z5000")
     service.update_spreadsheet_value(@spreadsheet_id, "#{DETAIL_TAB}!A1",

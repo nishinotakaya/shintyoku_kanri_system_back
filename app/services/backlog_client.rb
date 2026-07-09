@@ -58,6 +58,18 @@ class BacklogClient
     fetch_issues(project_id: project_id, status_ids: status_ids)
   end
 
+  # 指定 issue の詳細（担当者名の取得などに使う）。取れなければ nil。
+  def fetch_issue(issue_key)
+    get("/api/v2/issues/#{issue_key}")
+  rescue StandardError
+    nil
+  end
+
+  # 指定 issue の担当者名。未アサイン/取得失敗は "" を返す。
+  def fetch_assignee_name(issue_key)
+    fetch_issue(issue_key).to_h.dig("assignee", "name").to_s
+  end
+
   # 指定 issue のコメント一覧（古い順）
   def fetch_comments(issue_key)
     get("/api/v2/issues/#{issue_key}/comments", { "order" => "asc", "count" => 100 })
