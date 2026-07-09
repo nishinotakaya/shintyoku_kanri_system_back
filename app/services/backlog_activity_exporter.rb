@@ -181,18 +181,25 @@ class BacklogActivityExporter
     values.size
   end
 
-  # ── 詳細タブ(全再生成) ───────────────────────
+  # ── 詳細タブ(担当者列つき・他ユーザー行は保持) ───────────────────────
+  #   このユーザー分だけ作り直し、他ユーザー(担当者列が自分以外)の既存行は残す。
+  #   → 西野/川村の詳細が同居し、担当者(G列)でフィルタできる。
+  #   ※旧フォーマット(担当者列なし)の行は作り直しで消えるので、各人が一度エクスポートし直せば揃う。
   def rewrite_detail(service, spreadsheet)
-    header = %w[月 日付 課題 概要 種別 内容]
-    rows = activities.sort_by { |a| [ a.month, a.occurred_on.to_s, a.activity_id ] }.map do |a|
+    header = %w[月 日付 課題 概要 種別 内容 担当者]
+    this_user_rows = activities.sort_by { |a| [ a.month, a.occurred_on.to_s, a.activity_id ] }.map do |a|
       [ a.month, a.occurred_on.to_s, link(a.issue_key), a.summary.to_s,
-        BacklogActivity::TYPE_LABELS[a.activity_type] || a.activity_type, a.content.to_s.gsub(/\s+/, " ") ]
+        BacklogActivity::TYPE_LABELS[a.activity_type] || a.activity_type, a.content.to_s.gsub(/\s+/, " "), assignee_name ]
     end
-    values = [ header ] + rows
     sheet = spreadsheet.sheets.find { |s| s.properties.title == DETAIL_TAB }
     sheet_id = sheet.properties.sheet_id
+    # 他ユーザーの既存行を残す。ハイパーリンク式を壊さないよう FORMULA で読む。
+    existing = service.get_spreadsheet_values(@spreadsheet_id, "#{DETAIL_TAB}!A2:G5000", value_render_option: "FORMULA").values || []
+    kept = existing.select { |row| owner = row.to_a[6].to_s.strip; owner.present? && owner != assignee_name }
+
+    values = [ header ] + kept + this_user_rows
     set_text_columns(service, sheet_id, [ 0, 1 ]) # 月・日付
-    service.clear_values(@spreadsheet_id, "#{DETAIL_TAB}!A1:Z2000")
+    service.clear_values(@spreadsheet_id, "#{DETAIL_TAB}!A1:Z5000")
     service.update_spreadsheet_value(@spreadsheet_id, "#{DETAIL_TAB}!A1",
       S::ValueRange.new(values: values), value_input_option: "USER_ENTERED")
     format_detail(service, sheet_id, values.size)
@@ -201,19 +208,19 @@ class BacklogActivityExporter
   def format_detail(service, sheet_id, nrows)
     reqs = []
     reqs << S::Request.new(repeat_cell: S::RepeatCellRequest.new(
-      range: S::GridRange.new(sheet_id: sheet_id, start_row_index: 0, end_row_index: 1, start_column_index: 0, end_column_index: 6),
+      range: S::GridRange.new(sheet_id: sheet_id, start_row_index: 0, end_row_index: 1, start_column_index: 0, end_column_index: 7),
       cell: S::CellData.new(user_entered_format: S::CellFormat.new(
         background_color: S::Color.new(red: HEADER_BG[:red], green: HEADER_BG[:green], blue: HEADER_BG[:blue]),
         text_format: S::TextFormat.new(bold: true, foreground_color: S::Color.new(red: 1, green: 1, blue: 1)))),
       fields: "userEnteredFormat(backgroundColor,textFormat)"))
     reqs << S::Request.new(repeat_cell: S::RepeatCellRequest.new(
-      range: S::GridRange.new(sheet_id: sheet_id, start_row_index: 1, end_row_index: [ nrows, 1 ].max, start_column_index: 0, end_column_index: 6),
+      range: S::GridRange.new(sheet_id: sheet_id, start_row_index: 1, end_row_index: [ nrows, 1 ].max, start_column_index: 0, end_column_index: 7),
       cell: S::CellData.new(user_entered_format: S::CellFormat.new(wrap_strategy: "WRAP", vertical_alignment: "TOP")),
       fields: "userEnteredFormat(wrapStrategy,verticalAlignment)"))
     reqs << S::Request.new(update_sheet_properties: S::UpdateSheetPropertiesRequest.new(
       properties: S::SheetProperties.new(sheet_id: sheet_id, grid_properties: S::GridProperties.new(frozen_row_count: 1)),
       fields: "gridProperties.frozenRowCount"))
-    [ [ 0, 70 ], [ 1, 90 ], [ 2, 90 ], [ 3, 200 ], [ 4, 90 ], [ 5, 520 ] ].each do |i, px|
+    [ [ 0, 70 ], [ 1, 90 ], [ 2, 90 ], [ 3, 200 ], [ 4, 90 ], [ 5, 520 ], [ 6, 100 ] ].each do |i, px|
       reqs << S::Request.new(update_dimension_properties: S::UpdateDimensionPropertiesRequest.new(
         range: S::DimensionRange.new(sheet_id: sheet_id, dimension: "COLUMNS", start_index: i, end_index: i + 1),
         properties: S::DimensionProperties.new(pixel_size: px), fields: "pixelSize"))
