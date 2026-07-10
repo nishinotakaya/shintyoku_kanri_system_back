@@ -86,6 +86,7 @@ class SkillSheetExporter
     sheet_id = sheet.properties.sheet_id
     title    = sheet.properties.title
     grid     = sheet.properties.grid_properties
+    @sheet_id = sheet_id # grid()/trim_sheet が参照(以前は apply_format 内で設定していたが整形スキップ後も必要)
 
     values     = build_matrix
     total_rows = values.size
