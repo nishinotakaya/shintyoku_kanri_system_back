@@ -513,7 +513,7 @@ class EmailDrafter
     body_lines += [ "", breakdown_block ] unless breakdown_block.empty?
     body_lines += [
       "",
-      "ご査収のほど、何卒よろしくお願い申し上げます。"
+      "ご不明点がございましたらお知らせください。"
     ]
 
     {

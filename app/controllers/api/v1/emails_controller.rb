@@ -441,6 +441,10 @@ module Api
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
         ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
         subs = InvoiceSubmission.where(id: ids).includes(:user, :received_purchase_order)
+        # 振込先・宛名は先頭申請の申請者で解決するため、受取人が混在すると別人の口座宛て通知になる
+        if subs.map(&:user_id).uniq.size > 1
+          return render(json: { error: "申請者が異なる申請が混在しています。振込通知は受取人ごとに分けて送ってください。" }, status: :unprocessable_entity)
+        end
         breakdown_items = subs.map do |s|
           surname = s.user&.display_name.to_s.split(/[\s　]/).first.to_s
           po = s.purchase_order_no_override.presence || s.received_purchase_order&.order_no
@@ -492,6 +496,10 @@ module Api
         # 支払通知書 PDF: 川村さんの請求書をそのまま使い、タイトルだけ「支払通知書」に差替
         # (発行者=川村、振込先=川村の口座、宛先=川村側の請求書クライアント のまま)
         subs = InvoiceSubmission.where(id: ids).includes(:user, :received_purchase_order)
+        # 受取人が混在すると別人の口座宛て通知＋paid_at一括更新になるため単一申請者のみ許可
+        if subs.map(&:user_id).uniq.size > 1
+          return render(json: { error: "申請者が異なる申請が混在しています。振込通知は受取人ごとに分けて送ってください。" }, status: :unprocessable_entity)
+        end
         attachments = []
         subs.each do |s|
           surname = s.user&.display_name.to_s.split(/[\s　]/).first.to_s
