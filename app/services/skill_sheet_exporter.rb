@@ -96,7 +96,8 @@ class SkillSheetExporter
       Google::Apis::SheetsV4::ValueRange.new(values: values),
       value_input_option: "RAW"
     )
-    apply_format(service, sheet_id, total_rows)
+    # レイアウト整形(apply_format)は書き出しでは行わない(2026-07-10 西野さん指示:「整形はいらない、書き出すだけ」)。
+    # シート側の見た目は手整形を尊重し、ここでは値と期間数式だけ書く。
     write_period_formulas(service, title)  # 期間を実日付化し、補足セルに DATEDIF 関数を入れる
     trim_sheet(service, sheet_id, total_rows, grid&.row_count.to_i, grid&.column_count.to_i) # 本文より下・右の空行列を削除
 
