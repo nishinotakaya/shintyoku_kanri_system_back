@@ -25,13 +25,14 @@ class BacklogToSkillSheetProjectBuilder
     ■ 最重要ルール(事実ベース):
     - 課題タイトル・内容から読み取れる技術/作業のみ書き、創作しない。
     - 読み取れない欄は空文字にする。
+    - 課題管理ツールは Backlog である(Jira と書かない)。素材に無いツール名を推測で足さない。
     - description は「・」始まりの箇条書きで5〜10行、実際の課題内容(機能名・改修内容)を具体的に書く。
 
     ■ languages/db/server_os/tools のカテゴリ分けルール:
     - languages: Ruby/JavaScript/TypeScript/Java/Python/PHP 等の言語
     - db: MySQL/PostgreSQL/Oracle/SQLite 等
     - server_os: Linux/CentOS/Amazon Linux/Heroku/AWS/GCP 等
-    - tools: Rails/React/Vue/Next.js 等のフレームワークと、Git/GitHub/Docker/Jira 等のその他ツールの両方
+    - tools: Rails/React/Vue/Next.js 等のフレームワークと、Git/GitHub/Docker/Backlog 等のその他ツールの両方
     - name は正式表記に統一する("rails"→"Ruby on Rails", "TS"→"TypeScript", "postgres"→"PostgreSQL")
     - 区切り(・ / 、, 改行, カンマ, スラッシュ)で並ぶものは1つずつに分解して改行区切りで返す。
   SYS
