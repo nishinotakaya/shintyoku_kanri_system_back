@@ -31,6 +31,7 @@ Rails.application.routes.draw do
           post :export
           post :analyze_tech
           post :suggest_techs
+          post :generate_project_from_activities
           post :set_before
           get  :comments
           post "comments", action: :add_comment

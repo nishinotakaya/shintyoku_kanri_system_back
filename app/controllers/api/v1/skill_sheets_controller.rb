@@ -199,6 +199,16 @@ module Api
         render_error(e.message)
       end
 
+      # POST /api/v1/skill_sheets/:id/generate_project_from_activities
+      # 対応ログ(Backlog活動+Notionタスク)から職務経歴(案件)を1件 AI 生成し保存する。
+      def generate_project_from_activities
+        sheet = find_sheet or return
+        project = BacklogToSkillSheetProjectBuilder.new(skill_sheet: sheet, user: current_user).call
+        render json: { project: project }
+      rescue => e
+        render_error(e.message)
+      end
+
       # POST /api/v1/skill_sheets/:id/export  DB → スプレッドシート書き戻し + 整形
       # クリエイター(デザイン/動画編集)テンプレの人は専用エクスポータで「値だけ流し込む」。
       def export
