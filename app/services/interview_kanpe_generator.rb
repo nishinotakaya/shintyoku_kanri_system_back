@@ -1,5 +1,6 @@
 # マインドマップ(動画タイトル)から、撮影中に本人がチラ見して話す「カンペ(cue sheet)」を AI 生成する。
 # 台本(InterviewVideoScriptGenerator)と違い、本編の各要点は「未来/問題/原因/解決」のラベルを見せたまま書く。
+# mindmap.kanpe_style で sales(西野式セールス・既定) / app_build(アプリを作る完全台本) を切り替える。
 class InterviewKanpeGenerator
   # user: OpenAIキー解決用(操作者) / mindmap: カンペの元になるマインドマップ(動画タイトル・スキルシートの持ち主)
   def initialize(user:, mindmap:)
@@ -17,12 +18,18 @@ class InterviewKanpeGenerator
   private
 
   def youtube_mindmap? = @mindmap.respond_to?(:youtube?) && @mindmap.youtube?
+  def app_build? = @mindmap.respond_to?(:app_build_kanpe?) && @mindmap.app_build_kanpe?
 
   # 西野式 YouTube セールス カンペテンプレート(挨拶→企画コール→本編→誘導)。
   # 本文は config/locales/prompts.ja.yml (prompts.kanpe.template) に集約。
   def self.template_text = I18n.t("prompts.kanpe.template")
 
+  # アプリを作る完全台本テンプレート(フック→オープニング→デモ→AI時代の価値→副業→CTA)。
+  # 本文は config/locales/prompts.ja.yml (prompts.kanpe.app_build_template) に集約。
+  def self.app_build_template_text = I18n.t("prompts.kanpe.app_build_template")
+
   def sys_prompt
+    return app_build_sys_prompt if app_build?
     <<~SYS
       あなたはYouTube動画のセールス構成作家です。撮影中に本人がチラ見して話すための『カンペ(cue sheet)』を作ります。
       次の JSON で返してください: { "kanpe": "カンペ全文" }
@@ -52,6 +59,27 @@ class InterviewKanpeGenerator
     SYS
   end
 
+  def app_build_sys_prompt
+    <<~SYS
+      あなたはYouTube教育系動画の構成作家です。「AIツールでアプリをゼロから作って見せる」動画の撮影用完全台本を作ります。
+      次の JSON で返してください: { "kanpe": "台本全文" }
+      【出力フォーマット】
+      - 次の【見出し】で必ず区切る(この見出し文字列は固定。フロントがこれでパースする):
+        【フック】【オープニング】【ツール説明】【デモ準備】【デモ お願いする】【デモ AIが作る様子】【デモ 完成・動作確認】【AI時代の価値】【副業への繋げ方】【今日からの3ステップ+CTA】【デモ用プロンプト】
+      - 各セクションの本文は、本人がそのまま声に出して読めるセリフを「」で書く。
+      - セリフの合間に、`> 【画面】...` `> 【テロップ】...` の形式で演出指示行を入れる(行頭を > にする)。
+      【最重要: テーマの一貫性】
+      - 台本全体は必ず【動画タイトル/テーマ】の内容に直結させる。デモ題材はタイトルとマインドマップから導く。
+      - ペルソナや参考資料に過去の台本があっても、そのテーマをそのまま流用しない。ペルソナは「名乗り・経歴・数字・実績」の事実の出典としてだけ使う。
+      【スタイル】
+      - 煽らない。「まだAIだけで完璧なわけではない」と正直に言う。等身大のトーン。
+      - 【オープニング】では必ず本人のフルネームを名乗る。事実(経歴・数字)はペルソナ/スキルシートにある範囲のみ。創作しない。
+      - 専門用語は避け、プログラミング未経験者に伝わる言葉で。
+      【分量】
+      - 全体で3500〜5000字。デモの3セクション(お願いする/AIが作る様子/完成・動作確認)を最も厚くする。
+    SYS
+  end
+
   def prompt
     parts = []
     parts << "【出演者】#{@persona_user.display_name}"
@@ -65,7 +93,8 @@ class InterviewKanpeGenerator
     end
     answers = @mindmap.nodes.where(kind: "answer").order(:position).limit(8).pluck(:text).reject(&:blank?)
     parts << "【マインドマップで用意した回答(参考)】\n#{answers.map { |a| "・#{a}" }.join("\n")}" if answers.any?
-    parts << "\n【守るべきテンプレート構成】\n#{self.class.template_text}"
+    template_text = app_build? ? self.class.app_build_template_text : self.class.template_text
+    parts << "\n【守るべきテンプレート構成】\n#{template_text}"
     parts << "\n上記テンプレート構成に沿って、動画タイトルのテーマで本人が読むカンペを作ってください。"
     parts.join("\n")
   end
