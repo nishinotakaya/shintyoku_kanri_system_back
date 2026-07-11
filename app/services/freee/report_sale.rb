@@ -63,11 +63,21 @@ module Freee
       @preview_only = preview_only
       @transaction_type = transaction_type.to_s
       @tax_rate = tax_rate&.to_i
-      @partner_id = (@invoice[:partner_id] || self.class.resolve_partner_id(@invoice[:category] || "wings")).to_i
+      # 経費(expense)は freee 上でも取引先なしで登録できるため、partner_id は任意(nil可)。
+      # 売上(income)は従来どおりカテゴリ既定値へフォールバックし、未解決なら例外。
+      @partner_id =
+        if @transaction_type == "expense"
+          value = @invoice[:partner_id].to_i
+          value.zero? ? nil : value
+        else
+          (@invoice[:partner_id] || self.class.resolve_partner_id(@invoice[:category] || "wings")).to_i
+        end
       @account_item_id = (account_item_id ||
                           (@transaction_type == "expense" ? DEFAULT_ACCOUNT_ITEM_OUTSOURCING : ACCOUNT_ITEM_SALES)).to_i
       raise "company_id 未設定。FREEE_COMPANY_ID を設定してください。" if @company_id.blank?
-      raise "partner_id 未設定 (category=#{@invoice[:category]})。FREEE_PARTNER_<CATEGORY> を設定してください。" if @partner_id.zero?
+      if @transaction_type != "expense" && @partner_id.to_i.zero?
+        raise "partner_id 未設定 (category=#{@invoice[:category]})。FREEE_PARTNER_<CATEGORY> を設定してください。"
+      end
       if @transaction_type == "expense" && @account_item_id.zero?
         raise "account_item_id 未設定 (経費連携)。FREEE_ACCOUNT_ITEM_OUTSOURCING を設定してください。"
       end

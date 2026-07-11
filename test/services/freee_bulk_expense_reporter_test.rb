@@ -70,7 +70,8 @@ class FreeeBulkExpenseReporterTest < Minitest::Test
     refute expense.reload.freee_synced?
   end
 
-  def test_blank_store_name_is_failed
+  # 取引先は任意項目: 店名なし(取引先未解決)でも失敗にせず、取引先なしで計上する
+  def test_blank_store_name_still_succeeds_without_partner
     expense = create_expense(account_category: "旅費交通費", store_name: nil, freee_synced: false)
     reporter = build_reporter(
       account_item_lookup: stub_account_item_lookup("旅費交通費" => 501),
@@ -80,8 +81,8 @@ class FreeeBulkExpenseReporterTest < Minitest::Test
 
     result = reporter.call([ expense.id ])
 
-    assert_equal 1, result.failed.size
-    assert_equal "店名が未入力です", result.failed.first[:reason]
+    assert_equal 1, result.succeeded.size
+    assert expense.reload.freee_synced?
   end
 
   def test_report_sale_failure_is_failed_with_reason

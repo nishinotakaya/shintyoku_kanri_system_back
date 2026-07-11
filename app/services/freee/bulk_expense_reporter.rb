@@ -50,13 +50,9 @@ module Freee
         return { status: :failed, payload: { id: expense.id, reason: "勘定科目『#{expense.account_category}』をfreeeで解決/作成できませんでした" } }
       end
 
-      if expense.store_name.blank?
-        return { status: :failed, payload: { id: expense.id, reason: "店名が未入力です" } }
-      end
-      partner_id = @partner_lookup.find_or_create(name: expense.store_name)
-      if partner_id.nil?
-        return { status: :failed, payload: { id: expense.id, reason: "取引先『#{expense.store_name}』の解決に失敗しました" } }
-      end
+      # 取引先は「あれば紐づける」任意項目。経費は freee 上でも取引先なしで登録できるため、
+      # 未解決(店名なし/freeeの取引先作成失敗)でも失敗にせず、取引先なしで計上する(店名は摘要に残る)。
+      partner_id = expense.store_name.present? ? @partner_lookup.find_or_create(name: expense.store_name) : nil
 
       result = @report_sale_class.new(
         invoice: {
