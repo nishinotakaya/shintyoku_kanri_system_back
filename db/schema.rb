@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_08_150000) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_11_000000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -94,6 +94,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_08_150000) do
     t.string "url"
     t.boolean "did_previous", default: false, null: false
     t.boolean "do_today", default: false, null: false
+    t.integer "progress_workspace_id"
+    t.index ["progress_workspace_id"], name: "index_backlog_tasks_on_progress_workspace_id"
     t.index ["user_id"], name: "index_backlog_tasks_on_user_id"
   end
 
@@ -460,6 +462,17 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_08_150000) do
     t.index ["start_date", "end_date"], name: "index_notion_tasks_on_start_date_and_end_date"
   end
 
+  create_table "progress_workspaces", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "name", null: false
+    t.string "source_type", default: "manual", null: false
+    t.boolean "builtin", default: false, null: false
+    t.integer "position", default: 0
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_progress_workspaces_on_user_id"
+  end
+
   create_table "purchase_order_histories", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "category"
@@ -766,6 +779,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_08_150000) do
   add_foreign_key "github_settings", "users"
   add_foreign_key "invoice_settings", "users"
   add_foreign_key "invoice_submissions", "users"
+  add_foreign_key "progress_workspaces", "users"
   add_foreign_key "purchase_order_histories", "users"
   add_foreign_key "purchase_order_histories", "users", column: "recipient_user_id"
   add_foreign_key "purchase_order_settings", "users"

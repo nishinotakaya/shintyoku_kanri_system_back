@@ -264,6 +264,7 @@ Rails.application.routes.draw do
       patch "backlog/setting",    to: "backlog#update_setting"
       post  "backlog/test",       to: "backlog#test_connection"
       post  "backlog/sync",       to: "backlog#sync"
+      post  "backlog/sync_notion", to: "backlog#sync_notion"
       get   "backlog/tasks",      to: "backlog#tasks"
       get   "backlog/tasks_on_date", to: "backlog#tasks_on_date"
       get   "backlog/tasks/:issue_key/comments", to: "backlog#task_comments"
@@ -321,6 +322,9 @@ Rails.application.routes.draw do
           post :sync
         end
       end
+
+      # 進捗管理(/progress)のワークスペース切替
+      resources :progress_workspaces, only: [ :index, :create, :update, :destroy ]
     end
   end
 

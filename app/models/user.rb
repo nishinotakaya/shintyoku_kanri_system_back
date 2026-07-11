@@ -13,6 +13,7 @@ class User < ApplicationRecord
   has_one  :backlog_setting, dependent: :destroy
   has_one  :github_setting, dependent: :destroy
   has_many :backlog_tasks, dependent: :destroy
+  has_many :progress_workspaces, dependent: :destroy
   has_many :backlog_activities, dependent: :destroy
   has_many :backlog_summary_notes, dependent: :destroy
   has_many :backlog_completions, dependent: :destroy

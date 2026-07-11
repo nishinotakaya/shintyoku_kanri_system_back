@@ -32,6 +32,15 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/backlog/sync_notion
+      # NotionTask 全件を builtin の「リビング」ワークスペースへ upsert する。
+      def sync_notion
+        synced = NotionTaskSyncService.new(current_user).call
+        render json: { synced: synced }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       def reorder
         ids = params[:ids] || []
         ids.each_with_index do |id, i|
@@ -43,6 +52,8 @@ module Api
       def update_task
         task = current_user.backlog_tasks.find(params[:id])
         permitted = params.permit(:memo, :summary, :start_date, :end_date, :status_id, :progress_value, :deploy_date, :deploy_note, :url, :assignee_name, :did_previous, :do_today)
+        # ワークスペース間のタスク移動 (ワークスペース削除前の退避などで使う)
+        permitted[:progress_workspace_id] = params[:workspace_id] if params[:workspace_id].present?
         if permitted[:status_id].present?
           permitted[:status_name] = BacklogTask::STATUS_NAMES[permitted[:status_id].to_i]
           if permitted[:status_id].to_i == 4 && task.completed_on.nil?
@@ -72,6 +83,7 @@ module Api
         # カレンダーから日付指定で作る場合は start_date/end_date を渡してその日だけ表示
         attrs[:start_date] = params[:start_date] if params[:start_date].present?
         attrs[:end_date]   = params[:end_date]   if params[:end_date].present?
+        attrs[:progress_workspace_id] = params[:workspace_id] if params[:workspace_id].present?
         task = current_user.backlog_tasks.create!(attrs)
         render json: serialize_task(task), status: :created
       end
@@ -141,6 +153,8 @@ module Api
 
       def tasks
         tasks = current_user.backlog_tasks.order(:status_id, Arel.sql("COALESCE(position, 9999)"), :issue_key)
+        # ワークスペースでフィルタ (未指定時は従来どおり全件=後方互換)
+        tasks = tasks.where(progress_workspace_id: params[:workspace_id]) if params[:workspace_id].present?
         # ステータスでフィルタ
         if params[:status_ids].present?
           ids = params[:status_ids].split(",").map(&:to_i)
@@ -360,7 +374,8 @@ module Api
           deploy_date: t.deploy_date, deploy_note: t.deploy_note,
           source: t.source, assignee_name: t.assignee_name, assignee_id: t.assignee_id,
           url: t.url,
-          did_previous: t.did_previous, do_today: t.do_today
+          did_previous: t.did_previous, do_today: t.do_today,
+          progress_workspace_id: t.progress_workspace_id
         }
       end
     end

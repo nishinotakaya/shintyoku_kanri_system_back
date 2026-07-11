@@ -1,5 +1,6 @@
 class BacklogTask < ApplicationRecord
   belongs_to :user
+  belongs_to :progress_workspace, optional: true
 
   STATUS_PROGRESS = { 1 => 0.0, 2 => 0.4, 3 => 0.8, 4 => 1.0 }.freeze
   STATUS_NAMES = { 1 => "未対応", 2 => "処理中", 3 => "処理済", 4 => "完了" }.freeze

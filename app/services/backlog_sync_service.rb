@@ -8,6 +8,9 @@ class BacklogSyncService
   end
 
   def call
+    ProgressWorkspace.ensure_defaults!(@user)
+    wing_workspace_id = @user.progress_workspaces.find_by(builtin: true, source_type: "backlog")&.id
+
     client = BacklogClient.new(@setting)
     name_filter = @setting.assignee_name_filter.to_s.strip
     overwrite_mode = name_filter.present?
@@ -36,6 +39,8 @@ class BacklogSyncService
         task.assignee_name = issue.dig("assignee", "name")
         task.assignee_id = issue.dig("assignee", "id")
         task.url = "#{@setting.backlog_url.chomp('/')}/view/#{issue['issueKey']}"
+        # 既に別ワークスペースへ手動で移動済みのタスクは触らない
+        task.progress_workspace_id = wing_workspace_id if task.progress_workspace_id.blank?
 
         # 完了ステータス(4)なら completed_on を記録
         if task.status_id == 4 && task.completed_on.nil?
