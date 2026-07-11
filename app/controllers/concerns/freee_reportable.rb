@@ -35,9 +35,11 @@ module FreeeReportable
     end
   end
 
-  # cookie が 12 時間以内なら use、それ以外は再ログイン。
+  # cookie が 10 分以内なら use、それ以外は再ログイン。
+  # (freee セッションは別ログイン等で12時間より早く無効化されることがあり、
+  #  古い cookie のまま進めると内部APIが一律401になるため、ほぼ毎回取り直す)
   def refresh_freee_session!(conn)
-    return true if conn.session_cookie.present? && conn.last_connected_at && conn.last_connected_at >= 12.hours.ago
+    return true if conn.session_cookie.present? && conn.last_connected_at && conn.last_connected_at >= 10.minutes.ago
     login = Freee::SessionLogin.new(identity: conn.identity, password: conn.password_encrypted).call
     return false unless login.ok?
     conn.update!(
