@@ -143,6 +143,28 @@ class InterviewKanpeGeneratorTest < Minitest::Test
     assert_includes template_text, "【LINE誘導】"
   end
 
+  # 4-a. kanpe_style="app_build" の mindmap では、プロンプトに app_build テンプレの見出し(【フック】)が含まれ、
+  #      sales テンプレの見出し(【企画コール】)は含まれない
+  def test_prompt_uses_app_build_template_when_kanpe_style_is_app_build
+    @mindmap.update!(kanpe_style: "app_build")
+    generator = InterviewKanpeGenerator.new(user: @operator_user, mindmap: @mindmap)
+
+    prompt = generator.send(:prompt)
+
+    assert_includes prompt, "【フック】"
+    refute_includes prompt, "【企画コール】"
+  end
+
+  # 4-b. 既定(kanpe_style="sales")では従来どおり sales テンプレの見出し(【企画コール】)が含まれる
+  def test_prompt_uses_sales_template_by_default
+    generator = InterviewKanpeGenerator.new(user: @operator_user, mindmap: @mindmap)
+
+    prompt = generator.send(:prompt)
+
+    assert_includes prompt, "【企画コール】"
+    refute_includes prompt, "【フック】"
+  end
+
   private
 
   # 対象(module/class)のメソッドをブロックの間だけ差し替え、終了後に必ず元へ戻す。

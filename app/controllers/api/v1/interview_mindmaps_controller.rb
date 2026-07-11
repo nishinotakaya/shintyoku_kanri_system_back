@@ -44,7 +44,8 @@ module Api
         end
         sheet = target.skill_sheet
         title = params[:title].presence || default_title_for(mode, target)
-        map = InterviewMindmap.create!(user: target, skill_sheet: sheet, mode: mode, title: title)
+        map = InterviewMindmap.create!(user: target, skill_sheet: sheet, mode: mode, title: title,
+                                       kanpe_style: params[:kanpe_style].presence || "sales")
         map.nodes.create!(kind: "root", text: root_text_for(mode, target, title), position: 0)
         render json: map.reload.as_payload.merge(user: user_brief(target)), status: :created
       rescue => e
@@ -57,6 +58,7 @@ module Api
         m = find_map or return
         m.update!(title: params[:title]) if params[:title].present?
         m.update!(kanpe_script: params[:kanpe_script].to_s) if params.key?(:kanpe_script)
+        m.update!(kanpe_style: params[:kanpe_style]) if params[:kanpe_style].present?
         m.nodes.find_by(kind: "root")&.update!(text: m.title) if m.youtube?
         render json: m.reload.as_payload.merge(user: user_brief(m.user))
       rescue => e

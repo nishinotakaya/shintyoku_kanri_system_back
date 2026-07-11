@@ -6,6 +6,11 @@ class InterviewMindmap < ApplicationRecord
 
   MODES = %w[interview youtube mote].freeze
 
+  # カンペ生成スタイル。sales=西野式セールステンプレ(既定) / app_build=Claude Codeでアプリを作る完全台本テンプレ
+  KANPE_STYLES = %w[sales app_build].freeze
+
+  validates :kanpe_style, inclusion: { in: KANPE_STYLES }
+
   # YouTubeインタビュー動画用の固定質問バンク(西野提供)。本人が一人称で語る前提。
   YOUTUBE_QUESTIONS = [
     "まずは簡単に自己紹介をお願いします。",
@@ -53,6 +58,7 @@ class InterviewMindmap < ApplicationRecord
 
   def youtube? = mode == "youtube"
   def mote? = mode == "mote"
+  def app_build_kanpe? = kanpe_style == "app_build"
 
   def as_payload
     {
@@ -63,6 +69,7 @@ class InterviewMindmap < ApplicationRecord
       mode: mode,
       spreadsheet_url: spreadsheet_url,
       kanpe_script: kanpe_script,
+      kanpe_style: kanpe_style,
       nodes: nodes.map(&:as_payload)
     }
   end
