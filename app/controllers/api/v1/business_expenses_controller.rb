@@ -3,6 +3,7 @@ module Api
     # 確定申告用の事業経費 (レシート撮影→AI読取→勘定科目分類)。
     # Phase 1 は西野(admin)専用。立替金(expenses)とは完全別管理。
     class BusinessExpensesController < BaseController
+      include FreeeReportable
       before_action :require_admin
       before_action :set_record, only: [ :update, :destroy, :receipt ]
 
@@ -165,6 +166,32 @@ module Api
           end_date: params[:end_date].presence || Date.current.to_s
         )
         render json: { rows: rows, count: rows.size, duplicate_count: rows.count { |r| r[:duplicate] } }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/business_expenses/report_bulk_to_freee  { ids: [] }
+      # 選択した経費のうち freee 未連携分(freee_synced: false)を一括計上する。連携済みはスキップ扱い。
+      def report_bulk_to_freee
+        ids = Array(params[:ids]).map(&:to_i).reject(&:zero?)
+        return render(json: { error: "対象を選択してください" }, status: :unprocessable_entity) if ids.empty?
+
+        conn = current_user.freee_connection
+        return render(json: { error: "freee 未接続です。設定から接続してください" }, status: :bad_request) unless conn&.identity
+        return render(json: { error: "freee 再ログインに失敗しました" }, status: :bad_request) unless refresh_freee_session!(conn)
+
+        result = Freee::BulkExpenseReporter.new(user: current_user, connection: conn).call(ids)
+        render json: { succeeded: result.succeeded, skipped: result.skipped, failed: result.failed }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/business_expenses/bulk_destroy  { ids: [] }
+      # 選択した経費を一括削除する。current_user 所有分以外は対象外(黙って無視)。
+      def bulk_destroy
+        ids = Array(params[:ids]).map(&:to_i).reject(&:zero?)
+        deleted = current_user.business_expenses.where(id: ids).destroy_all
+        render json: { deleted: deleted.size }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end

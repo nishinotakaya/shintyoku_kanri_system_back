@@ -152,6 +152,8 @@ Rails.application.routes.draw do
           post :import_freee       # freee登録済み経費(deal)を取込
           post :sync_freee_banks   # freee連携の全口座(銀行+クレカ)を同期
           get  :freee_wallet_txns  # freee「自動で経理」: 未処理明細+推奨科目
+          post :report_bulk_to_freee # 選択した経費のうちfreee未連携分を一括計上
+          post :bulk_destroy       # 選択した経費を一括削除
         end
       end
       # freee連携口座の明細台帳(銀行/カード)。同期→未登録明細→経費登録

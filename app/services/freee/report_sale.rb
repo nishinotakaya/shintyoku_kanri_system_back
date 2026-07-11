@@ -34,6 +34,10 @@ module Freee
     # 経費用 (env で上書き可能)
     DEFAULT_ACCOUNT_ITEM_OUTSOURCING = (ENV["FREEE_ACCOUNT_ITEM_OUTSOURCING"] || 0).to_i  # 外注費
     TAX_CODE_EXPENSE_10 = 21  # 課税仕入 10% (freee 既定値、必要なら env で上書き)
+    # 8%(軽減税率)/対象外の tax_code は freee 実環境での実測値が無いため env で上書き前提の暫定値。
+    # 本番投入前に実際の計上結果を確認し、必要なら env FREEE_TAX_CODE_EXPENSE_8 / FREEE_TAX_CODE_EXPENSE_0 で補正する。
+    TAX_CODE_EXPENSE_8 = (ENV["FREEE_TAX_CODE_EXPENSE_8"] || 22).to_i  # 課税仕入 8%(軽減税率対象)
+    TAX_CODE_EXPENSE_0 = (ENV["FREEE_TAX_CODE_EXPENSE_0"] || 0).to_i   # 対象外仕入
 
     # category から partner_id を解決する。
     # 1) ENV FREEE_PARTNER_<UPCASE_CATEGORY> > 2) PARTNERS_BY_CATEGORY > 3) 既定でラボップ
@@ -51,12 +55,14 @@ module Freee
     # company_id_override: env で渡される company_id を優先
     # transaction_type: 'income' (売上) | 'expense' (経費)
     # account_item_id: 経費の場合は外注費等の科目 id (env or 引数)
-    def initialize(invoice:, connection:, company_id: nil, preview_only: false, transaction_type: "income", account_item_id: nil)
+    # tax_rate: 経費の税率 (10/8/0)。income は既存通り常に 10% 固定で挙動を変えない。
+    def initialize(invoice:, connection:, company_id: nil, preview_only: false, transaction_type: "income", account_item_id: nil, tax_rate: nil)
       @invoice = invoice
       @conn = connection
       @company_id = (company_id || @conn.company_id || ENV["FREEE_COMPANY_ID"]).to_s
       @preview_only = preview_only
       @transaction_type = transaction_type.to_s
+      @tax_rate = tax_rate&.to_i
       @partner_id = (@invoice[:partner_id] || self.class.resolve_partner_id(@invoice[:category] || "wings")).to_i
       @account_item_id = (account_item_id ||
                           (@transaction_type == "expense" ? DEFAULT_ACCOUNT_ITEM_OUTSOURCING : ACCOUNT_ITEM_SALES)).to_i
@@ -69,7 +75,7 @@ module Freee
 
     def call
       total = @invoice[:total_amount].to_i
-      vat = (total * 10.0 / 110.0).round
+      vat = compute_vat(total)
       due = @invoice[:due_date].to_s
 
       # 0) accounting アプリの context を取得（cu_cid cookie + 最新 CSRF）
@@ -109,6 +115,26 @@ module Freee
       @effective_csrf = ctx.csrf
     end
 
+    # 消費税額。income は既存通り 10%内税で固定。expense は tax_rate (8/0/それ以外=10) で算出する。
+    def compute_vat(total)
+      return (total * 10.0 / 110.0).round unless @transaction_type == "expense"
+      case @tax_rate
+      when 8 then (total * 8.0 / 108.0).round
+      when 0 then 0
+      else (total * 10.0 / 110.0).round
+      end
+    end
+
+    # freee 内部 API の tax_code。income は既存通り TAX_CODE_INCOME_10 固定。
+    def tax_code
+      return TAX_CODE_INCOME_10 unless @transaction_type == "expense"
+      case @tax_rate
+      when 8 then TAX_CODE_EXPENSE_8
+      when 0 then TAX_CODE_EXPENSE_0
+      else TAX_CODE_EXPENSE_10
+      end
+    end
+
     def preview_payload(total, vat, due)
       {
         deal: {
@@ -120,7 +146,7 @@ module Freee
                 default_tags_name: "",
                 description: @invoice[:subject].to_s,
                 qty: 1,
-                tax_code: (@transaction_type == "expense" ? TAX_CODE_EXPENSE_10 : TAX_CODE_INCOME_10),
+                tax_code: tax_code,
                 tax_entry_method: TAX_ENTRY_METHOD_INCLUDED,
                 type: "positive",
                 unit_price: total,
@@ -138,7 +164,6 @@ module Freee
     end
 
     def deal_payload(total, vat, due)
-      tax_code = @transaction_type == "expense" ? TAX_CODE_EXPENSE_10 : TAX_CODE_INCOME_10
       {
         details: [ {
           account_item_id: @account_item_id,

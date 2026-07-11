@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_11_000000) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_11_120000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -144,6 +144,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_000000) do
     t.string "payment_source"
     t.string "payment_method"
     t.boolean "freee_synced", default: false, null: false
+    t.integer "freee_deal_id"
     t.index ["user_id", "expense_date"], name: "index_business_expenses_on_user_id_and_expense_date"
     t.index ["user_id", "import_hash"], name: "index_business_expenses_on_user_id_and_import_hash"
   end
