@@ -141,11 +141,13 @@ class FreeeBulkExpenseReporterTest < Minitest::Test
     )
   end
 
-  # name => account_item_id の Hash で find(name:) を返す簡易スタブ
+  # name => account_item_id の Hash で find_or_create(name:) を返す簡易スタブ
+  # (reporter は freee に無い科目を新規作成まで試みるため find_or_create を使う)
   def stub_account_item_lookup(name_to_id)
     Class.new do
       define_method(:initialize) { |map| @map = map }
       define_method(:find) { |name:| @map[name] }
+      define_method(:find_or_create) { |name:| @map[name] }
     end.new(name_to_id)
   end
 

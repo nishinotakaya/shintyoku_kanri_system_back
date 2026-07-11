@@ -40,9 +40,14 @@ module Freee
     def report_one(expense)
       return { status: :skipped, payload: { id: expense.id, reason: "連携済み" } } if expense.freee_synced?
 
-      account_item_id = @account_item_lookup.find(name: expense.account_category)
+      if expense.account_category.blank?
+        return { status: :failed, payload: { id: expense.id, reason: "勘定科目が未設定です。経費で科目を選択してください" } }
+      end
+
+      # freee に無い勘定科目は名寄せ(相互部分一致)で解決し、それでも無ければ新規作成する
+      account_item_id = @account_item_lookup.find_or_create(name: expense.account_category)
       if account_item_id.nil?
-        return { status: :failed, payload: { id: expense.id, reason: "勘定科目『#{expense.account_category}』がfreeeに見つかりません" } }
+        return { status: :failed, payload: { id: expense.id, reason: "勘定科目『#{expense.account_category}』をfreeeで解決/作成できませんでした" } }
       end
 
       if expense.store_name.blank?
