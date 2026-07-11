@@ -33,11 +33,11 @@ module Freee
 
     # 経費用 (env で上書き可能)
     DEFAULT_ACCOUNT_ITEM_OUTSOURCING = (ENV["FREEE_ACCOUNT_ITEM_OUTSOURCING"] || 0).to_i  # 外注費
-    TAX_CODE_EXPENSE_10 = 21  # 課税仕入 10% (freee 既定値、必要なら env で上書き)
-    # 8%(軽減税率)/対象外の tax_code は freee 実環境での実測値が無いため env で上書き前提の暫定値。
-    # 本番投入前に実際の計上結果を確認し、必要なら env FREEE_TAX_CODE_EXPENSE_8 / FREEE_TAX_CODE_EXPENSE_0 で補正する。
-    TAX_CODE_EXPENSE_8 = (ENV["FREEE_TAX_CODE_EXPENSE_8"] || 22).to_i  # 課税仕入 8%(軽減税率対象)
-    TAX_CODE_EXPENSE_0 = (ENV["FREEE_TAX_CODE_EXPENSE_0"] || 0).to_i   # 対象外仕入
+    # tax_code は 2026-07-11 に freee preview API へ実コードを投げて tax_name を読み取り実測確定した値。
+    #   136=課対仕入10% / 163=課対仕入8%（軽） / 2=対象外
+    TAX_CODE_EXPENSE_10 = (ENV["FREEE_TAX_CODE_EXPENSE_10"] || 136).to_i # 課対仕入 10%
+    TAX_CODE_EXPENSE_8  = (ENV["FREEE_TAX_CODE_EXPENSE_8"] || 163).to_i  # 課対仕入 8%（軽減税率）
+    TAX_CODE_EXPENSE_0  = (ENV["FREEE_TAX_CODE_EXPENSE_0"] || 2).to_i    # 対象外
 
     # category から partner_id を解決する。
     # 1) ENV FREEE_PARTNER_<UPCASE_CATEGORY> > 2) PARTNERS_BY_CATEGORY > 3) 既定でラボップ
