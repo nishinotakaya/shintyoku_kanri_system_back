@@ -46,7 +46,7 @@ class NotionTaskSyncServiceTest < Minitest::Test
 
       NotionTaskSyncService.new(@user).call
 
-      task = @user.backlog_tasks.find_by!(source: "notion", issue_key: "N-#{notion_task.notion_block_id.first(8)}")
+      task = @user.backlog_tasks.find_by!(source: "notion", issue_key: "N-#{notion_task.notion_block_id.to_s.delete('-')}")
       assert_equal 1, task.status_id, "status=#{status_value.inspect} は status_id=1 になるべき"
       assert_equal "未対応", task.status_name
     end
@@ -65,7 +65,7 @@ class NotionTaskSyncServiceTest < Minitest::Test
 
     NotionTaskSyncService.new(@user).call
 
-    task = @user.backlog_tasks.find_by!(source: "notion", issue_key: "N-#{notion_task.notion_block_id.first(8)}")
+    task = @user.backlog_tasks.find_by!(source: "notion", issue_key: "N-#{notion_task.notion_block_id.to_s.delete('-')}")
     assert_equal "画面設計", task.summary
     assert_equal "詳細メモ", task.memo
     assert_equal "山田太郎", task.assignee_name

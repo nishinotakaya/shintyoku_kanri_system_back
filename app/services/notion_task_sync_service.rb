@@ -22,7 +22,7 @@ class NotionTaskSyncService
         status = STATUS_MAP[notion_task.status.to_s] || DEFAULT_STATUS
         task = @user.backlog_tasks.find_or_initialize_by(
           source: "notion",
-          issue_key: "N-#{notion_task.notion_block_id.first(8)}"
+          issue_key: "N-#{notion_task.notion_block_id.to_s.delete('-')}"
         )
         task.summary = notion_task.title
         task.memo = notion_task.note
