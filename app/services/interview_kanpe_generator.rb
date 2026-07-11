@@ -24,7 +24,7 @@ class InterviewKanpeGenerator
   # 本文は config/locales/prompts.ja.yml (prompts.kanpe.template) に集約。
   def self.template_text = I18n.t("prompts.kanpe.template")
 
-  # アプリを作る完全台本テンプレート(フック→オープニング→デモ→AI時代の価値→副業→CTA)。
+  # アプリを作る完全台本テンプレート(フック→オープニング→デモ→AI時代の価値→エンジニア転職→CTA)。
   # 本文は config/locales/prompts.ja.yml (prompts.kanpe.app_build_template) に集約。
   def self.app_build_template_text = I18n.t("prompts.kanpe.app_build_template")
 
@@ -65,7 +65,7 @@ class InterviewKanpeGenerator
       次の JSON で返してください: { "kanpe": "台本全文" }
       【出力フォーマット】
       - 次の【見出し】で必ず区切る(この見出し文字列は固定。フロントがこれでパースする):
-        【フック】【オープニング】【ツール説明】【デモ準備】【デモ お願いする】【デモ AIが作る様子】【デモ 完成・動作確認】【AI時代の価値】【副業への繋げ方】【今日からの3ステップ+CTA】【デモ用プロンプト】
+        【フック】【オープニング】【ツール説明】【デモ準備】【デモ お願いする】【デモ AIが作る様子】【デモ 完成・動作確認】【AI時代の価値】【エンジニア転職への繋げ方】【今日からの3ステップ+CTA】【デモ用プロンプト】
       - 各セクションの本文は、本人がそのまま声に出して読めるセリフを「」で書く。
       - セリフの合間に、`> 【画面】...` `> 【テロップ】...` の形式で演出指示行を入れる(行頭を > にする)。
       【最重要: テーマの一貫性】
