@@ -63,6 +63,7 @@ module Api
           end
         end
         task.update!(permitted)
+        push_to_calendar(task) # プライベートTodoのみGoogleカレンダーへ反映
         render json: serialize_task(task)
       end
 
@@ -85,12 +86,30 @@ module Api
         attrs[:end_date]   = params[:end_date]   if params[:end_date].present?
         attrs[:progress_workspace_id] = params[:workspace_id] if params[:workspace_id].present?
         task = current_user.backlog_tasks.create!(attrs)
+        push_to_calendar(task) # プライベートTodoのみGoogleカレンダーへ反映
         render json: serialize_task(task), status: :created
       end
 
       def destroy_task
-        current_user.backlog_tasks.find(params[:id]).destroy!
+        task = current_user.backlog_tasks.find(params[:id])
+        remove_from_calendar(task) # プライベートTodoならカレンダー側の予定も消す
+        task.destroy!
         head :no_content
+      end
+
+      # プライベートワークスペースのTodo ⇄ 専用Googleカレンダーの取込。
+      def import_calendar
+        workspace = private_workspace
+        return render(json: { error: "プライベートワークスペースが見つかりません" }, status: :not_found) unless workspace
+
+        imported = GoogleCalendarSync.new(current_user).import(workspace)
+        render json: { imported: imported }
+      rescue GoogleCalendarSync::ScopeError => e
+        Rails.logger.warn("[backlog#import_calendar] scope error: #{e.message}")
+        render json: { error: "Googleカレンダーの権限がありません。一度ログアウトして再度Googleログインしてください。" }, status: :forbidden
+      rescue => e
+        Rails.logger.error("[backlog#import_calendar] #{e.class}: #{e.message}")
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       def sync_to_work_reports
@@ -335,6 +354,31 @@ module Api
       end
 
       private
+
+      # current_user の「プライベート」ワークスペース(builtin manual)。無ければ nil。
+      def private_workspace
+        @private_workspace ||= current_user.progress_workspaces.find_by(name: "プライベート")
+      end
+
+      # タスクがプライベートワークスペース所属なら Google カレンダーへ push。
+      # 連携未設定/権限なしでも Todo 操作自体は成功させたいので、失敗はログのみ。
+      def push_to_calendar(task)
+        return unless private_workspace && task.progress_workspace_id == private_workspace.id
+
+        GoogleCalendarSync.new(current_user).push(task)
+      rescue GoogleCalendarSync::ScopeError => e
+        Rails.logger.warn("[backlog] calendar push skipped (scope): #{e.message}")
+      rescue => e
+        Rails.logger.error("[backlog] calendar push failed: #{e.class}: #{e.message}")
+      end
+
+      def remove_from_calendar(task)
+        return unless private_workspace && task.progress_workspace_id == private_workspace.id
+
+        GoogleCalendarSync.new(current_user).remove(task)
+      rescue => e
+        Rails.logger.error("[backlog] calendar remove failed: #{e.class}: #{e.message}")
+      end
 
       def serialize_comment(c)
         {

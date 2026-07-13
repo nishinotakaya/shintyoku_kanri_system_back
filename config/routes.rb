@@ -284,6 +284,7 @@ Rails.application.routes.draw do
       post  "backlog/export_sheet", to: "backlog#export_sheet"
       get   "backlog/sheet_tabs",   to: "backlog#sheet_tabs"
       post  "backlog/sync_to_work_reports", to: "backlog#sync_to_work_reports"
+      post  "backlog/import_calendar", to: "backlog#import_calendar"
       # Backlog Git（GitHub風レビュー画面）
       get  "backlog_git/repositories",  to: "backlog_git#repositories"
       get  "backlog_git/pull_requests", to: "backlog_git#pull_requests"

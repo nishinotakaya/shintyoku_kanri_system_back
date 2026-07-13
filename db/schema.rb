@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_11_130000) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_13_010000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -95,6 +95,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_130000) do
     t.boolean "did_previous", default: false, null: false
     t.boolean "do_today", default: false, null: false
     t.integer "progress_workspace_id"
+    t.string "google_event_id"
+    t.index ["google_event_id"], name: "index_backlog_tasks_on_google_event_id"
     t.index ["progress_workspace_id"], name: "index_backlog_tasks_on_progress_workspace_id"
     t.index ["user_id"], name: "index_backlog_tasks_on_user_id"
   end
@@ -747,6 +749,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_11_130000) do
     t.string "tax_office"
     t.string "tax_status", default: "taxable", null: false
     t.date "subcontract_from"
+    t.string "private_todo_calendar_id"
     t.index ["canva_oauth_state"], name: "index_users_on_canva_oauth_state"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"
