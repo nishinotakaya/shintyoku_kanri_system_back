@@ -313,7 +313,10 @@ module Api
       def tasks_on_date
         target_date = Date.iso8601(params[:date].to_s)
         recent_completed_threshold = target_date - 3
+        # このAPIはカレンダーの「タマ」タブ専用。リビング(source=notion)やスキルシート(source=sheet)を
+        # 混ぜないよう、Backlog系(backlog / 手入力local / 旧nil)のみに絞る。リビングは /notion_tasks を使う。
         scope = viewing_user.backlog_tasks
+          .where("source IS NULL OR source IN (?)", %w[backlog local])
           .where(
             "(status_id <> 4 AND ((start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) OR " \
             "(created_on IS NULL OR created_on <= ?) AND (completed_on IS NULL OR completed_on >= ?))) " \
