@@ -170,18 +170,19 @@ module Api
         render_error(e.message)
       end
 
-      # モテ: 相手のセリフ(質問=Q) → 自分のモテ返し(回答=A) を会話形式で root 配下に並べる
+      # モテ: 相手のセリフ(質問=Q) → 盛り上がる返し(回答=A) を会話形式で並べ、
+      # 続けて合コンの"つかみゲーム"(ゲーム名=Q → やり方/コツ=A) も root 配下に並べる。
       def import_mote_bank(m, root)
+        entries = InterviewMindmap::MOTE_DIALOGUES + InterviewMindmap::GOKON_GAMES
         InterviewMindmap.transaction do
           base = root.children.maximum(:position).to_i + 1
-          InterviewMindmap::MOTE_DIALOGUES.each_with_index do |d, i|
+          entries.each_with_index do |d, i|
             q = m.nodes.create!(parent_id: root.id, kind: "question", text: d[:q], position: base + i, source: "bank", expanded: true)
             m.nodes.create!(parent_id: q.id, kind: "answer", text: d[:a], position: 0, source: "bank")
           end
           root.update!(expanded: true)
         end
-        total = InterviewMindmap::MOTE_DIALOGUES.size
-        render json: m.reload.as_payload.merge(imported: total)
+        render json: m.reload.as_payload.merge(imported: entries.size)
       rescue => e
         render_error(e.message)
       end
