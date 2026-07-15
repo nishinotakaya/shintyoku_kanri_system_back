@@ -5,14 +5,14 @@ class ProgressWorkspace < ApplicationRecord
   belongs_to :user
   has_many :backlog_tasks, foreign_key: :progress_workspace_id, dependent: :nullify
 
-  SOURCE_TYPES = %w[backlog notion manual].freeze
+  SOURCE_TYPES = %w[backlog notion trello manual].freeze
 
   validates :name, presence: true
 
   DEFAULTS = [
     { name: "Wing", source_type: "backlog" },
     { name: "リビング", source_type: "notion" },
-    { name: "テックリーダーズ", source_type: "manual" },
+    { name: "テックリーダーズ", source_type: "trello" },
     { name: "ReRe", source_type: "manual" },
     { name: "プライベート", source_type: "manual" }
   ].freeze

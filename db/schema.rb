@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_13_010000) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_15_092712) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -699,6 +699,26 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_13_010000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["user_id"], name: "index_todos_on_user_id"
+  end
+
+  create_table "trello_tasks", force: :cascade do |t|
+    t.string "trello_card_id", null: false
+    t.string "board_id"
+    t.string "board_name"
+    t.string "list_name"
+    t.string "title", null: false
+    t.text "description"
+    t.string "assignee_name"
+    t.date "start_date"
+    t.date "due_date"
+    t.string "url"
+    t.float "position"
+    t.text "memo"
+    t.datetime "synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "done", default: false, null: false
+    t.index ["trello_card_id"], name: "index_trello_tasks_on_trello_card_id", unique: true
   end
 
   create_table "users", force: :cascade do |t|

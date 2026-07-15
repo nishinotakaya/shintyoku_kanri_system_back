@@ -267,6 +267,7 @@ Rails.application.routes.draw do
       post  "backlog/test",       to: "backlog#test_connection"
       post  "backlog/sync",       to: "backlog#sync"
       post  "backlog/sync_notion", to: "backlog#sync_notion"
+      post  "backlog/sync_trello", to: "backlog#sync_trello"
       get   "backlog/tasks",      to: "backlog#tasks"
       get   "backlog/tasks_on_date", to: "backlog#tasks_on_date"
       get   "backlog/tasks/:issue_key/comments", to: "backlog#task_comments"
@@ -321,6 +322,13 @@ Rails.application.routes.draw do
 
       # Notion (WBS タスク) 連携
       resources :notion_tasks, only: [ :index, :update ] do
+        collection do
+          post :sync
+        end
+      end
+
+      # Trello (テックリーダーズ) 連携
+      resources :trello_tasks, only: [ :index, :update ] do
         collection do
           post :sync
         end

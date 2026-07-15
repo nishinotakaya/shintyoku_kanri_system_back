@@ -41,6 +41,21 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/backlog/sync_trello
+      # 先に Trello から最新カードを取得(TrelloSyncService)し、続けて
+      # builtin の「テックリーダーズ」ワークスペースへ upsert する。ワンボタンで完結させる。
+      def sync_trello
+        TrelloSyncService.call
+        synced = TrelloTaskSyncService.new(current_user).call
+        render json: { synced: synced }
+      rescue TrelloClient::AuthError => e
+        render json: { error: e.message }, status: :unauthorized
+      rescue TrelloClient::ApiError => e
+        render json: { error: e.message }, status: :bad_gateway
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "テックリーダーズのワークスペースが見つかりません" }, status: :unprocessable_entity
+      end
+
       def reorder
         ids = params[:ids] || []
         ids.each_with_index do |id, i|
