@@ -9,7 +9,7 @@ module Api
       end
 
       def sync
-        count = TrelloSyncService.call
+        count = TrelloSyncService.call(current_user)
         render json: { synced: count, at: Time.current.iso8601 }
       rescue TrelloClient::AuthError => e
         render json: { error: e.message }, status: :unauthorized

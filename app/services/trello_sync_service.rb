@@ -1,10 +1,14 @@
 class TrelloSyncService
-  def self.call
-    new.call
+  def self.call(user = nil)
+    new(user).call
+  end
+
+  def initialize(user = nil)
+    @user = user
   end
 
   def call
-    client = TrelloClient.new
+    client = TrelloClient.new(user: @user)
     board = client.fetch_board
     board_name = board["name"]
     trello_lists = client.fetch_lists

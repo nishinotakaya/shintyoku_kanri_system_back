@@ -3,19 +3,21 @@ require "json"
 require "uri"
 
 # Trello REST API (v1) クライアント。ボードのリスト/カードを取得する。
+#
+# キー解決: user の設定があればそれ、無ければ ENV(= 西野の共通設定) にフォールバック
 class TrelloClient
   BASE_URL = "https://api.trello.com/1"
 
   class AuthError < StandardError; end
   class ApiError  < StandardError; end
 
-  def initialize(api_key: ENV["TRELLO_API_KEY"], api_token: ENV["TRELLO_API_TOKEN"], board_id: ENV["TRELLO_BOARD_ID"])
-    if api_key.to_s.strip.empty? || api_token.to_s.strip.empty? || board_id.to_s.strip.empty?
+  def initialize(user: nil, api_key: nil, api_token: nil, board_id: nil)
+    @api_key   = api_key.presence   || user&.trello_api_key.presence   || ENV["TRELLO_API_KEY"]
+    @api_token = api_token.presence || user&.trello_api_token.presence || ENV["TRELLO_API_TOKEN"]
+    @board_id  = board_id.presence  || user&.trello_board_id.presence  || ENV["TRELLO_BOARD_ID"]
+    if @api_key.to_s.strip.empty? || @api_token.to_s.strip.empty? || @board_id.to_s.strip.empty?
       raise AuthError, "Trello API キー/トークンを確認してください"
     end
-    @api_key = api_key
-    @api_token = api_token
-    @board_id = board_id
   end
 
   # ボード内のリスト一覧 (id -> name の対応付けに使う)

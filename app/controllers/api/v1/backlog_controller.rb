@@ -45,7 +45,7 @@ module Api
       # 先に Trello から最新カードを取得(TrelloSyncService)し、続けて
       # builtin の「テックリーダーズ」ワークスペースへ upsert する。ワンボタンで完結させる。
       def sync_trello
-        TrelloSyncService.call
+        TrelloSyncService.call(current_user)
         synced = TrelloTaskSyncService.new(current_user).call
         render json: { synced: synced }
       rescue TrelloClient::AuthError => e

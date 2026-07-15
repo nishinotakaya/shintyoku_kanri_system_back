@@ -28,7 +28,8 @@ module Api
       private
 
       def me_params
-        params.require(:user).permit(:display_name, :company_name, :openai_api_key, :heygen_api_key, :video_script_context, :closing_day,
+        params.require(:user).permit(:display_name, :company_name, :openai_api_key, :heygen_api_key,
+          :trello_api_key, :trello_api_token, :trello_board_id, :video_script_context, :closing_day,
           :default_transit_from, :default_transit_to, :default_transit_fee, :default_transit_line,
           :postal_code, :address, :tax_office, :attendance_schedule_url, :progress_sheet_url, :local_save_dir, :dev_language,
           custom_off_days: [], commute_days: [],
@@ -45,6 +46,9 @@ module Api
           openai_api_key_set: current_user.openai_api_key.present?,
           heygen_api_key_set: current_user.heygen_api_key.present?,
           heygen_available: HeygenClient.api_key_for(current_user).present?,
+          trello_api_key_set: current_user.trello_api_key.present?,
+          trello_api_token_set: current_user.trello_api_token.present?,
+          trello_board_id: current_user.trello_board_id,
           video_script_context: current_user.video_script_context,
           custom_off_days: current_user.custom_off_days || [],
           default_transit_from: current_user.default_transit_from,
