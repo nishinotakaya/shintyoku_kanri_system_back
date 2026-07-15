@@ -45,12 +45,13 @@ class TrelloTaskSyncService
   private
 
   # リスト名から進捗カンバンのステータスを決める。
-  # 検証完了/検証中 → 処理済、完了/マージ/Done → 完了、作業中/WIP/プルリク/レビュー/進行中/Doing → 処理中、それ以外 → 未対応
+  # 作業中/WIP → 処理中、プルリク(レビュー依頼)/検証中 → 処理済、マージ/完了 → 完了、それ以外(タスク優先度/MTG等) → 未対応。
+  # 「ドラフトプルリク(WIP_作業中)」は「プルリク」も含むため、作業中系の判定をレビュー系より先に行う。
   def status_for(list_name)
     name = list_name.to_s
-    return { id: 3, name: "処理済" } if name.include?("検証完了") || name.include?("検証中")
+    return { id: 2, name: "処理中" } if name.include?("作業中") || name.include?("WIP") || name.include?("進行中") || name.downcase.include?("doing")
+    return { id: 3, name: "処理済" } if name.include?("検証") || name.include?("プルリク") || name.include?("レビュー")
     return { id: 4, name: "完了" } if TrelloTask.done_list?(list_name)
-    return { id: 2, name: "処理中" } if name.include?("作業中") || name.include?("WIP") || name.include?("プルリク") || name.include?("レビュー") || name.include?("進行中") || name.downcase.include?("doing")
     { id: 1, name: "未対応" }
   end
 end

@@ -56,22 +56,31 @@ class TrelloTaskSyncServiceTest < Minitest::Test
     end
   end
 
-  # 2-c. list_name「プルリク(レビュー依頼)」「ドラフトプルリク(WIP_作業中)」は status_id=2(処理中) にマップされる
-  def test_list_name_pull_request_maps_to_status_id_2
-    [ "プルリク(レビュー依頼)", "ドラフトプルリク(WIP_作業中)" ].each do |list_name_value|
-      trello_task = create_trello_task(list_name: list_name_value)
+  # 2-c. list_name「ドラフトプルリク(WIP_作業中)」は status_id=2(処理中) にマップされる
+  def test_list_name_draft_pull_request_maps_to_status_id_2
+    trello_task = create_trello_task(list_name: "ドラフトプルリク(WIP_作業中)")
 
-      TrelloTaskSyncService.new(@user).call
+    TrelloTaskSyncService.new(@user).call
 
-      task = @user.backlog_tasks.find_by!(source: "trello", issue_key: "T-#{trello_task.trello_card_id}")
-      assert_equal 2, task.status_id, "list_name=#{list_name_value.inspect} は status_id=2 になるべき"
-      assert_equal "処理中", task.status_name
-    end
+    task = @user.backlog_tasks.find_by!(source: "trello", issue_key: "T-#{trello_task.trello_card_id}")
+    assert_equal 2, task.status_id
+    assert_equal "処理中", task.status_name
   end
 
-  # 2-d. list_name がその他(未着手/nil/未知のリスト名/「MTGで確認タスク、話し合い事項」)は status_id=1 にマップされる
+  # 2-c'. list_name「プルリク(レビュー依頼)」は status_id=3(処理済) にマップされる
+  def test_list_name_pull_request_review_maps_to_status_id_3
+    trello_task = create_trello_task(list_name: "プルリク(レビュー依頼)")
+
+    TrelloTaskSyncService.new(@user).call
+
+    task = @user.backlog_tasks.find_by!(source: "trello", issue_key: "T-#{trello_task.trello_card_id}")
+    assert_equal 3, task.status_id
+    assert_equal "処理済", task.status_name
+  end
+
+  # 2-d. list_name がその他(未着手/nil/未知のリスト名/「MTGで確認タスク、話し合い事項」/「タスク優先度 高」/「タスク優先度 低」)は status_id=1 にマップされる
   def test_list_name_others_map_to_status_id_1
-    [ "未着手", nil, "解説リスト", "MTGで確認タスク、話し合い事項" ].each do |list_name_value|
+    [ "未着手", nil, "解説リスト", "MTGで確認タスク、話し合い事項", "タスク優先度 高", "タスク優先度 低" ].each do |list_name_value|
       trello_task = create_trello_task(list_name: list_name_value)
 
       TrelloTaskSyncService.new(@user).call
