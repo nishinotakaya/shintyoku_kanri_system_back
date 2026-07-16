@@ -59,7 +59,7 @@ module Api
         m.update!(title: params[:title]) if params[:title].present?
         m.update!(kanpe_script: params[:kanpe_script].to_s) if params.key?(:kanpe_script)
         m.update!(kanpe_style: params[:kanpe_style]) if params[:kanpe_style].present?
-        m.nodes.find_by(kind: "root")&.update!(text: m.title) if m.youtube?
+        m.nodes.find_by(kind: "root")&.update!(text: m.title) if m.youtube? || m.love_youtube?
         render json: m.reload.as_payload.merge(user: user_brief(m.user))
       rescue => e
         render_error(e.message)
@@ -104,7 +104,9 @@ module Api
         root = m.nodes.find_by(kind: "root") || m.nodes.order(:position).first
         return render_error("起点ノードがありません") unless root
         return import_youtube_bank(m, root) if m.youtube?
+        return import_youtube_bank(m, root, InterviewMindmap::LOVE_YOUTUBE_QUESTIONS) if m.love_youtube?
         return import_mote_bank(m, root) if m.mote?
+        return import_mote_bank(m, root, InterviewMindmap::MOTE_QA_DIALOGUES) if m.mote_qa?
         bank = InterviewBankImporter.new(user: current_user).call
         InterviewMindmap.transaction do
           base = root.children.maximum(:position).to_i + 1
@@ -156,29 +158,30 @@ module Api
         render_error(e.message)
       end
 
-      # YouTube: 固定の質問バンク(12問)を root 配下に並べる(回答は各質問の展開時に生成)
-      def import_youtube_bank(m, root)
+      # YouTube: 固定の質問バンク(12問)を root 配下に並べる(回答は各質問の展開時に生成)。
+      # love_youtube は questions に LOVE_YOUTUBE_QUESTIONS を渡して呼び出す。
+      def import_youtube_bank(m, root, questions = InterviewMindmap::YOUTUBE_QUESTIONS)
         InterviewMindmap.transaction do
           base = root.children.maximum(:position).to_i + 1
-          InterviewMindmap::YOUTUBE_QUESTIONS.each_with_index do |q, i|
-            m.nodes.create!(parent_id: root.id, kind: "question", text: q, position: base + i, source: "bank")
+          questions.each_with_index do |question_text, index|
+            m.nodes.create!(parent_id: root.id, kind: "question", text: question_text, position: base + index, source: "bank")
           end
           root.update!(expanded: true)
         end
-        render json: m.reload.as_payload.merge(imported: InterviewMindmap::YOUTUBE_QUESTIONS.size)
+        render json: m.reload.as_payload.merge(imported: questions.size)
       rescue => e
         render_error(e.message)
       end
 
       # モテ: 相手のセリフ(質問=Q) → 盛り上がる返し(回答=A) を会話形式で並べ、
       # 続けて合コンの"つかみゲーム"(ゲーム名=Q → やり方/コツ=A) も root 配下に並べる。
-      def import_mote_bank(m, root)
-        entries = InterviewMindmap::MOTE_DIALOGUES + InterviewMindmap::GOKON_GAMES
+      # mote_qa は entries に MOTE_QA_DIALOGUES を渡して呼び出す(ゲームは含めない)。
+      def import_mote_bank(m, root, entries = InterviewMindmap::MOTE_DIALOGUES + InterviewMindmap::GOKON_GAMES)
         InterviewMindmap.transaction do
           base = root.children.maximum(:position).to_i + 1
-          entries.each_with_index do |d, i|
-            q = m.nodes.create!(parent_id: root.id, kind: "question", text: d[:q], position: base + i, source: "bank", expanded: true)
-            m.nodes.create!(parent_id: q.id, kind: "answer", text: d[:a], position: 0, source: "bank")
+          entries.each_with_index do |dialogue, index|
+            question = m.nodes.create!(parent_id: root.id, kind: "question", text: dialogue[:q], position: base + index, source: "bank", expanded: true)
+            m.nodes.create!(parent_id: question.id, kind: "answer", text: dialogue[:a], position: 0, source: "bank")
           end
           root.update!(expanded: true)
         end
@@ -278,7 +281,8 @@ module Api
       HOVER_TTL = 10 # 秒。これより古いホバーは無視(mouseleave取りこぼし対策)
 
       def ensure_feature
-        return if current_user.can_use?(:interview_mindmap) || current_user.can_use?(:youtube_mindmap)
+        mindmap_features = %i[interview_mindmap youtube_mindmap mote_mindmap mote_qa_mindmap love_youtube_mindmap]
+        return if mindmap_features.any? { |feature| current_user.can_use?(feature) }
         render json: { error: "面談対策マインドマップの利用権限がありません" }, status: :forbidden
       end
 
@@ -295,24 +299,28 @@ module Api
         m
       end
 
-      # interview は誰でも(ensure_feature 済み)、youtube/mote は専用フラグ(admin素通り)が要る
+      # interview は誰でも(ensure_feature 済み)、youtube/mote/mote_qa/love_youtube は専用フラグ(admin素通り)が要る
       def mode_allowed?(mode)
-        return true unless %w[youtube mote].include?(mode)
+        return true unless %w[youtube mote mote_qa love_youtube].include?(mode)
         current_user.can_use?(:"#{mode}_mindmap")
       end
 
       def default_title_for(mode, target)
         case mode
-        when "youtube" then "#{target.display_name} YouTube用"
-        when "mote"    then "#{target.display_name} モテ会話"
+        when "youtube"      then "#{target.display_name} YouTube用"
+        when "mote"         then "#{target.display_name} モテ会話"
+        when "mote_qa"      then "#{target.display_name} モテ質問Q&A"
+        when "love_youtube" then "#{target.display_name} 恋愛系YouTube"
         else "#{target.display_name} 面談対策"
         end
       end
 
       def root_text_for(mode, target, title)
         case mode
-        when "youtube" then title # 動画タイトル/テーマを起点に表示
-        when "mote"    then "モテコミュニケーション"
+        when "youtube"      then title # 動画タイトル/テーマを起点に表示
+        when "mote"         then "モテコミュニケーション"
+        when "mote_qa"      then "モテ質問Q&A"
+        when "love_youtube" then title # 動画タイトル/テーマを起点に表示
         else "#{target.display_name} のスキルシート"
         end
       end

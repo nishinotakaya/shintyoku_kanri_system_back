@@ -23,14 +23,23 @@ class InterviewNodeExpander
         data = OpenaiJson.chat_json(system: YOUTUBE_ROOT_SYS, user: youtube_root_prompt(existing), api_key: api_key, model: "gpt-4o", temperature: 0.7)
         questions = Array(data["questions"]).first(12).map { |q| { kind: "question", text: q.to_s } }.reject { |c| c[:text].strip.empty? }
         questions.presence || InterviewMindmap::YOUTUBE_QUESTIONS.map { |q| { kind: "question", text: q } }
-      elsif mote?
+      elsif love_youtube?
+        # 恋愛系YouTube: 動画タイトル/テーマに沿った想定質問を AI で生成する(youtube と同じ流れ、スキルシートは使わない)。
+        existing = @node.children.where(kind: "question").pluck(:text)
+        data = OpenaiJson.chat_json(system: LOVE_YOUTUBE_ROOT_SYS, user: love_youtube_root_prompt(existing), api_key: api_key, model: "gpt-4o", temperature: 0.8)
+        questions = Array(data["questions"]).first(12).map { |q| { kind: "question", text: q.to_s } }.reject { |c| c[:text].strip.empty? }
+        questions.presence || InterviewMindmap::LOVE_YOUTUBE_QUESTIONS.map { |q| { kind: "question", text: q } }
+      elsif mote? || mote_qa?
         existing = @node.children.where(kind: "question").pluck(:text)
         if existing.empty?
           # 最初は固定の「相手のセリフ(Q)」を起点に並べる(返しAはQを展開すると出る/取込で同時投入)
-          InterviewMindmap::MOTE_DIALOGUES.map { |d| { kind: "question", text: d[:q] } }
+          dialogues = mote_qa? ? InterviewMindmap::MOTE_QA_DIALOGUES : InterviewMindmap::MOTE_DIALOGUES
+          dialogues.map { |d| { kind: "question", text: d[:q] } }
         else
-          # 再展開: 既出と重複しない新しい「相手のセリフ」を AI で追加
-          data = OpenaiJson.chat_json(system: MOTE_CAT_SYS, user: mote_category_prompt(existing), api_key: api_key, model: "gpt-4o", temperature: 0.9)
+          # 再展開: 既出と重複しない新しい「相手のセリフ(質問)」を AI で追加
+          sys = mote_qa? ? MOTE_QA_CAT_SYS : MOTE_CAT_SYS
+          prompt = mote_qa? ? mote_qa_category_prompt(existing) : mote_category_prompt(existing)
+          data = OpenaiJson.chat_json(system: sys, user: prompt, api_key: api_key, model: "gpt-4o", temperature: 0.9)
           Array(data["categories"]).first(6).map { |c| { kind: "question", text: c.to_s } }.reject { |c| c[:text].strip.empty? }
         end
       else
@@ -38,21 +47,29 @@ class InterviewNodeExpander
         Array(data["questions"]).first(8).map { |q| { kind: "question", text: q.to_s } }.reject { |c| c[:text].strip.empty? }
       end
     when "answer"
-      if mote?
-        # 褒めフレーズ(answer)を展開 → 同じ趣旨の言い回しバリエーションを追加生成
+      if mote? || mote_qa?
+        # 褒めフレーズ/返し(answer)を展開 → 同じ趣旨の言い回しバリエーションを追加生成
         data = OpenaiJson.chat_json(system: MOTE_VARIATION_SYS, user: mote_variation_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.9)
         Array(data["phrases"]).first(6).map { |p| { kind: "answer", text: p.to_s } }.reject { |c| c[:text].strip.empty? }
       else
         # 回答(answer)を展開 → その回答を受けて面接官/インタビュアーが続けて聞きそうな深掘り質問
-        sys = youtube? ? YOUTUBE_ANSWER_SYS : ANSWER_SYS
-        data = OpenaiJson.chat_json(system: sys, user: answer_prompt, api_key: api_key, model: ("gpt-4o" if youtube?), temperature: youtube? ? 0.7 : 0.5)
+        sys = (youtube? || love_youtube?) ? YOUTUBE_ANSWER_SYS : ANSWER_SYS
+        data = OpenaiJson.chat_json(system: sys, user: answer_prompt, api_key: api_key, model: ("gpt-4o" if youtube? || love_youtube?), temperature: (youtube? || love_youtube?) ? 0.7 : 0.5)
         Array(data["followups"]).first(4).map { |f| { kind: "followup", text: f.to_s } }.reject { |c| c[:text].strip.empty? }
       end
     else
-      if mote?
-        # カテゴリ(question)を展開 → そのカテゴリの褒めフレーズ(answer)を追加生成
-        data = OpenaiJson.chat_json(system: MOTE_SYS, user: mote_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.85)
+      if mote? || mote_qa?
+        # カテゴリ(question)を展開 → そのカテゴリの褒めフレーズ/返し(answer)を追加生成
+        sys = mote_qa? ? MOTE_QA_SYS : MOTE_SYS
+        data = OpenaiJson.chat_json(system: sys, user: mote_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.85)
         Array(data["phrases"]).first(8).map { |p| { kind: "answer", text: p.to_s } }.reject { |c| c[:text].strip.empty? }
+      elsif love_youtube?
+        # 質問(question)を展開 → 出演者本人になりきった回答(answer)＋続く質問(followups)を生成(スキルシートは使わない)
+        data = OpenaiJson.chat_json(system: LOVE_YOUTUBE_QA_SYS, user: love_youtube_qa_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.8)
+        out = []
+        out << { kind: "answer", text: data["answer"].to_s } if data["answer"].to_s.strip.present?
+        Array(data["followups"]).first(4).each { |f| out << { kind: "followup", text: f.to_s } unless f.to_s.strip.empty? }
+        out
       else
         sys = youtube? ? YOUTUBE_QA_SYS : QA_SYS
         temp = youtube? ? 0.7 : 0.4
@@ -70,6 +87,8 @@ class InterviewNodeExpander
 
   def youtube? = @mindmap.youtube?
   def mote? = @mindmap.mote?
+  def mote_qa? = @mindmap.mote_qa?
+  def love_youtube? = @mindmap.love_youtube?
 
   # onclass リサーチ(高再生の傾向)を差し込むブロック。YouTube 以外や取得失敗時は空文字。
   def research_block
@@ -121,6 +140,15 @@ class InterviewNodeExpander
     次の JSON で返してください: { "questions": ["質問1", "質問2", ...] }  ※8〜12個。既出の質問とは重複させない。
   SYS
 
+  LOVE_YOUTUBE_ROOT_SYS = <<~SYS.freeze
+    あなたは恋愛・モテコミュニケーション系YouTubeチャンネルの構成作家です。
+    与えられた【動画タイトル/テーマ】に**厳密に沿って**、その動画で扱う想定質問を、視聴者(恋愛や会話に自信がない男性)が見たくなる流れで組み立てます。
+    最重要: **タイトルのテーマから外れた質問は作らない**。
+    【構成】導入(視聴者の悩みに共感するフック) → 本編(具体的なテクニック・例セリフ・NG例) → 締め(今日からできる一歩)。
+    【質問の質】視聴者が検索しそうな悩みの言葉を使う(「会話が続かない」「LINEが既読スルーされる」等)。「実際どう言えばいい?」と具体的なセリフを引き出す質問を必ず入れる。
+    次の JSON で返してください: { "questions": ["質問1", ...] }  ※8〜12個。既出の質問とは重複させない。
+  SYS
+
   YOUTUBE_QA_SYS = <<~SYS.freeze
     あなたはYouTubeのインタビュー動画の制作者であり、出演者本人になりきって質問に答えます。
     次の JSON で返してください:
@@ -132,6 +160,19 @@ class InterviewNodeExpander
     - YouTubeの語り口で、自然で人間味があり、視聴者に語りかけるように。教科書的・箇条書き的にしない。
     - **端的に**。長くしすぎない。**2〜3文(おおよそ120字以内)**でテンポよく。エピソードを入れるなら1つだけ、短く。前置き・冗長な説明はしない。
     - 事実(プロフィール/スキルシート)にもとづき、**盛らない・創作しない**。収入などの数字は根拠が無ければ断定せず「〜くらい」「具体的な額より◯◯が変わった」等に逃がす。
+  SYS
+
+  LOVE_YOUTUBE_QA_SYS = <<~SYS.freeze
+    あなたは恋愛・モテコミュニケーション系YouTuberの台本作家であり、出演者本人になりきって質問に答えます。
+    次の JSON で返してください:
+    { "answer": "出演者本人がカメラに向かって語る回答(一人称)",
+      "followups": ["視聴者/インタビュアーが続けて聞きたくなる質問", "..."] }
+    【口調・スタイル】
+    - 一人称のYouTube語り。断定でテンポよく。「〜なんですよ」「〜してください」など視聴者に語りかける。
+    - **具体的なセリフ例や行動例を必ず1つ入れる**(「例えば『◯◯』って言うだけでいい」のように)。抽象論で終わらせない。
+    - **2〜4文(140字以内)**で端的に。
+    - 体験談は「よくあるケース」「僕の周りでも」として語ってよいが、収入や実績の具体的な数字は創作しない。
+    - 下品な表現・相手を騙すようなテクニック・容姿いじりは扱わない。誠実さベースのモテ理論。
   SYS
 
   ANSWER_SYS = <<~SYS.freeze
@@ -177,6 +218,16 @@ class InterviewNodeExpander
     あなたはモテ会話のプロです。相手(女性)の【セリフ】に対する、自然でモテて"盛り上がる"『返し』を複数作ります。
     次の JSON で返してください: { "phrases": ["返し", "..."] }  ※5個程度。値は『自分の返し』だけ(相手のセリフは入れない)。
     【狙い】ただの共感+褒めで終わらせず、相手が『笑う/思わず返したくなる』テンポの良い一言にする。
+    【スタイル】タメ口の自然な話し言葉。ホスト感・キメすぎを出さない。
+    #{MOTE_GUARD}
+    既出と丸かぶりさせない。
+  SYS
+
+  MOTE_QA_SYS = <<~SYS.freeze
+    あなたはモテ会話のプロです。相手(女性)からの【質問】に対する、自然でモテて"盛り上がる"『返し』を複数作ります。
+    次の JSON で返してください: { "phrases": ["返し", "..."] }  ※5個程度。値は『自分の返し』だけ(相手の質問は入れない)。
+    【狙い】真面目に答えるだけで終わらせない。**一度ボケや切り返しで笑わせてから、チラッと本音や誠実さを見せる**構成が理想。
+    査定っぽい質問(彼女いるの？何人と付き合った？等)は、ユーモアでかわしつつ卑屈にならない。
     【スタイル】タメ口の自然な話し言葉。ホスト感・キメすぎを出さない。
     #{MOTE_GUARD}
     既出と丸かぶりさせない。
@@ -231,6 +282,16 @@ class InterviewNodeExpander
     TXT
   end
 
+  # 恋愛系YouTube 起点展開: 動画タイトル/テーマに沿った想定質問を作らせる(スキルシートは使わない)
+  def love_youtube_root_prompt(existing = [])
+    dup = existing.present? ? "【すでにある質問(重複させない)】\n#{existing.map { |t| "・#{t}" }.join("\n")}\n\n" : ""
+    <<~TXT
+      【動画タイトル/テーマ】#{@mindmap.title}
+      【出演者】#{person_name}
+      #{dup}このタイトル/テーマに厳密に沿った、動画で聞く想定質問を作ってください。
+    TXT
+  end
+
   def qa_prompt
     header = +""
     if youtube?
@@ -246,6 +307,17 @@ class InterviewNodeExpander
     <<~TXT
       #{header}【スキルシート】
       #{sheet_summary}
+
+      【これまでの質問の流れ】#{path_to_root}
+      【今回答える質問】#{@node.text}
+    TXT
+  end
+
+  # 恋愛系YouTube用: 質問(question)展開のプロンプト。スキルシートは使わず、動画の文脈だけで語らせる。
+  def love_youtube_qa_prompt
+    <<~TXT
+      【出演者(本人)】#{person_name}
+      【動画タイトル/テーマ】#{@mindmap.title}
 
       【これまでの質問の流れ】#{path_to_root}
       【今回答える質問】#{@node.text}
@@ -270,18 +342,36 @@ class InterviewNodeExpander
     TXT
   end
 
+  MOTE_QA_CAT_SYS = <<~SYS.freeze
+    あなたはモテ会話/合コンの「相手の質問出し」のプロです。飲み会・合コン・デートで相手(女性)が男性に聞きがちな"質問"を新しく挙げます。
+    次の JSON で返してください: { "categories": ["相手からの質問", "..."] }  ※6個程度。**既出と重複させない**。
+    例: 「兄弟いるの？」「元カノとはなんで別れたの？」「理想のデートは？」「爬虫類飼ってそうw」「甘いもの好きなの？」など、
+    返しで"ボケ/切り返し/二択/共犯感"を効かせて盛り上げやすい自然な質問。査定系(年収・学歴等)は入れない。下品・不快にしない。
+  SYS
+
+  # 既存の相手からの質問を渡して、重複しない新しい質問を生成させる
+  def mote_qa_category_prompt(existing)
+    <<~TXT
+      【すでにある相手からの質問(これらと重複させない)】
+      #{existing.map { |t| "・#{t}" }.join("\n")}
+
+      相手(女性)が聞きがちな新しい質問を考えてください。
+    TXT
+  end
+
   # answer ノード展開用: 親の質問と回答を渡し、深掘り質問を生成させる
   def answer_prompt
     question_text = @node.parent&.text.to_s
     existing_followups = @node.children.where(kind: %w[question followup]).order(:position).pluck(:text)
     header = +""
-    if youtube?
+    if youtube? || love_youtube?
       header << "【出演者(本人)】#{person_name}\n"
       header << "【動画タイトル/テーマ】#{@mindmap.title}\n" if @mindmap.title.present?
     end
+    sheet_block = love_youtube? ? "（スキルシートは使わない）" : sheet_summary
     <<~TXT
       #{header}【スキルシート】
-      #{sheet_summary}
+      #{sheet_block}
 
       【これまでの質問の流れ】#{path_to_root}
       【質問】#{question_text}
