@@ -3,7 +3,8 @@ require "google/apis/sheets_v4"
 # 川村さん等の Backlog 対応ログ(BacklogActivity)を、ユーザーが手で整えた
 # 「月次サマリ」シートに【非破壊で】反映する。
 #   サマリ列: 月 / 課題 / 概要 / 状態推移 / 開始日 / 処理済日 / 完了日 / 備考 / 担当者
-#   ・既存行: 空いている日付セル(開始日/処理済日/完了日)と空の担当者だけ埋める。状態・概要・備考・手入力は一切触らない。
+#   ・既存行: 状態推移はアプリ側の最新状態(完了はBacklogの事実)に合わせて更新する。
+#     空いている日付セル(開始日/処理済日/完了日)と空の担当者も埋める。概要・書式・手入力は一切触らない。
 #   ・新規課題(月×課題): 末尾に行を追加。
 #   担当者列(末尾)は、各課題の Backlog 実担当者(issue.assignee.name)を入れて、シート上で担当者フィルタできるようにする。
 #   詳細タブ(対応ログ詳細)は活動ログそのものなので全再生成する。
@@ -88,8 +89,9 @@ class BacklogActivityExporter
   end
 
   # ── サマリ更新(非破壊) ───────────────────────
-  # 既存行: 空の「処理済日 / 完了日」を埋め、アプリに手入力がある備考だけ書き戻す（空で潰さない）。
-  #         月 / 課題 / 概要 / 状態推移 / 開始日 / 書式 は触らない。
+  # 既存行: 状態推移をアプリ側の最新状態(完了はBacklogの事実)に更新し、空の「処理済日 / 完了日」を埋め、
+  #         アプリに手入力がある備考だけ書き戻す（空で潰さない）。
+  #         月 / 課題 / 概要 / 書式 は触らない。
   # 新規行: シートに無い 月×課題 を末尾に追加し、テンプレートにデータが揃うようにする。
   def update_summary(service, tab)
     rows = service.get_spreadsheet_values(@spreadsheet_id, "#{tab}!A1:I1000").values || [] # FORMATTED(表示値)
@@ -109,6 +111,11 @@ class BacklogActivityExporter
       month = row[COL_MONTH].to_s.strip
       existing_keys[[ month, key ]] = i
       info = summary_by_key[[ month, key ]] or next
+
+      # 状態推移: アプリ側の最新状態(完了はBacklogの事実)と違っていれば更新する
+      if info[:status].present? && row[COL_STATUS].to_s.strip != info[:status]
+        updates << S::ValueRange.new(range: "#{tab}!#{col_letter(COL_STATUS)}#{i + 1}", values: [ [ info[:status] ] ])
+      end
 
       { COL_SHORI => info[:shori_on], COL_DONE => info[:done_on] }.each do |col, val|
         next if val.blank?

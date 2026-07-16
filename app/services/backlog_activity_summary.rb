@@ -25,17 +25,21 @@ class BacklogActivitySummary
     @rows ||= month_issue_pairs.map do |month, issue_key|
       info = issue_data.fetch(issue_key)
       note = notes[[ month, issue_key ]]
-      computed_status = info[:status]
+      # 完了日が確定していれば「完了」を正とする(状態変更の活動ログが同期範囲外で
+      # 拾えていなくても、リリース済という事実を「処理済み」のまま残さない)。
+      done_date = completions[issue_key]&.completed_on || info[:done]
+      computed_status = done_date.present? ? STATUS_DONE : info[:status]
       {
         month:           month,
         issue_key:       issue_key,
         summary:         info[:summary],
-        status:          note&.status_override.presence || computed_status,
+        # 完了(リリース済)は Backlog の事実なので手入力 override より優先する。それ以外は override が勝つ。
+        status:          computed_status == STATUS_DONE ? STATUS_DONE : (note&.status_override.presence || computed_status),
         computed_status: computed_status,
         status_override: note&.status_override.to_s,
         start_on:        d(info[:start]),
         shori_on:        d(info[:shori]),
-        done_on:         d(completions[issue_key]&.completed_on || info[:done]),
+        done_on:         d(done_date),
         note:            note&.note.to_s,
         notion_block_id: note&.notion_block_id.to_s,
         url:             issue_url(issue_key)
