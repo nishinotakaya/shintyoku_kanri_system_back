@@ -126,11 +126,12 @@ class TrelloTaskSyncServiceTest < Minitest::Test
     assert_equal first_count, second_count
   end
 
-  # 4. summary/memo/assignee_name/start_date/end_date/url が TrelloTask 側から反映される
+  # 4. summary/memo/assignee_name/start_date/end_date/url/trello_list_name が TrelloTask 側から反映される
   def test_upserted_task_fields_are_mapped_from_trello_task
     trello_task = create_trello_task(
       title: "画面設計",
       description: "詳細メモ",
+      list_name: "作業中",
       assignee_name: "山田太郎",
       start_date: Date.new(2026, 7, 1),
       due_date: Date.new(2026, 7, 15),
@@ -146,6 +147,7 @@ class TrelloTaskSyncServiceTest < Minitest::Test
     assert_equal Date.new(2026, 7, 1), task.start_date
     assert_equal Date.new(2026, 7, 15), task.end_date
     assert_equal "https://trello.com/c/abc123", task.url
+    assert_equal "作業中", task.trello_list_name
   end
 
   # 5. call の戻り値は同期件数

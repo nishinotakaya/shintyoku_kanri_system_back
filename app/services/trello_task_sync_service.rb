@@ -32,6 +32,7 @@ class TrelloTaskSyncService
         task.end_date = trello_task.due_date
         task.status_id = status[:id]
         task.status_name = status[:name]
+        task.trello_list_name = trello_task.list_name
         task.url = trello_task.url
         task.progress_workspace_id = tech_leaders_workspace_id
         task.save!

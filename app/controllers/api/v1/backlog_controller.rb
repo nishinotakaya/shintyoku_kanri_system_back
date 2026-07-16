@@ -435,7 +435,7 @@ module Api
           memo: t.memo, position: t.position,
           deploy_date: t.deploy_date, deploy_note: t.deploy_note,
           source: t.source, assignee_name: t.assignee_name, assignee_id: t.assignee_id,
-          url: t.url,
+          url: t.url, trello_list_name: t.trello_list_name,
           did_previous: t.did_previous, do_today: t.do_today,
           progress_workspace_id: t.progress_workspace_id
         }

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_15_100000) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_16_023146) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -96,6 +96,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_15_100000) do
     t.boolean "do_today", default: false, null: false
     t.integer "progress_workspace_id"
     t.string "google_event_id"
+    t.string "trello_list_name"
     t.index ["google_event_id"], name: "index_backlog_tasks_on_google_event_id"
     t.index ["progress_workspace_id"], name: "index_backlog_tasks_on_progress_workspace_id"
     t.index ["user_id"], name: "index_backlog_tasks_on_user_id"
