@@ -53,7 +53,8 @@ class InterviewNodeExpander
     when "answer"
       if mote? || mote_qa?
         # 褒めフレーズ/返し(answer)を展開 → 同じ趣旨の言い回しバリエーションを追加生成
-        data = OpenaiJson.chat_json(system: format(MOTE_VARIATION_SYS, partner: mote_partner_gender), user: mote_variation_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.9)
+        variation_sys = mote_qa? ? MOTE_QA_VARIATION_SYS : MOTE_VARIATION_SYS
+        data = OpenaiJson.chat_json(system: format(variation_sys, partner: mote_partner_gender), user: mote_variation_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.9)
         Array(data["phrases"]).first(6).map { |p| { kind: "answer", text: p.to_s } }.reject { |c| c[:text].strip.empty? }
       else
         # 回答(answer)を展開 → その回答を受けて面接官/インタビュアーが続けて聞きそうな深掘り質問
@@ -233,13 +234,24 @@ class InterviewNodeExpander
   SYS
 
   MOTE_QA_SYS = <<~SYS.freeze
-    あなたはモテ会話のプロです。相手(%{partner})からの【質問】に対する、自然でモテて"盛り上がる"『返し』を複数作ります。
+    あなたはモテ会話のプロです。相手(%{partner})からの【質問】に対する、自然で感じの良い『返し』を複数作ります。
     次の JSON で返してください: { "phrases": ["返し", "..."] }  ※5個程度。値は『自分の返し』だけ(相手の質問は入れない)。
-    【狙い】真面目に答えるだけで終わらせない。**一度ボケや切り返しで笑わせてから、チラッと本音や誠実さを見せる**構成が理想。
-    査定っぽい質問(彼女いるの？何人と付き合った？等)は、ユーモアでかわしつつ卑屈にならない。
+    【狙い】無理にボケない・キメすぎない。質問に素直に答えつつ、一言の自己開示や相手への質問返しで会話が続くようにする。
+    軽いユーモアは1割程度の塩(「w」1つ程度)に留める。査定っぽい質問(彼女いるの？何人と付き合った？等)は重くならず、
+    さらっとかわして「仲良くなったら話す」方向にする。
     【スタイル】タメ口の自然な話し言葉。ホスト感・キメすぎを出さない。
     #{MOTE_GUARD}
     既出と丸かぶりさせない。
+  SYS
+
+  MOTE_QA_VARIATION_SYS = <<~SYS.freeze
+    あなたはモテ会話のプロです。相手(%{partner})の質問に対する「返し」の、別の言い回しのバリエーションを作ります。
+    次の JSON で返してください: { "phrases": ["返し", "..."] }  ※5個程度。値は『自分の返し』だけ(相手のセリフは入れない)。
+    【狙い】無理にボケない・キメすぎない、自然で感じの良い普通の返しにする。質問に素直に答えつつ、一言の自己開示や
+    相手への質問返しで会話が続くようにする。軽いユーモアは1割程度の塩(「w」1つ程度)に留める。
+    【スタイル】タメ口の自然な話し言葉。ホスト感・キメすぎを出さない。
+    #{MOTE_GUARD}
+    元の返しや既出と丸かぶりさせない。
   SYS
 
   # YouTube用プロフィール(あれば優先)。無ければスキルシートの自己PRを参考にする。
