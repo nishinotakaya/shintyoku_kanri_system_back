@@ -34,7 +34,8 @@ module Api
             base: pr["base"], branch: pr["branch"],
             created_user: pr.dig("created_user", "name"), created: pr["created"],
             # 一覧のコメント数バッジ。件数取得失敗は 0 扱いにして一覧自体は返す
-            comment_count: (client.pull_request_comment_count(project, repo, pr["number"]) rescue 0)
+            comment_count: (client.pull_request_comment_count(project, repo, pr["number"]) rescue 0),
+            url: pull_request_url(project, repo, pr["number"])
           }
         }
       end
@@ -75,7 +76,8 @@ module Api
             next if c["content"].blank?
             { id: c["id"], user: c.dig("createdUser", "name"), content: c["content"], created: c["created"] }
           },
-          files: files, diff_error: diff_error
+          files: files, diff_error: diff_error,
+          url: pull_request_url(project, repo, pr["number"])
         }
       rescue BacklogGitMirror::Error, RuntimeError => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -159,6 +161,13 @@ module Api
 
       def build_mirror
         BacklogGitMirror.new(client, params.require(:project), params.require(:repo))
+      end
+
+      # Backlog 上の PR ページへの直リンク
+      def pull_request_url(project_key, repo_name, pr_number)
+        backlog_url = current_user.backlog_setting.backlog_url.to_s.chomp("/")
+        return nil if backlog_url.blank?
+        "#{backlog_url}/git/#{project_key}/#{repo_name}/pullRequests/#{pr_number}"
       end
     end
   end
