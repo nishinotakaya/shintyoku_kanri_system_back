@@ -306,6 +306,7 @@ Rails.application.routes.draw do
       get   "github/pr_detail",      to: "github_repos#pr_detail"
       post  "github/comment",        to: "github_repos#create_comment"
       post  "github/review_comment", to: "github_repos#create_review_comment"
+      post  "github/post_review",    to: "github_repos#post_review"
       get   "github/notifications",  to: "github_repos#notifications"
       # Backlog 対応ログ（活動履歴）月次ビュー
       get   "backlog_activities/targets", to: "backlog_activities#targets"

@@ -62,6 +62,22 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # 一斉レビュー投稿: 下書きコメント群を1つの markdown に結合して PR コメントへ POST
+      # params: full_name, number, comments: [{ path, line, code, body }]
+      def post_review
+        comments = params.require(:comments)
+        content = +"#### 📝 コードレビュー（#{Time.zone.now.strftime('%Y-%m-%d %H:%M')} / #{current_user.display_name}）\n\n"
+        comments.each do |review_comment|
+          content << "---\n**`#{review_comment[:path]}:#{review_comment[:line]}`**\n"
+          content << "```\n#{review_comment[:code]}\n```\n" if review_comment[:code].present?
+          content << "#{review_comment[:body]}\n\n"
+        end
+        comment = client.create_comment(params.require(:full_name), params.require(:number), content)
+        render json: { posted: comments.size, comment_id: comment[:id] }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
 
       def default_repo_names
