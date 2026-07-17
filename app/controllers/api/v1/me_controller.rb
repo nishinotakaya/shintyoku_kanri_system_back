@@ -31,7 +31,7 @@ module Api
         params.require(:user).permit(:display_name, :company_name, :openai_api_key, :heygen_api_key,
           :trello_api_key, :trello_api_token, :trello_board_id, :video_script_context, :closing_day,
           :default_transit_from, :default_transit_to, :default_transit_fee, :default_transit_line,
-          :postal_code, :address, :tax_office, :attendance_schedule_url, :progress_sheet_url, :local_save_dir, :dev_language,
+          :postal_code, :address, :tax_office, :attendance_schedule_url, :progress_sheet_url, :local_save_dir, :dev_language, :gender,
           custom_off_days: [], commute_days: [],
           transit_routes: [ :from, :to, :fee, :line ])
       end
@@ -65,6 +65,7 @@ module Api
           progress_sheet_url: current_user.progress_sheet_url,
           local_save_dir: current_user.local_save_dir,
           dev_language: current_user.dev_language,
+          gender: current_user.gender,
           admin: current_user.admin?,
           feature_flags: current_user.feature_flags.to_h,
           tax_status: current_user.tax_status,

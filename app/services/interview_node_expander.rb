@@ -33,11 +33,15 @@ class InterviewNodeExpander
         existing = @node.children.where(kind: "question").pluck(:text)
         if existing.empty?
           # 最初は固定の「相手のセリフ(Q)」を起点に並べる(返しAはQを展開すると出る/取込で同時投入)
-          dialogues = mote_qa? ? InterviewMindmap::MOTE_QA_DIALOGUES : InterviewMindmap::MOTE_DIALOGUES
+          dialogues = if mote_qa?
+            @mindmap.user&.gender == "female" ? InterviewMindmap::MOTE_QA_DIALOGUES_FOR_FEMALE : InterviewMindmap::MOTE_QA_DIALOGUES
+          else
+            InterviewMindmap::MOTE_DIALOGUES
+          end
           dialogues.map { |d| { kind: "question", text: d[:q] } }
         else
           # 再展開: 既出と重複しない新しい「相手のセリフ(質問)」を AI で追加
-          sys = mote_qa? ? MOTE_QA_CAT_SYS : MOTE_CAT_SYS
+          sys = mote_qa? ? format(MOTE_QA_CAT_SYS, partner: mote_partner_gender) : format(MOTE_CAT_SYS, partner: mote_partner_gender)
           prompt = mote_qa? ? mote_qa_category_prompt(existing) : mote_category_prompt(existing)
           data = OpenaiJson.chat_json(system: sys, user: prompt, api_key: api_key, model: "gpt-4o", temperature: 0.9)
           Array(data["categories"]).first(6).map { |c| { kind: "question", text: c.to_s } }.reject { |c| c[:text].strip.empty? }
@@ -49,7 +53,7 @@ class InterviewNodeExpander
     when "answer"
       if mote? || mote_qa?
         # 褒めフレーズ/返し(answer)を展開 → 同じ趣旨の言い回しバリエーションを追加生成
-        data = OpenaiJson.chat_json(system: MOTE_VARIATION_SYS, user: mote_variation_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.9)
+        data = OpenaiJson.chat_json(system: format(MOTE_VARIATION_SYS, partner: mote_partner_gender), user: mote_variation_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.9)
         Array(data["phrases"]).first(6).map { |p| { kind: "answer", text: p.to_s } }.reject { |c| c[:text].strip.empty? }
       else
         # 回答(answer)を展開 → その回答を受けて面接官/インタビュアーが続けて聞きそうな深掘り質問
@@ -60,7 +64,7 @@ class InterviewNodeExpander
     else
       if mote? || mote_qa?
         # カテゴリ(question)を展開 → そのカテゴリの褒めフレーズ/返し(answer)を追加生成
-        sys = mote_qa? ? MOTE_QA_SYS : MOTE_SYS
+        sys = mote_qa? ? format(MOTE_QA_SYS, partner: mote_partner_gender) : format(MOTE_SYS, partner: mote_partner_gender)
         data = OpenaiJson.chat_json(system: sys, user: mote_prompt, api_key: api_key, model: "gpt-4o", temperature: 0.85)
         Array(data["phrases"]).first(8).map { |p| { kind: "answer", text: p.to_s } }.reject { |c| c[:text].strip.empty? }
       elsif love_youtube?
@@ -89,6 +93,11 @@ class InterviewNodeExpander
   def mote? = @mindmap.mote?
   def mote_qa? = @mindmap.mote_qa?
   def love_youtube? = @mindmap.love_youtube?
+
+  # モテ系の「相手」の性別: 持ち主が女性なら男性、それ以外(male/未設定)は女性(従来どおり)
+  def mote_partner_gender
+    @mindmap.user&.gender == "female" ? "男性" : "女性"
+  end
 
   # onclass リサーチ(高再生の傾向)を差し込むブロック。YouTube 以外や取得失敗時は空文字。
   def research_block
@@ -207,7 +216,7 @@ class InterviewNodeExpander
   TXT
 
   MOTE_VARIATION_SYS = <<~SYS.freeze
-    あなたはモテ会話のプロです。相手(女性)のセリフに対する「返し」の、別の言い回しのバリエーションを作ります。
+    あなたはモテ会話のプロです。相手(%{partner})のセリフに対する「返し」の、別の言い回しのバリエーションを作ります。
     次の JSON で返してください: { "phrases": ["返し", "..."] }  ※5個程度。値は『自分の返し』だけ(相手のセリフは入れない)。
     ただ共感して褒めるだけでなく、思わず笑って返したくなる"盛り上がる返し"にすること。タメ口の自然な話し言葉。
     #{MOTE_GUARD}
@@ -215,7 +224,7 @@ class InterviewNodeExpander
   SYS
 
   MOTE_SYS = <<~SYS.freeze
-    あなたはモテ会話のプロです。相手(女性)の【セリフ】に対する、自然でモテて"盛り上がる"『返し』を複数作ります。
+    あなたはモテ会話のプロです。相手(%{partner})の【セリフ】に対する、自然でモテて"盛り上がる"『返し』を複数作ります。
     次の JSON で返してください: { "phrases": ["返し", "..."] }  ※5個程度。値は『自分の返し』だけ(相手のセリフは入れない)。
     【狙い】ただの共感+褒めで終わらせず、相手が『笑う/思わず返したくなる』テンポの良い一言にする。
     【スタイル】タメ口の自然な話し言葉。ホスト感・キメすぎを出さない。
@@ -224,7 +233,7 @@ class InterviewNodeExpander
   SYS
 
   MOTE_QA_SYS = <<~SYS.freeze
-    あなたはモテ会話のプロです。相手(女性)からの【質問】に対する、自然でモテて"盛り上がる"『返し』を複数作ります。
+    あなたはモテ会話のプロです。相手(%{partner})からの【質問】に対する、自然でモテて"盛り上がる"『返し』を複数作ります。
     次の JSON で返してください: { "phrases": ["返し", "..."] }  ※5個程度。値は『自分の返し』だけ(相手の質問は入れない)。
     【狙い】真面目に答えるだけで終わらせない。**一度ボケや切り返しで笑わせてから、チラッと本音や誠実さを見せる**構成が理想。
     査定っぽい質問(彼女いるの？何人と付き合った？等)は、ユーモアでかわしつつ卑屈にならない。
@@ -325,7 +334,7 @@ class InterviewNodeExpander
   end
 
   MOTE_CAT_SYS = <<~SYS.freeze
-    あなたはモテ会話/合コンの「相手のセリフ出し」のプロです。飲み会や合コンの席で相手(女性)が言いがちな"一言"を新しく挙げます。
+    あなたはモテ会話/合コンの「相手のセリフ出し」のプロです。飲み会や合コンの席で相手(%{partner})が言いがちな"一言"を新しく挙げます。
     次の JSON で返してください: { "categories": ["相手のセリフ", "..."] }  ※6個程度。**既出と重複させない**。
     例: 「最近疲れてて」「髪切ったんだ」「何食べる？」「映画好きなんだ」「実は◯◯にハマってて」「意外と◯◯なんだよね」など、
     返しで"いじり/ボケ/二択/共感"を効かせて盛り上げやすい自然なセリフ。趣味・ギャップ・その場のノリ系を多めに。
@@ -338,12 +347,12 @@ class InterviewNodeExpander
       【すでにある相手のセリフ(これらと重複させない)】
       #{existing.map { |t| "・#{t}" }.join("\n")}
 
-      相手(女性)が言いがちな新しいセリフを考えてください。
+      相手(#{mote_partner_gender})が言いがちな新しいセリフを考えてください。
     TXT
   end
 
   MOTE_QA_CAT_SYS = <<~SYS.freeze
-    あなたはモテ会話/合コンの「相手の質問出し」のプロです。飲み会・合コン・デートで相手(女性)が男性に聞きがちな"質問"を新しく挙げます。
+    あなたはモテ会話/合コンの「相手の質問出し」のプロです。飲み会・合コン・デートで相手(%{partner})が聞きがちな"質問"を新しく挙げます。
     次の JSON で返してください: { "categories": ["相手からの質問", "..."] }  ※6個程度。**既出と重複させない**。
     例: 「兄弟いるの？」「元カノとはなんで別れたの？」「理想のデートは？」「爬虫類飼ってそうw」「甘いもの好きなの？」など、
     返しで"ボケ/切り返し/二択/共犯感"を効かせて盛り上げやすい自然な質問。査定系(年収・学歴等)は入れない。下品・不快にしない。
@@ -355,7 +364,7 @@ class InterviewNodeExpander
       【すでにある相手からの質問(これらと重複させない)】
       #{existing.map { |t| "・#{t}" }.join("\n")}
 
-      相手(女性)が聞きがちな新しい質問を考えてください。
+      相手(#{mote_partner_gender})が聞きがちな新しい質問を考えてください。
     TXT
   end
 

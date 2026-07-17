@@ -106,7 +106,10 @@ module Api
         return import_youtube_bank(m, root) if m.youtube?
         return import_youtube_bank(m, root, InterviewMindmap::LOVE_YOUTUBE_QUESTIONS) if m.love_youtube?
         return import_mote_bank(m, root) if m.mote?
-        return import_mote_bank(m, root, InterviewMindmap::MOTE_QA_DIALOGUES) if m.mote_qa?
+        if m.mote_qa?
+          dialogues = m.user&.gender == "female" ? InterviewMindmap::MOTE_QA_DIALOGUES_FOR_FEMALE : InterviewMindmap::MOTE_QA_DIALOGUES
+          return import_mote_bank(m, root, dialogues)
+        end
         bank = InterviewBankImporter.new(user: current_user).call
         InterviewMindmap.transaction do
           base = root.children.maximum(:position).to_i + 1
@@ -175,7 +178,7 @@ module Api
 
       # モテ: 相手のセリフ(質問=Q) → 盛り上がる返し(回答=A) を会話形式で並べ、
       # 続けて合コンの"つかみゲーム"(ゲーム名=Q → やり方/コツ=A) も root 配下に並べる。
-      # mote_qa は entries に MOTE_QA_DIALOGUES を渡して呼び出す(ゲームは含めない)。
+      # mote_qa は entries に MOTE_QA_DIALOGUES(持ち主が女性なら MOTE_QA_DIALOGUES_FOR_FEMALE) を渡して呼び出す(ゲームは含めない)。
       def import_mote_bank(m, root, entries = InterviewMindmap::MOTE_DIALOGUES + InterviewMindmap::GOKON_GAMES)
         InterviewMindmap.transaction do
           base = root.children.maximum(:position).to_i + 1
