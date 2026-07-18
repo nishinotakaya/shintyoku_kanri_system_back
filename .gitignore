@@ -37,3 +37,11 @@
 /node_modules
 /vendor/bundle
 .vercel
+
+# Claude Code 関連(コミット対象外ルール)
+.claude/
+docs/
+
+# Claude Code 関連(コミット対象外ルール)
+.claude/
+docs/
