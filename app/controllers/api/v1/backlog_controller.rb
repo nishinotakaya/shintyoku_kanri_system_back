@@ -344,26 +344,15 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # カレンダーの「タマ」タブ専用。絞り込み条件は TamaCalendarTaskQuery に集約。
       def tasks_on_date
         target_date = Date.iso8601(params[:date].to_s)
-        recent_completed_threshold = target_date - 3
-        # このAPIはカレンダーの「タマ」タブ専用。リビング(source=notion)やスキルシート(source=sheet)を
-        # 混ぜないよう、Backlog系(backlog / 手入力local / 旧nil)のみに絞る。リビングは /notion_tasks を使う。
-        scope = viewing_user.backlog_tasks
-          .where("source IS NULL OR source IN (?)", %w[backlog local])
-          .where(
-            "(status_id <> 4 AND ((start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) OR " \
-            "(created_on IS NULL OR created_on <= ?) AND (completed_on IS NULL OR completed_on >= ?))) " \
-            "OR (status_id = 4 AND completed_on IS NOT NULL AND completed_on >= ? AND completed_on <= ?)",
-            target_date, target_date, target_date, target_date,
-            recent_completed_threshold, target_date
-          )
-        if params[:assignee].present?
-          scope = scope.where("assignee_name LIKE ?", "%#{params[:assignee]}%")
-        end
-        # 表示順: 処理済(3) → 処理中(2) → 未対応(1) → 完了(4) → その他
-        status_order = Arel.sql("CASE status_id WHEN 3 THEN 1 WHEN 2 THEN 2 WHEN 1 THEN 3 WHEN 4 THEN 4 ELSE 5 END")
-        render json: scope.order(status_order, Arel.sql("COALESCE(position, 9999)"), :issue_key).map { |t| serialize_task(t) }
+        tasks = TamaCalendarTaskQuery.new(
+          user: viewing_user,
+          date: target_date,
+          assignee: params[:assignee]
+        ).call
+        render json: tasks.map { |t| serialize_task(t) }
       rescue ArgumentError
         render json: { error: "date パラメータが不正です" }, status: :bad_request
       end

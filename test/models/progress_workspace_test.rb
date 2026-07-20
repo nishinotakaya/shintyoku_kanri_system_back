@@ -23,7 +23,7 @@ class ProgressWorkspaceTest < Minitest::Test
     workspaces = @user.progress_workspaces.order(:position)
     assert_equal 5, workspaces.size
     assert_equal [ "Wing", "リビング", "テックリーダーズ", "ReRe", "プライベート" ], workspaces.map(&:name)
-    assert_equal [ "backlog", "notion", "manual", "manual", "manual" ], workspaces.map(&:source_type)
+    assert_equal [ "backlog", "notion", "trello", "manual", "manual" ], workspaces.map(&:source_type)
     assert workspaces.all?(&:builtin?), "デフォルトワークスペースは全て builtin であるべき"
   end
 
