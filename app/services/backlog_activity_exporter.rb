@@ -46,7 +46,7 @@ class BacklogActivityExporter
 
     { spreadsheet_id: @spreadsheet_id,
       url: "https://docs.google.com/spreadsheets/d/#{@spreadsheet_id}/edit",
-      filled_dates: result[:filled], appended_rows: result[:appended] }
+      filled_dates: result[:filled], appended_rows: result[:appended], deleted_rows: result[:deleted] }
   rescue Google::Apis::ClientError => e
     raise "スプレッドシートへの書き込みに失敗しました（権限を確認してください）: #{e.message}"
   end
@@ -143,7 +143,30 @@ class BacklogActivityExporter
 
     appended = append_new_rows(service, tab, rows.size, existing_keys)
     linkify_note_cells(service)
-    { filled: updates.size + note_link_cells.size, appended: appended }
+    # アプリ現行サマリに無い「対象ユーザー本人の古い月の行」を掃除する(集約前の重複行を消す)。
+    # 削除は最後に行い、行 index は削除前スナップショット(rows)基準・降順で消すのでズレない。
+    deleted = delete_stale_rows(service, tab, rows, header_idx)
+    { filled: updates.size + note_link_cells.size, appended: appended, deleted: deleted }
+  end
+
+  # 集約(課題ごと最新月)で不要になった、対象ユーザー本人の古い月の行を削除する。
+  # 他ユーザー(西野など)の行・資料行・現行サマリにある行は BacklogSummarySheetReconciler が温存する。
+  def delete_stale_rows(service, tab, rows, header_idx)
+    indices = BacklogSummarySheetReconciler.new(
+      sheet_rows: rows,
+      header_index: header_idx,
+      app_pairs: summary_by_key.keys,
+      target_name: @user.display_name
+    ).stale_row_indices
+    return 0 if indices.empty?
+
+    requests = indices.map do |row_index|
+      S::Request.new(delete_dimension: S::DeleteDimensionRequest.new(
+        range: S::DimensionRange.new(sheet_id: @summary_sheet_id, dimension: "ROWS",
+          start_index: row_index, end_index: row_index + 1)))
+    end
+    service.batch_update_spreadsheet(@spreadsheet_id, S::BatchUpdateSpreadsheetRequest.new(requests: requests))
+    indices.size
   end
 
   # ── 備考セル内の URL をクリック可能なリンク(リッチテキスト)にする ──

@@ -54,6 +54,54 @@ class BacklogActivitySummaryTest < Minitest::Test
     assert_equal "", row[:done_on]
   end
 
+  # 4. 同じ課題が複数月にまたがっても、最新月の1行だけに集約される。
+  def test_multi_month_issue_collapses_to_single_latest_month_row
+    create_status_activity(occurred_on: Date.new(2026, 6, 1), content: "未対応 → 処理中", month: "2026-06")
+    create_status_activity(occurred_on: Date.new(2026, 7, 1), content: "処理中 → 処理済み", month: "2026-07")
+
+    rows = BacklogActivitySummary.new(@user).rows.select { |r| r[:issue_key] == "SAP-1" }
+
+    assert_equal 1, rows.size, "同一課題は1行に集約されるべき"
+    assert_equal "2026-07", rows.first[:month], "最新月になるべき"
+    # 開始日は全活動の最早、状態は最新の状態変更から算出される
+    assert_equal "2026-06-01", rows.first[:start_on]
+  end
+
+  # 5. 複数課題は最新月が新しい順に並ぶ(同月内は課題キー降順)。
+  def test_issues_are_sorted_by_latest_month_desc
+    create_status_activity(occurred_on: Date.new(2026, 5, 1), content: "未対応 → 処理中", month: "2026-05", issue_key: "SAP-100")
+    create_status_activity(occurred_on: Date.new(2026, 7, 1), content: "未対応 → 処理中", month: "2026-07", issue_key: "SAP-200")
+    create_status_activity(occurred_on: Date.new(2026, 7, 2), content: "未対応 → 処理中", month: "2026-07", issue_key: "SAP-300")
+
+    keys = BacklogActivitySummary.new(@user).rows.map { |r| [ r[:month], r[:issue_key] ] }
+
+    # 2026-07 が先、同月内は課題キー降順(SAP-300 → SAP-200)、最後に 2026-05
+    assert_equal [ [ "2026-07", "SAP-300" ], [ "2026-07", "SAP-200" ], [ "2026-05", "SAP-100" ] ], keys
+  end
+
+  # 6. 最新月にメモが無くても、同じ課題の古い月のメモ(内容あり)を最新月の行に引き継ぐ。
+  def test_note_from_older_month_is_carried_to_latest_month_row
+    create_status_activity(occurred_on: Date.new(2026, 6, 1), content: "未対応 → 処理中", month: "2026-06")
+    create_status_activity(occurred_on: Date.new(2026, 7, 1), content: "処理中 → 処理済み", month: "2026-07")
+    BacklogSummaryNote.create!(user: @user, month: "2026-06", issue_key: "SAP-1", note: "古い月のメモ")
+
+    row = BacklogActivitySummary.new(@user).rows.find { |r| r[:issue_key] == "SAP-1" }
+
+    assert_equal "2026-07", row[:month]
+    assert_equal "古い月のメモ", row[:note], "古い月のメモを最新月の行に引き継ぐべき"
+  end
+
+  # 7. 活動が全く無い課題の備考(資料:リンク集など)は従来どおり備考のみ行として出る。
+  def test_note_only_row_without_activity_is_still_shown
+    BacklogSummaryNote.create!(user: @user, month: "2026-07", issue_key: "SAP-9000", note: "資料リンク集")
+
+    row = BacklogActivitySummary.new(@user).rows.find { |r| r[:issue_key] == "SAP-9000" }
+
+    refute_nil row
+    assert_equal "資料リンク集", row[:note]
+    assert_equal "", row[:summary]
+  end
+
   private
 
   def create_status_activity(occurred_on:, content:, month:, issue_key: "SAP-1")

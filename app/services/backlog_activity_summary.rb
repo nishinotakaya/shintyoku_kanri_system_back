@@ -19,12 +19,27 @@ class BacklogActivitySummary
     @backlog_url = user.backlog_setting&.backlog_url.to_s.chomp("/")
   end
 
-  # 上司報告サマリの行（月×課題の出現順）。
+  # 上司報告サマリの行（課題ごとに1行・最新月に集約／最新月が新しい順）。
+  # 同じ課題が複数月にまたがっても内容は同じなので、一番新しい月の1行だけを出す
+  # (例: SAP-4057 が 2026-06/2026-07 にあれば 2026-07 の1行)。概要/状態/開始日/処理済日/完了日は
+  # その課題の全活動から算出するので、月をまとめても情報は失われない。
   # 活動が無い「備考だけの行」（例: Notion ドキュメントハブの資料リンク集）も末尾に出す。
   def rows
-    @rows ||= month_issue_pairs.map do |month, issue_key|
+    @rows ||= issue_rows + note_only_rows
+  end
+
+  def issue_url(issue_key)
+    return nil if @backlog_url.blank?
+    "#{@backlog_url}/view/#{issue_key}"
+  end
+
+  private
+
+  # 課題ごと1行(最新月)の本体行。
+  def issue_rows
+    latest_month_by_issue.map do |issue_key, month|
       info = issue_data.fetch(issue_key)
-      note = notes[[ month, issue_key ]]
+      note = note_for(issue_key, month)
       # 完了日が確定していれば「完了」を正とする(状態変更の活動ログが同期範囲外で
       # 拾えていなくても、リリース済という事実を「処理済み」のまま残さない)。
       done_date = completions[issue_key]&.completed_on || info[:done]
@@ -44,22 +59,16 @@ class BacklogActivitySummary
         notion_block_id: note&.notion_block_id.to_s,
         url:             issue_url(issue_key)
       }
-    end + note_only_rows
+    end
   end
 
-  def issue_url(issue_key)
-    return nil if @backlog_url.blank?
-    "#{@backlog_url}/view/#{issue_key}"
-  end
-
-  private
-
-  # 活動に紐づかない備考行（月×キーが activities に存在しない BacklogSummaryNote）。
+  # 活動に紐づかない備考行（課題キーに activities が1件も無い BacklogSummaryNote）。
   # Notion ドキュメントハブの資料リンク集(「資料:○○」行)などがここに出る。
+  # 集約後は「課題単位」で活動有無を見る(活動のある課題の古い月メモは note_for で吸収する)。
   def note_only_rows
-    existing = month_issue_pairs
+    active_issue_keys = latest_month_by_issue.keys.to_set
     notes.filter_map do |(month, issue_key), note|
-      next if existing.include?([ month, issue_key ])
+      next if active_issue_keys.include?(issue_key)
       next if note.note.blank?
       {
         month: month, issue_key: issue_key,
@@ -72,12 +81,36 @@ class BacklogActivitySummary
     end.sort_by { |row| [ row[:month].to_s, row[:issue_key].to_s ] }
   end
 
+  # 課題ごとの最新月（月が新しい順に並べる。同月内は課題キー降順）。
+  def latest_month_by_issue
+    @latest_month_by_issue ||= activities.group_by(&:issue_key)
+      .transform_values { |acts| acts.map(&:month).compact.max }
+      .sort_by { |issue_key, month| [ month.to_s, issue_key.to_s ] }
+      .reverse
+      .to_h
+  end
+
+  # 集約後の行に載せるメモ。最新月にメモ/上書きがあればそれを、無ければ同じ課題の
+  # 別の月で内容のあるメモのうち最新のものを使う(古い月のメモを取りこぼさない)。
+  def note_for(issue_key, month)
+    direct = notes[[ month, issue_key ]]
+    return direct if direct && (direct.note.present? || direct.status_override.present?)
+    fallback = notes_by_issue[issue_key]
+      &.select { |note| note.note.present? || note.status_override.present? }
+      &.max_by { |note| note.month.to_s }
+    fallback || direct
+  end
+
   def activities
     @activities ||= @user.backlog_activities.order(:occurred_on, :activity_id).to_a
   end
 
   def notes
     @notes ||= @user.backlog_summary_notes.index_by { |n| [ n.month, n.issue_key ] }
+  end
+
+  def notes_by_issue
+    @notes_by_issue ||= @user.backlog_summary_notes.group_by(&:issue_key)
   end
 
   # 課題ごとの完了日（Backlog の changeLog から同期した値）。done_on の優先ソース。
@@ -99,12 +132,6 @@ class BacklogActivitySummary
         done:    status_acts.find { |a| after.call(a) == STATUS_DONE }&.occurred_on
       }
     end
-  end
-
-  # 月×課題 の組み合わせ（月・課題キー順）
-  def month_issue_pairs
-    activities.group_by { |a| [ a.month, a.issue_key ] }.keys
-              .sort_by { |month, issue_key| [ month.to_s, issue_key.to_s ] }
   end
 
   def d(date) = date ? date.to_s : ""
