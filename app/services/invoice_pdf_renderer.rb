@@ -60,12 +60,22 @@ class InvoicePdfRenderer
       total = @total_override.to_i
       subtotal = (total / (1.0 + rate / 100.0)).round
       tax = total - subtotal
-      # 明細が無い labop モードのみ、override に合わせて単一行を再生成（unit_price=3,750 円/時間）
+      # 明細が無い labop モードのみ、override に合わせて単一行を再生成する。
+      # 数量は実働時間(work_reports合計)を使い、単価は「税抜金額 ÷ 実働時間」で出す。
+      # こうすると数量×単価=金額が実態(例: 160.0h × 2,875 = 460,000)と一致する。
+      # 以前はデフォルト単価(wings=3,500)で数量を逆算していたため、160h の申請が
+      # 460,000÷3,500=131.4h と表示され、数量×単価が金額と合わないバグになっていた。
+      # 実働が 0 の月だけ、カテゴリ別デフォルト単価から数量を逆算するフォールバックに落ちる。
       # 自己発行(非labop)は時給概念が無いカテゴリ(resystems 等)があるので、勝手な時給行を作らない。
       if items.empty? && labop_mode?
-        unit_price = InvoiceSetting.default_unit_price_for(@category || "wings").nonzero? || 3_750
-        qty_f = subtotal.to_f / unit_price
-        qty = qty_f == qty_f.to_i ? qty_f.to_i : qty_f.round(1)
+        if hours.positive?
+          qty = hours == hours.to_i ? hours.to_i : hours.round(1)
+          unit_price = (subtotal.to_f / hours).round
+        else
+          unit_price = InvoiceSetting.default_unit_price_for(@category || "wings").nonzero? || 3_750
+          qty_f = subtotal.to_f / unit_price
+          qty = qty_f == qty_f.to_i ? qty_f.to_i : qty_f.round(1)
+        end
         items = [ { label: build_default_label, qty: qty, unit: "時間", unit_price: unit_price, amount: subtotal } ]
       end
     end
