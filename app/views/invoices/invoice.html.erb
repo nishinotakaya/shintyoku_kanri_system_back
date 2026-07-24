@@ -12,6 +12,10 @@ _issuer_user    = (defined?(issuer_user) && issuer_user) || user
 _is_payment_notice = (defined?(title_text) && title_text == "支払通知書")
 _seal_user    = _is_payment_notice ? _issuer_user : user
 _seal_setting = _is_payment_notice ? _issuer_setting : setting
+# 差出人(発行者)ブロックの名義・住所・登録番号に使う設定。
+# 請求書 は請求者(=対象ユーザー setting)、支払通知書 は支払者(=_issuer_setting)。
+# admin(西野)が代理で川村の請求書を出しても、差出人は川村本人になる(西野住所/番号にしない)。
+_sender_setting = _is_payment_notice ? _issuer_setting : setting
 # まず DB(ユーザーの seal_image=data URL)を使い、無ければ従来の public/hanko_* にフォールバック
 _db_seal = (_seal_user.respond_to?(:seal_image) ? _seal_user.seal_image.to_s : "")
 _seal_surname = (_seal_setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || _seal_user.display_name.to_s.split(/[\s　]/).first.to_s
@@ -167,16 +171,16 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
       <% if hanko_src %>
       <img class="hanko-img" src="<%= hanko_src %>" />
       <% end %>
-      <div class="issuer-name"><%= _issuer_setting.issuer_name %></div>
+      <div class="issuer-name"><%= _sender_setting.issuer_name %></div>
       <div>適格請求書発行事業者登録番号</div>
-      <%# インボイス番号: 請求書単体の上書きがあれば優先、無ければ発行者設定の値 %>
-      <div><%= (defined?(registration_no_override) && registration_no_override.present?) ? registration_no_override : _issuer_setting.registration_no %></div>
+      <%# インボイス番号: 請求書単体の上書きがあれば優先、無ければ差出人設定の値 %>
+      <div><%= (defined?(registration_no_override) && registration_no_override.present?) ? registration_no_override : _sender_setting.registration_no %></div>
       <br>
-      <div>〒<%= _issuer_setting.postal_code %></div>
-      <div><%= _issuer_setting.address %></div>
+      <div>〒<%= _sender_setting.postal_code %></div>
+      <div><%= _sender_setting.address %></div>
       <br>
-      <div>TEL: <%= _issuer_setting.tel %></div>
-      <div><%= _issuer_setting.email %></div>
+      <div>TEL: <%= _sender_setting.tel %></div>
+      <div><%= _sender_setting.email %></div>
     </div>
   </div>
 

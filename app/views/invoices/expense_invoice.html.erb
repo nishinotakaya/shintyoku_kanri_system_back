@@ -10,6 +10,10 @@ _issuer_user    = (defined?(issuer_user) && issuer_user) || user
 _is_payment_notice = (defined?(title_text) && title_text == "支払通知書")
 _seal_user    = _is_payment_notice ? _issuer_user : user
 _seal_setting = _is_payment_notice ? _issuer_setting : setting
+# 差出人(発行者)ブロックの名義・住所・登録番号・振込先に使う設定。
+# 請求書/立替金 は請求者(=対象ユーザー setting)、支払通知書 は支払者(=_issuer_setting)。
+# admin(西野)が代理で川村の立替金を出しても、差出人は川村本人になる(西野口座/住所にしない)。
+_sender_setting = _is_payment_notice ? _issuer_setting : setting
 _db_seal = (_seal_user.respond_to?(:seal_image) ? _seal_user.seal_image.to_s : "")
 _issuer_surname = (_seal_setting.issuer_name.to_s.split(/[\s　]/).first.to_s).presence || _seal_user.display_name.to_s.split(/[\s　]/).first.to_s
 _hanko_map = { "西野" => "hanko_nishino.png", "川村" => "hanko_kawamura.svg" }
@@ -119,15 +123,15 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
       <% if hanko_src %>
       <img class="hanko-img" src="<%= hanko_src %>" />
       <% end %>
-      <div class="issuer-name"><%= _issuer_setting.issuer_name %></div>
+      <div class="issuer-name"><%= _sender_setting.issuer_name %></div>
       <div>適格請求書発行事業者登録番号</div>
-      <div><%= _issuer_setting.registration_no %></div>
+      <div><%= _sender_setting.registration_no %></div>
       <br>
-      <div>〒<%= _issuer_setting.postal_code %></div>
-      <div><%= _issuer_setting.address %></div>
+      <div>〒<%= _sender_setting.postal_code %></div>
+      <div><%= _sender_setting.address %></div>
       <br>
-      <div>TEL: <%= _issuer_setting.tel %></div>
-      <div><%= _issuer_setting.email %></div>
+      <div>TEL: <%= _sender_setting.tel %></div>
+      <div><%= _sender_setting.email %></div>
     </div>
   </div>
 
@@ -184,8 +188,9 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
 
   <div class="bank">
     <div class="lbl">お振込先：</div>
-    <%# 支払通知書モード: 振込先は受領者(payee=user=川村) の bank_info。それ以外は発行者(payer/請求者)の bank_info。 %>
-    <div><%= _title_text == '支払通知書' ? setting.bank_info : _issuer_setting.bank_info %></div>
+    <%# 振込先は常に請求者/受領者(=対象ユーザー setting)の口座。
+        支払通知書=受領者(川村)、請求書/立替金=請求者(川村)。admin 代理でも操作者(西野)口座にしない。 %>
+    <div><%= setting.bank_info %></div>
   </div>
 </body>
 </html>
