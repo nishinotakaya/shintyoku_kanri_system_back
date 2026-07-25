@@ -565,7 +565,8 @@ module Api
           subject: params[:subject].to_s,
           body: params[:body].to_s,
           attachments: attachments,
-          from_name: current_user.display_name
+          from_name: current_user.display_name,
+          bcc: current_user.email # 署名者(西野=支払者)に控えを BCC で送る(記録用)
         )
 
         # 送信成功 → 対象 submission の paid_at を更新（既に paid_at 入っていても上書き）

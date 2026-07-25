@@ -19,7 +19,7 @@ class GmailSender
 
   # to: 文字列 or 配列
   # attachments: [{ filename:, content_type:, body: <String binary> }]
-  def send_mail(to:, subject:, body:, attachments: [], from_name: nil)
+  def send_mail(to:, subject:, body:, attachments: [], from_name: nil, bcc: nil)
     # 宛先は呼び出し元 (Frontend) が指定したものをそのまま使う。
     # OUTBOUND_TEST_RECIPIENT は to が空のときのみフォールバックとして利用。
     actual_to = Array(to).flatten.map { |t| t.to_s.strip }.reject(&:empty?).uniq
@@ -28,14 +28,17 @@ class GmailSender
       actual_to = [ fallback ] if fallback.present?
     end
     raise "送信先がありません" if actual_to.empty?
+    # 控え送付先 (BCC)。To と重複するものは除く。
+    actual_bcc = Array(bcc).flatten.map { |t| t.to_s.strip }.reject(&:empty?).uniq - actual_to
 
     # Mail gem に文字列で To を渡すと RFC822 ヘッダが確実に作られる
     to_header = actual_to.join(", ")
-    Rails.logger.info("[GmailSender] to=#{to_header} from=#{@user.email} attachments=#{attachments.size}")
+    Rails.logger.info("[GmailSender] to=#{to_header} bcc=#{actual_bcc.join(',')} from=#{@user.email} attachments=#{attachments.size}")
 
     mail = Mail.new
     mail.from    = from_name ? "#{from_name} <#{@user.email}>" : @user.email
     mail.to      = to_header
+    mail.bcc     = actual_bcc.join(", ") if actual_bcc.any?
     mail.subject = subject
     mail.body    = body.to_s
     mail.charset = "UTF-8"
