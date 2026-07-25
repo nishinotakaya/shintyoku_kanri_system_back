@@ -241,5 +241,16 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
     <div style="white-space: pre-wrap;"><%= note_text %></div>
   </div>
   <% end %>
+
+  <%# 電子サイン(証明ブロック): 支払通知書で e_sign が渡された時だけ描画 %>
+  <% if defined?(e_sign) && e_sign.present? %>
+  <div class="esign" style="margin-top: 14px; padding: 10px 12px; border: 1.5px solid #2f6f4f; border-radius: 6px; font-size: 11px; color: #1f4d38; background: #f2faf5; max-width: 340px;">
+    <div style="font-weight: 700; margin-bottom: 4px;">✔ 電子的に証明済（電子サイン）</div>
+    <div>署名者：<%= e_sign[:signer_name] %></div>
+    <div>日時：<%= e_sign[:signed_at] %></div>
+    <div>検証番号：<%= e_sign[:verify_id] %></div>
+    <div style="margin-top: 3px; font-size: 9px; color: #4a6b5a;">本書の内容はハッシュ値により改ざん検知が可能です。</div>
+  </div>
+  <% end %>
 </body>
 </html>

@@ -500,10 +500,24 @@ module Api
         if subs.map(&:user_id).uniq.size > 1
           return render(json: { error: "申請者が異なる申請が混在しています。振込通知は受取人ごとに分けて送ってください。" }, status: :unprocessable_entity)
         end
+        # 電子サイン(名前入力・既定は操作者=支払者=西野の氏名)
+        signer_name = params[:signer_name].to_s.strip.presence || current_user.display_name
+
         attachments = []
         subs.each do |s|
           surname = s.user&.display_name.to_s.split(/[\s　]/).first.to_s
           cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
+
+          # 支払通知書(振込確認証)を電子的に証明: 支払者(西野)が署名。金額・受領者・振込日をハッシュ化して証跡を残す。
+          po_no = s.purchase_order_no_override.presence || s.received_purchase_order&.order_no
+          cert = InvoiceCertifier.certify(
+            target_type: "InvoiceSubmission", target_id: s.id, kind: "payment_proof",
+            user: current_user,
+            payload: { payee: s.user&.display_name, amount: s.total_override, paid_on: paid_on.to_s,
+                       po: po_no, category: s.category, year: s.year, month: s.month, signer_name: signer_name }
+          )
+          e_sign = { signer_name: signer_name, signed_at: cert.signed_at.strftime("%Y年%-m月%-d日 %H:%M"),
+                     verify_id: cert.content_sha256.first(12) }
 
           if s.kind == "expense"
             # 立替金の支払通知書 PDF (ExpensePdfRenderer 経由)
@@ -512,7 +526,8 @@ module Api
               issuer_user_override: current_user,
               client_name_override: s.user.display_name,
               title_override: "支払通知書",
-              application_date: paid_on # 発行日=振込済にした当日
+              application_date: paid_on, # 発行日=振込済にした当日
+              e_sign: e_sign
             ).call
             fname = "#{cat_label}_#{surname.presence || '通知'}_支払通知書_立替金_#{s.year}年_#{s.month}月分.pdf"
             attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
@@ -538,7 +553,8 @@ module Api
             client_name_override: s.user.display_name,
             # 発行日=振込済にした当日、お振込日=同日(支払期限の計算値ではなく実際の振込日を出す)
             application_date: paid_on,
-            due_date_override: paid_on
+            due_date_override: paid_on,
+            e_sign: e_sign
           ).call
           fname = "#{cat_label}_#{surname.presence || '通知'}_支払通知書_#{s.year}年_#{s.month}月分.pdf"
           attachments << { filename: fname, content_type: "application/pdf", body: File.binread(pdf_path) }

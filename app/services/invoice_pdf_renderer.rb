@@ -12,7 +12,8 @@ class InvoicePdfRenderer
                  client_name_override: nil, issuer_user_override: nil,
                  total_override: nil, item_label_override: nil, subject_override: nil,
                  items_override: nil, note: nil, merged_users: nil, title_override: nil,
-                 due_date_override: nil, registration_no_override: nil, bank_info_override: nil)
+                 due_date_override: nil, registration_no_override: nil, bank_info_override: nil,
+                 e_sign: nil)
     @user = user
     @year = year
     @month = month
@@ -28,6 +29,7 @@ class InvoicePdfRenderer
     @subject_override = subject_override.to_s.presence
     @items_override = items_override if items_override.is_a?(Array) && items_override.any?
     @note = note.to_s.presence # 備考欄に出すテキスト（発注番号など）
+    @e_sign = e_sign # 電子サイン情報 { signer_name:, signed_at:, verify_id: }（支払通知書のみ描画）
     @title_override = title_override.to_s.presence
     @setting = user.invoice_setting_for(@category || "wings")
     @issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
@@ -152,6 +154,7 @@ class InvoicePdfRenderer
     title_text = @title_override || "請求書"
     registration_no_override = @registration_no_override  # インボイス番号の請求書単体上書き(ERBで使用)
     bank_info_text = @bank_info_override || setting.bank_info  # 振込先: 請求書単体の上書き優先、無ければ設定値(ERBで使用)
+    e_sign = @e_sign  # 電子サイン(支払通知書のみ描画。ERBで使用)
 
     html_body = ERB.new(File.read(TEMPLATE)).result(binding)
 

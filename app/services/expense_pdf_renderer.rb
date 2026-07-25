@@ -11,7 +11,7 @@ class ExpensePdfRenderer
 
   def initialize(user, year:, month:, application_date: nil, category: nil,
                  client_name_override: nil, issuer_user_override: nil,
-                 merged_users: nil, mode: :positive, title_override: nil)
+                 merged_users: nil, mode: :positive, title_override: nil, e_sign: nil)
     @user = user
     @year = year
     @month = month
@@ -27,6 +27,7 @@ class ExpensePdfRenderer
     @mode = mode.to_sym
     # 支払通知書モードで使う: H1 タイトルを「支払通知書」等に差替
     @title_override = title_override.to_s.presence
+    @e_sign = e_sign # 電子サイン { signer_name:, signed_at:, verify_id: }（支払通知書のみ描画）
   end
 
   def call
@@ -110,6 +111,7 @@ class ExpensePdfRenderer
 
     user = @user
     title_text = @title_override || "請求書"
+    e_sign = @e_sign # 電子サイン(支払通知書のみ描画。ERBで使用)
     data = { items: items, subtotal: subtotal, total: total,
              issue_date: issue_date, due_date: due_date, invoice_no: invoice_no,
              application_date: application_date, title_text: title_text }
