@@ -152,6 +152,11 @@ class BacklogActivityExporter
   # 集約(課題ごと最新月)で不要になった、対象ユーザー本人の古い月の行を削除する。
   # 他ユーザー(西野など)の行・資料行・現行サマリにある行は BacklogSummarySheetReconciler が温存する。
   def delete_stale_rows(service, tab, rows, header_idx)
+    # 安全弁: アプリの現行サマリが0件のときは掃除しない。
+    # 同期失敗などで一時的に空になった場合に、対象ユーザーのシート行を全削除する事故を防ぐ
+    # (reconciler は app_pairs が空だと全行を stale と判定するため)。
+    return 0 if summary_by_key.empty?
+
     indices = BacklogSummarySheetReconciler.new(
       sheet_rows: rows,
       header_index: header_idx,
