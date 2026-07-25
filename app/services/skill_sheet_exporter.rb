@@ -97,8 +97,12 @@ class SkillSheetExporter
       Google::Apis::SheetsV4::ValueRange.new(values: values),
       value_input_option: "RAW"
     )
-    # レイアウト整形(apply_format)は書き出しでは行わない(2026-07-10 西野さん指示:「整形はいらない、書き出すだけ」)。
-    # シート側の見た目は手整形を尊重し、ここでは値と期間数式だけ書く。
+    # レイアウト整形を書き出しごとに適用する。
+    # 2026-07-10 に「整形はいらない・書き出すだけ」で一度 apply_format を止めたが、
+    # その結果 新規シート(まっさらな列幅/色なし)や 手整形の範囲を超えた新しい案件が
+    # 整形されず崩れる不具合になったため 2026-07-25 に再有効化。
+    # 見本フォーマット(列幅 COL_WIDTHS・ヘッダ色・中央寄せ・罫線・行高)を常に当てる。
+    apply_format(service, sheet_id, total_rows)
     write_period_formulas(service, title)  # 期間を実日付化し、補足セルに DATEDIF 関数を入れる
     trim_sheet(service, sheet_id, total_rows, grid&.row_count.to_i, grid&.column_count.to_i) # 本文より下・右の空行列を削除
 
