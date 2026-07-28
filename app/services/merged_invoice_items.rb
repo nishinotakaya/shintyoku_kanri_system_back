@@ -28,14 +28,16 @@ module MergedInvoiceItems
     subtotal = (subtotal / (1.0 + tax_rate / 100.0)).round if tax_rate > 0
 
     # タマ(wings)と同じく「◯◯業務(N.0hまで) N 時間 単価」の時間表記で出す（リビング等も共通）。
-    # 稼働時間は業務報告書(work_reports)から取得し、単価は 確定額(税抜)÷時間 で逆算＝金額は変えない。
-    # 稼働が無い/金額が時間で割り切れないときだけ、従来どおり「1式」にフォールバック。
+    # 稼働時間は業務報告書(work_reports)から取得し、単価は 確定額(税抜)÷時間 で出す(四捨五入)。金額列は確定額のまま。
+    # 以前は「金額が時間でちょうど割り切れる時だけ時間表記」で、割り切れないと1式に落ちていた
+    # (例: 西野 523,000円 ÷ 158時間 は余り20円 → 1式)。稼働があれば常に時間表記にして、他の作業者と揃える。
+    # 稼働が無い(0時間)ときだけ、従来どおり「1式」にフォールバックする。
     setting = submission.user.invoice_setting_for(submission.category)
     hours = worked_hours_for(submission)
-    if hours.positive? && subtotal.positive? && (subtotal % hours).zero?
+    if hours.positive? && subtotal.positive?
       item_label = submission.item_label_override.presence || setting.item_label.presence || "開発支援業務"
       return [ { label: "#{prefix}#{item_label}(#{format('%.1f', hours)}hまで)",
-                 qty: hours, unit: "時間", unit_price: subtotal / hours, amount: subtotal } ]
+                 qty: hours, unit: "時間", unit_price: (subtotal.to_f / hours).round, amount: subtotal } ]
     end
 
     label = "#{prefix}#{submission.subject_override.presence || submission.item_label_override.presence || setting.item_label}"
