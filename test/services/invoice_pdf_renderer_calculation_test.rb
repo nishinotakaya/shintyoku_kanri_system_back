@@ -65,9 +65,9 @@ class InvoicePdfRendererCalculationTest < Minitest::Test
 
     item = data[:items].first
     refute_nil item
-    # wings デフォルト単価(3,500)で 460,000÷3,500=131.4 に逆算される(実働が無い時の挙動)
-    assert_equal 3_500, item[:unit_price]
-    assert_in_delta 131.4, item[:qty], 0.05
+    # wings デフォルト単価(3,750)で 460,000÷3,750≒122.7 に逆算される(実働が無い時の挙動)
+    assert_equal 3_750, item[:unit_price]
+    assert_in_delta 122.7, item[:qty], 0.05
   end
 
   # 3. 小数時間(例:131.5h)でも数量は実働時間そのまま、単価は四捨五入で金額と概ね一致する。

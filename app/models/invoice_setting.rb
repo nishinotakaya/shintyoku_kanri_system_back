@@ -70,8 +70,10 @@ class InvoiceSetting < ApplicationRecord
 
   # 注文書(PO)が無い時のフォールバック時給（カテゴリ別固定）。
   # 人別に保存された unit_price は使わず、カテゴリで一律にする方針。
-  #   living(タマリビング)=3,750 / wings(タマ)=3,500 / それ以外(resystems/techleaders)=時給なし(0)
-  CATEGORY_DEFAULT_UNIT_PRICE = { "living" => 3750, "wings" => 3500 }.freeze
+  #   living(タマリビング)=3,750 / wings(タマ)=3,750 / それ以外(resystems/techleaders)=時給なし(0)
+  # wings は 2026-07 に西野さんの指示で 3,500→3,750 に変更(西野さんの実レート)。
+  # 川村さん等の個別レートは請求額(total_override)や注文書レートで設定されるためデフォルトに依存しない。
+  CATEGORY_DEFAULT_UNIT_PRICE = { "living" => 3750, "wings" => 3750 }.freeze
   def self.default_unit_price_for(category)
     CATEGORY_DEFAULT_UNIT_PRICE[category.to_s].to_i
   end
