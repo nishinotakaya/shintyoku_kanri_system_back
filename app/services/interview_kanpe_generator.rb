@@ -2,6 +2,15 @@
 # 台本(InterviewVideoScriptGenerator)と違い、本編の各要点は「未来/問題/原因/解決」のラベルを見せたまま書く。
 # mindmap.kanpe_style で sales(西野式セールス・既定) / app_build(アプリを作る完全台本) を切り替える。
 class InterviewKanpeGenerator
+  # 1 回目の生成がこの字数に届かなければ、テーマ・見出しを保ったまま肉付けさせる。
+  MIN_CHARS = 4000
+  # 4500字以上(日本語で約 4500〜6000 トークン)を返させるため、既定の 4096 では足りない。
+  MAX_TOKENS = 8000
+  # 肉付けの追加リクエスト回数の上限(1回では 4000 字に届かないことが多いため)。
+  EXPAND_ATTEMPTS = 2
+  # 肉付けしてもこの字数しか伸びなければ頭打ちとみなして打ち切る。
+  EXPAND_MIN_GROWTH = 200
+
   # user: OpenAIキー解決用(操作者) / mindmap: カンペの元になるマインドマップ(動画タイトル・スキルシートの持ち主)
   def initialize(user:, mindmap:)
     @user = user
@@ -12,10 +21,40 @@ class InterviewKanpeGenerator
 
   def call
     api_key = OpenaiClient.api_key_for(@user)
-    OpenaiJson.chat_json(system: sys_prompt, user: prompt, api_key: api_key, model: "gpt-4o", temperature: 0.7)["kanpe"].to_s.strip
+    kanpe = generate(prompt, api_key)
+    EXPAND_ATTEMPTS.times do
+      break if kanpe.size >= MIN_CHARS || kanpe.empty?
+
+      expanded = generate(expand_prompt(kanpe), api_key)
+      break if expanded.size <= kanpe.size + EXPAND_MIN_GROWTH # これ以上伸びないなら諦める
+
+      kanpe = expanded
+    end
+    kanpe
   end
 
   private
+
+  def generate(user_prompt, api_key)
+    OpenaiJson.chat_json(
+      system: sys_prompt, user: user_prompt, api_key: api_key,
+      model: "gpt-4o", temperature: 0.7, max_tokens: MAX_TOKENS
+    )["kanpe"].to_s.strip
+  end
+
+  # 薄いカンペを、テーマ・見出し・要点を変えずに厚くさせる追い込みプロンプト。
+  def expand_prompt(thin_kanpe)
+    <<~PROMPT
+      次のカンペは内容は正しいものの、#{thin_kanpe.size}字しかなく撮影に使うには薄すぎます。
+      テーマ・見出し・要点3つ・話の順番は一切変えずに、各セクションを具体例・あるあるのシーン・本人の体験談で肉付けし、
+      全体で4500字以上に書き直してください。同じ意味の言い換えによる水増しはせず、中身のある具体を足すこと。
+      特に【本編 要点内容1〜3】の「未来：」「問題：」「原因：」「解決：」は各3〜4文にすること。
+      肉付けで足してはいけないもの: 学歴の話(中卒/高卒/大卒 等)、第三者の数字入り実績(「知り合いは月収50万になった」等)、
+      今回のテーマから外れる別企画の話。足すのは本人の体験と、視聴者が「あるある」と感じる状況描写だけ。
+
+      #{thin_kanpe}
+    PROMPT
+  end
 
   def youtube_mindmap? = @mindmap.respond_to?(:youtube?) && @mindmap.youtube?
   def app_build? = @mindmap.respond_to?(:app_build_kanpe?) && @mindmap.app_build_kanpe?
@@ -44,8 +83,15 @@ class InterviewKanpeGenerator
         必ず【動画タイトル/テーマ】の内容に直結させる。要点3つはタイトルから導く
         (例: タイトルが「もう遅いと言われて私がエンジニアになるまで」なら、
          要点は「なぜ『もう遅い』と言われるのか」「遅いと言われた自分が実際どう乗り越えたか」「今から始めても間に合う理由と戦略」のように、タイトルの言葉に紐づける)。
+      - 【企画コール】は【動画タイトル/テーマ】の言葉を使って宣言する
+        (「今回の企画は「〈タイトルの内容〉」について話していきます」)。参考資料にある別の企画名を名乗らない。
+      - ただしタイトル冒頭の【元介護士】のような角括弧のラベルはサムネ用なので読み上げない。
+        【声に出すときのテーマ表現】がある場合はそれを使い、無ければ角括弧を外して自然な話し言葉にする。
       - ペルソナや参考資料の中に過去の台本・例文が含まれていても、そのテーマや要点(教材の使い方・企業が求める人材 等)を
         そのまま流用しない。ペルソナは「名乗り・経歴・数字・実績」の事実の出典としてだけ使う。
+      - 参考資料の文をコピペしない。無料プレゼント名・具体例・まとめの一文も、今回のタイトルに合わせて書き下ろす。
+      - 出力前に自己チェック: 企画コール・要点3つ・最終まとめが、タイトルを読んだ人が期待する内容になっているか。
+        なっていなければ書き直す。
       【スタイル】
       - 本文は本人がそのまま声に出して読める自然な話し言葉(です・ます)にする。
       - 【挨拶】と【自己紹介】では必ず本人の名前(【出演者】に書かれた名前)をフルネームで名乗る
@@ -53,6 +99,8 @@ class InterviewKanpeGenerator
       - 事実(経歴・数字)はペルソナ/スキルシートにある範囲のみ使う。創作しない。台本全体で矛盾させない。
       - 【学歴は絶対に創作しない】中卒/高卒/大卒などの学歴は、出典(ペルソナ/スキルシート)に明記が無い限り一切書かない・推測しない。
         前職や経歴は出典にある事実(例: 前職＝介護職)だけを使う。学歴の記載が無いなら「前職(例: 介護職)からエンジニアを目指し」のように経歴で語る。
+        参考資料(過去台本)に学歴の表現があっても、資料内で食い違っていることがあるので引用しない。プレゼント名など固有名詞に学歴語が入っている場合も言い換える。
+      - 相談者・知人など第三者の話は、数字入りの実績(「月収50万円になった」等)を創作しない。状況・悩みの描写にとどめる。
       - 「◯つのポイント」と予告したら、本編でその個数ぴったりを扱う(3と言ったら3つ)。
       【分量(必達)】
       - 全体で必ず4500字以上(目安4500〜6000字)。短く終わらせない。字数が不足するなら本編要点や具体例を足して必ず4500字以上にする。
@@ -89,8 +137,9 @@ class InterviewKanpeGenerator
     parts = []
     parts << "【出演者】#{@persona_user.display_name}"
     parts << "【動画タイトル/テーマ(この動画で話す内容。要点3つは必ずここから導く)】#{@mindmap.title}"
-    if @persona_user.video_script_context.present?
-      parts << "【ペルソナ・プロフィール・事業内容(最重要。これを軸に語らせる)】\n#{@persona_user.video_script_context}"
+    parts << "【声に出すときのテーマ表現】#{spoken_theme}" if spoken_theme != @mindmap.title.to_s.strip
+    if (persona_block = PersonaContext.new(@persona_user.video_script_context).prompt_block)
+      parts << persona_block
     end
     parts << "【スキルシート(事実の出典)】\n#{sheet_summary}"
     if youtube_mindmap? && (research = YoutubeResearchReader.cached_summary).present?
@@ -102,6 +151,11 @@ class InterviewKanpeGenerator
     parts << "\n【守るべきテンプレート構成】\n#{template_text}"
     parts << "\n上記テンプレート構成に沿って、動画タイトルのテーマで本人が読むカンペを作ってください。"
     parts.join("\n")
+  end
+
+  # タイトル冒頭の【元介護士】等はサムネ用のラベルなので、読み上げ用のテーマからは外す。
+  def spoken_theme
+    @spoken_theme ||= @mindmap.title.to_s.gsub(/【[^】]*】/, "").gsub(/[｜|]/, " ").squeeze(" ").strip
   end
 
   def sheet_summary

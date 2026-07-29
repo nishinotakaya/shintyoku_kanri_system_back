@@ -102,6 +102,23 @@ class InterviewKanpeGeneratorTest < Minitest::Test
     persona_without_context&.destroy
   end
 
+  # 2-a(過去台本). ペルソナ欄に過去台本が貼られている場合は「軸にせよ」と渡さず、参考資料に格下げする
+  def test_prompt_demotes_past_script_persona_to_reference_material
+    @persona_user.update!(video_script_context: <<~SCRIPT)
+      なぜ独学ではエンジニアになれないのか- YouTube台本
+      企画コール 今回の企画は「独学でエンジニアになることができない理由5選」について話していきます。
+      大きな問題定義 独学でエンジニアを目指す人の9割以上が挫折しています。
+      要点内容1：プログラミング教材の目的
+      LINE誘導 プロアカの公式LINEでは〜
+    SCRIPT
+    generator = InterviewKanpeGenerator.new(user: @operator_user, mindmap: @mindmap.reload)
+
+    prompt = generator.send(:prompt)
+
+    assert_includes prompt, "【参考資料: 本人の過去動画の台本"
+    refute_includes prompt, "【ペルソナ・プロフィール・事業内容"
+  end
+
   # 2-b. mindmap の answer ノードがプロンプトに含まれる
   def test_prompt_includes_answer_nodes_from_mindmap
     @mindmap.nodes.create!(kind: "question", text: "前職は何をしていましたか？", position: 1)

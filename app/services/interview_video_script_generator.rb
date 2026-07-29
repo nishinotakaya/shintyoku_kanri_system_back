@@ -20,7 +20,11 @@ class InterviewVideoScriptGenerator
 
   def call
     api_key = OpenaiClient.api_key_for(@user)
-    OpenaiJson.chat_json(system: sys_prompt, user: prompt, api_key: api_key, model: "gpt-4o", temperature: 0.7)["script"].to_s.strip
+    # max_tokens 未指定だと gpt-4o の既定 4096 で切れ、10分台本が途中で止まる。
+    OpenaiJson.chat_json(
+      system: sys_prompt, user: prompt, api_key: api_key,
+      model: "gpt-4o", temperature: 0.7, max_tokens: 8000
+    )["script"].to_s.strip
   end
 
   private
@@ -87,8 +91,8 @@ class InterviewVideoScriptGenerator
     parts = []
     parts << "【出演者】#{@persona_user.display_name}"
     parts << "【動画タイトル/テーマ】#{@topic || @mindmap&.title}" if @topic || @mindmap&.title
-    if @persona_user.video_script_context.present?
-      parts << "【ペルソナ・プロフィール・事業内容(最重要。これを軸に語らせる)】\n#{@persona_user.video_script_context}"
+    if (persona_block = PersonaContext.new(@persona_user.video_script_context).prompt_block)
+      parts << persona_block
     end
     parts << "【スキルシート(事実の出典)】\n#{sheet_summary}"
     if youtube_mindmap? && (research = YoutubeResearchReader.cached_summary).present?

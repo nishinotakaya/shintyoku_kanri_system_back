@@ -38,8 +38,9 @@ class YoutubeTitleSuggester
     parts = []
     parts << "【出演者】#{@persona_user.display_name}"
     parts << "【動画の切り口・キーワード(任意)】#{@theme}" if @theme.present?
-    if @persona_user.respond_to?(:video_script_context) && @persona_user.video_script_context.present?
-      parts << "【ペルソナ・事業内容(最重要。これを軸に)】\n#{@persona_user.video_script_context}"
+    if @persona_user.respond_to?(:video_script_context) &&
+       (persona_block = PersonaContext.new(@persona_user.video_script_context).prompt_block)
+      parts << persona_block
     end
     parts << "【スキルシート(事実の出典)】\n#{sheet_summary}"
     research = YoutubeResearchReader.cached_summary

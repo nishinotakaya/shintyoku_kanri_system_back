@@ -3,7 +3,9 @@
 module OpenaiJson
   module_function
 
-  def chat_json(system:, user:, api_key:, model: nil, temperature: 0.2)
+  # max_tokens: 未指定だとモデル既定(gpt-4o は 4096)で打ち切られる。
+  # 日本語で数千字を返させる用途(台本・カンペ)では必ず明示すること。
+  def chat_json(system:, user:, api_key:, model: nil, temperature: 0.2, max_tokens: nil)
     raise "OpenAI API キーが未設定です。設定画面で登録してください。" if api_key.blank?
 
     uri = URI("https://api.openai.com/v1/chat/completions")
@@ -18,8 +20,9 @@ module OpenaiJson
         { role: "user",   content: user }
       ],
       temperature: temperature,
-      response_format: { type: "json_object" }
-    }.to_json
+      response_format: { type: "json_object" },
+      max_tokens: max_tokens
+    }.compact.to_json
 
     res = http.request(req)
     unless res.code.start_with?("2")
