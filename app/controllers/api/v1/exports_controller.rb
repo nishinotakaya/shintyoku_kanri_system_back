@@ -148,15 +148,17 @@ module Api
         composed_note = [ *purchase_order_note_lines(effective_no), primary.note ]
                           .compact.reject(&:blank?).join("\n").presence
 
-        # 結合は「再計算しない」。各申請の請求書の確定額をそのまま使い、
-        # 各人の明細は items_override があればその行、無ければ確定額(税抜)を1行に集約する。
-        # 合計は merged_items（各申請の確定行）の合算から算出 = フロントの自動計算と一致。
-        # （total_override が空の申請でも items から拾えるので漏れない）
+        # 結合は「再計算しない」。明細は個別請求書と同じ行（注文書の時給・控除行そのまま）を並べ、
+        # 請求金額は各申請の確定額の合計に固定する。
+        # ※ 明細合計を小計にすると、控除行のぶん個別請求書の合計とズレるので total_override で固定する。
+        #    逆に単価を「確定額 ÷ 稼働時間」で逆算すると控除が単価に溶けて時給が下がって見える（過去バグ）。
         ordered_subs = MergedInvoiceItems.order(subs)
         # 統合PDFの編集明細(items_override パラメータ)が来たら、それを使う。
         # = 元申請(invoice_submissions)を一切書き換えずに統合PDFだけ更新する。
         edited_items = MergedInvoiceItems.normalize(params[:items_override])
         merged_items = edited_items || MergedInvoiceItems.build(ordered_subs)
+        # 手編集した明細のときは編集結果どおりに再計算させる（固定すると編集が金額に反映されない）。
+        merged_total = edited_items ? nil : MergedInvoiceItems.confirmed_total(ordered_subs)
 
         # 申請日: 統合PDFの編集モーダルで指定した application_date を最優先。
         # 無ければ、いずれかの申請の application_date_override を採用（従来挙動）。
@@ -171,7 +173,7 @@ module Api
           item_label_override: primary.item_label_override,
           subject_override: primary.subject_override,
           items_override: merged_items,
-          total_override: nil,
+          total_override: merged_total,
           note: composed_note,
           bank_info_override: primary.bank_info_override
         )

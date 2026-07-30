@@ -1,7 +1,8 @@
 # 統合請求書の明細を組み立てる単一窓口。
-# 各申請の「確定額そのまま」を使い、元申請(invoice_submissions)は一切書き換えない。
+# 元申請(invoice_submissions)は一切書き換えない。
 #   - items_override があればその行（氏名 prefix 付き）
-#   - 無ければ確定額(税抜)を1行に集約
+#   - 無ければ個別請求書とまったく同じ明細（注文書の時給 + 控除行など）を氏名 prefix 付きで使う
+#   - それも取れないときだけ確定額(税抜)を1行に集約
 module MergedInvoiceItems
   module_function
 
@@ -23,25 +24,55 @@ module MergedInvoiceItems
           unit_price: (h["unit_price"] || h[:unit_price]).to_i, amount: (h["amount"] || h[:amount]).to_i }
       end
     end
+    # 個別請求書とまったく同じ明細（注文書の時給 × 稼働時間 + シェアラウンジ等の控除行）を使う。
+    # 以前は「確定額(税抜) ÷ 稼働時間」で単価を逆算していたため、控除行が単価に溶けて
+    # 統合すると時給が下がって見えていた（例: 西野 3,750円/h → 3,310円/h）。
+    # 統合の請求金額そのものは confirmed_total で各申請の確定額に固定するので、ここは表示明細に徹する。
+    items = invoice_items_for(submission, prefix)
+    return items if items.present?
+
+    # 時給が引けないカテゴリ(resystems 等)や稼働 0 のときだけ、確定額(税抜)を1式に集約する。
+    setting = submission.user.invoice_setting_for(submission.category)
+    label = "#{prefix}#{submission.subject_override.presence || submission.item_label_override.presence || setting.item_label}"
+    subtotal = subtotal_of(submission)
+    [ { label: label, qty: 1, unit: "式", unit_price: subtotal, amount: subtotal } ]
+  end
+
+  # 個別請求書(InvoicePdfRenderer)がその申請ぶんに出す明細を、氏名 prefix 付きで返す。
+  # 統合でも個別でも同じ単価・同じ行になるよう、明細生成の実装は 1 箇所に寄せる。
+  def invoice_items_for(submission, prefix)
+    renderer = InvoicePdfRenderer.new(
+      submission.user,
+      year: submission.year, month: submission.month, category: submission.category,
+      item_label_override: submission.item_label_override,
+      subject_override: submission.subject_override
+    )
+    Array(renderer.calculation[:items]).map do |item|
+      label = item[:label].to_s
+      label = "#{prefix}#{label}" unless prefix.empty? || label.start_with?(prefix)
+      item.merge(label: label)
+    end
+  rescue StandardError
+    []
+  end
+
+  # 統合請求書の請求金額(税込)。個別請求書の確定額の単純合計と必ず一致させる。
+  def confirmed_total(submissions)
+    submissions.sum { |submission| confirmed_total_for(submission) }
+  end
+
+  def confirmed_total_for(submission)
+    return submission.total_override.to_i if submission.total_override.present?
+    tax_rate = InvoiceSetting.defaults_for(submission.category)[:tax_rate].to_i
+    subtotal = for_submission(submission).sum { |item| item[:amount].to_i }
+    subtotal + (subtotal * tax_rate / 100.0).round
+  end
+
+  # 申請の確定額(税抜)。total_override は税込なので税率で割り戻す。
+  def subtotal_of(submission)
     tax_rate = InvoiceSetting.defaults_for(submission.category)[:tax_rate].to_i
     subtotal = submission.total_override.to_i
-    subtotal = (subtotal / (1.0 + tax_rate / 100.0)).round if tax_rate > 0
-
-    # タマ(wings)と同じく「◯◯業務(N.0hまで) N 時間 単価」の時間表記で出す（リビング等も共通）。
-    # 稼働時間は業務報告書(work_reports)から取得し、単価は 確定額(税抜)÷時間 で出す(四捨五入)。金額列は確定額のまま。
-    # 以前は「金額が時間でちょうど割り切れる時だけ時間表記」で、割り切れないと1式に落ちていた
-    # (例: 西野 523,000円 ÷ 158時間 は余り20円 → 1式)。稼働があれば常に時間表記にして、他の作業者と揃える。
-    # 稼働が無い(0時間)ときだけ、従来どおり「1式」にフォールバックする。
-    setting = submission.user.invoice_setting_for(submission.category)
-    hours = worked_hours_for(submission)
-    if hours.positive? && subtotal.positive?
-      item_label = submission.item_label_override.presence || setting.item_label.presence || "開発支援業務"
-      return [ { label: "#{prefix}#{item_label}(#{format('%.1f', hours)}hまで)",
-                 qty: hours, unit: "時間", unit_price: (subtotal.to_f / hours).round, amount: subtotal } ]
-    end
-
-    label = "#{prefix}#{submission.subject_override.presence || submission.item_label_override.presence || setting.item_label}"
-    [ { label: label, qty: 1, unit: "式", unit_price: subtotal, amount: subtotal } ]
+    tax_rate > 0 ? (subtotal / (1.0 + tax_rate / 100.0)).round : subtotal
   end
 
   # 申請ユーザーのその月・カテゴリの稼働時間(業務報告書)。整数時間に丸めて返す（0=取得不可）。

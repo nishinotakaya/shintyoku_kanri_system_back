@@ -1,8 +1,9 @@
 require "test_helper"
 
 # MergedInvoiceItems: 統合請求書の明細組み立て。
-# 稼働時間があれば「時間×単価」で出す(金額が時間で割り切れなくても1式に落とさない)ことを検証する。
-# 回帰: 西野 523,000円(税抜) ÷ 158時間 は余り20円 → 以前は「1式」になっていた。
+# 統合しても個別請求書と同じ単価・同じ行が出る（時給が下がらない）ことを検証する。
+# 回帰: 「確定額(税抜) ÷ 稼働時間」で単価を逆算していたため、シェアラウンジ利用料(-30,000)などの
+#       控除行が単価に溶けて 西野 3,750円/h が 3,310円/h に見えていた。
 class MergedInvoiceItemsTest < Minitest::Test
   def setup
     @user = User.create!(
@@ -15,6 +16,7 @@ class MergedInvoiceItemsTest < Minitest::Test
     return unless @user
     InvoiceSubmission.where(user_id: @user.id).delete_all
     WorkReport.where(user_id: @user.id).delete_all
+    InvoiceSetting.where(user_id: @user.id).delete_all
     @user.destroy
   end
 
@@ -37,33 +39,47 @@ class MergedInvoiceItemsTest < Minitest::Test
     )
   end
 
-  # 1. 割り切れない時間でも「時間×単価(四捨五入)」で出す。金額は確定額のまま。
-  def test_non_divisible_hours_shows_time_not_lump
+  # 1. 単価は個別請求書と同じ実時給。確定額を時間で割り戻した値にしない。
+  #    確定額(575,300 税込 = 523,000 税抜)を 158h で割ると 3,310 になるが、それは出さない。
+  def test_keeps_real_hourly_rate_when_merged
     add_hours(158)
-    sub = make_sub(total_override: 575_300) # 税込・wings(10%) → 税抜 523,000
+    sub = make_sub(total_override: 575_300)
 
     items = MergedInvoiceItems.for_submission(sub)
+    hour_item = items.find { |item| item[:unit] == "時間" }
 
-    assert_equal 1, items.size
-    item = items.first
-    assert_equal "時間", item[:unit], "1式ではなく時間表記になるべき"
-    assert_equal 158, item[:qty]
-    assert_equal 523_000, item[:amount], "金額は税抜確定額そのまま"
-    assert_equal 3310, item[:unit_price], "単価=四捨五入(523000/158)"
-    assert_includes item[:label], "西野 鷹也"
+    assert hour_item, "時間行が出るべき"
+    assert_equal 158, hour_item[:qty]
+    assert_equal 3750, hour_item[:unit_price], "実時給(3,750円)のまま。確定額÷時間で逆算しない"
+    assert_equal 592_500, hour_item[:amount], "158h × 3,750円"
+    assert_includes hour_item[:label], "西野 鷹也"
   end
 
-  # 2. 稼働0時間のときは従来どおり「1式」にフォールバックする。
-  def test_zero_hours_falls_back_to_lump
-    sub = make_sub(total_override: 100_000)
+  # 2. シェアラウンジ利用料などの控除行が、単価に溶けずに独立した行として残る。
+  def test_keeps_deduction_line_as_separate_row
+    add_hours(158)
+    sub = make_sub(total_override: 575_300)
+
+    items = MergedInvoiceItems.for_submission(sub)
+    deduction = items.find { |item| item[:amount].negative? }
+
+    assert deduction, "控除行(シェアラウンジ利用料)が残るべき"
+    assert_equal(-30_000, deduction[:amount])
+    assert_includes deduction[:label], "西野 鷹也"
+  end
+
+  # 3. 時給が引けないカテゴリ(resystems 等)は従来どおり「1式」にフォールバックする。
+  def test_falls_back_to_lump_when_no_hourly_rate
+    sub = make_sub(total_override: 100_000, category: "resystems")
 
     item = MergedInvoiceItems.for_submission(sub).first
 
     assert_equal "式", item[:unit]
     assert_equal 1, item[:qty]
+    assert_equal 100_000, item[:amount], "resystems は税率0%なので税抜=税込"
   end
 
-  # 3. items_override があれば時間表記より優先してその明細を使う。
+  # 4. items_override があれば実時給より優先してその明細を使う。
   def test_items_override_takes_precedence
     add_hours(158)
     sub = make_sub(total_override: 575_300,
@@ -74,5 +90,13 @@ class MergedInvoiceItemsTest < Minitest::Test
     assert_equal 1, items.size
     assert_equal "回", items.first[:unit]
     assert_equal(-30_000, items.first[:amount])
+  end
+
+  # 5. 統合の請求金額は各申請の確定額の単純合計。明細合計(控除込み)には引きずられない。
+  def test_confirmed_total_is_sum_of_submission_totals
+    add_hours(158)
+    sub = make_sub(total_override: 575_300)
+
+    assert_equal 575_300, MergedInvoiceItems.confirmed_total([ sub ])
   end
 end
