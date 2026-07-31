@@ -222,6 +222,8 @@ Rails.application.routes.draw do
       post "exports/purchase_order.pdf", to: "exports#purchase_order"
       post "exports/pick_dir",            to: "exports#pick_local_dir"
       get  "exports/list_dirs",           to: "exports#list_local_dirs"
+      # 本人の帳票一覧（ローカルフォルダへの一括取り込み用）
+      get  "exports/my_documents",        to: "exports#my_documents"
 
       get   "invoice_setting", to: "invoice_settings#show"
       patch "invoice_setting", to: "invoice_settings#update"

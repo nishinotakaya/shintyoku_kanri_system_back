@@ -59,6 +59,19 @@ class InvoiceSetting < ApplicationRecord
     default_items: []
   ).freeze
 
+  # 画面・ファイル名で使うカテゴリの表示名。帳票名やフォルダ名の先頭に付く。
+  CATEGORY_LABELS = {
+    "wings" => "Wings",
+    "living" => "リビング",
+    "techleaders" => "テックリーダーズ",
+    "resystems" => "REシステムズ",
+    "video" => "動画編集"
+  }.freeze
+
+  def self.category_label(category)
+    CATEGORY_LABELS[category.to_s]
+  end
+
   def self.defaults_for(category)
     case category.to_s
     when "techleaders" then TECHLEADERS_DEFAULTS

@@ -3,13 +3,8 @@ require "open3"
 module Api
   module V1
     class ExportsController < BaseController
-      CATEGORY_LABELS = {
-        "wings" => "Wings",
-        "living" => "リビング",
-        "techleaders" => "テックリーダーズ",
-        "resystems" => "REシステムズ",
-        "video" => "動画編集"
-      }.freeze
+      # カテゴリ表示名は InvoiceSetting が正（帳票名・フォルダ名と共通）
+      CATEGORY_LABELS = InvoiceSetting::CATEGORY_LABELS
 
       def work_report
         year, month = parse_month
@@ -215,6 +210,17 @@ module Api
 
       def merged_expense_xlsx
         merged_expense_internal(format: :xlsx)
+      end
+
+      # GET /api/v1/exports/my_documents
+      # ログイン中ユーザー本人の帳票だけを列挙する。フロントはこれを見て
+      # ローカルの保存先フォルダへ月別に取り込む。
+      # 他ユーザーの帳票は admin であっても返さない（MyDocumentManifest 側で user_id 固定）。
+      def my_documents
+        # doc_types はカンマ区切り (例: "invoice,expense")。未指定なら全種別。
+        doc_types = params[:doc_types].to_s.split(",").map(&:strip).reject(&:blank?)
+        doc_types = MyDocumentManifest::DOC_TYPE_LABELS.keys if doc_types.empty?
+        render json: MyDocumentManifest.new(current_user, doc_types: doc_types).call
       end
 
       # macOS 限定: osascript で「フォルダを選択」ダイアログを開いて POSIX パスを返す
