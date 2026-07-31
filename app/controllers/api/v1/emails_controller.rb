@@ -102,8 +102,10 @@ module Api
             # マージ請求書 (例: ORD-010014 西野+川村)
             # items_override は使わず work_reports ベースで全ユーザー iterate
             # total_override は各 submission を合算
-            primary = group.first
-            others = group.drop(1).map(&:user)
+            # 差出人・印鑑になる primary は必ず admin(西野)。並び順任せだと川村さん名義になる。
+            ordered = group.sort_by { |submission| submission.user.admin? ? 0 : 1 }
+            primary = ordered.first
+            others = User.admin_first(ordered.map(&:user)).drop(1)
             effective_no = primary.purchase_order_no_override.presence || primary.received_purchase_order&.order_no
             po_line = effective_no.present? ? "注文番号: #{effective_no}" : nil
             composed_note = [ po_line, primary.note ].compact.reject(&:blank?).join("\n")
@@ -159,7 +161,8 @@ module Api
 
         # ----- 立替金 PDF（通常: amount > 0 を集約） -----
         expense_pdfs.to_a.group_by { |s| [ s.year, s.month, s.category ] }.each do |(y, m, c), subs|
-          users = subs.map(&:user).uniq
+          # 差出人・印鑑になる先頭ユーザーは必ず admin(西野)。
+          users = User.admin_first(subs.map(&:user))
           total = users.sum { |u|
             u.expenses.in_range(u.period_for(y, m)).where(category: c, company_burden: true).where("amount > 0").sum(:amount).to_i
           }

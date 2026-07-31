@@ -128,8 +128,7 @@ module Api
         return render(json: { error: "対象なし" }, status: :unprocessable_entity) if subs.empty?
 
         # primary user は admin (西野) を優先
-        users_raw = subs.map(&:user).uniq
-        users_sorted = users_raw.partition(&:admin?).flatten
+        users_sorted = User.admin_first(subs.map(&:user))
         primary_user = users_sorted.first
         primary = subs.find { |s| s.user_id == primary_user.id } || subs.first
         others = users_sorted.drop(1)
@@ -365,8 +364,7 @@ module Api
         return render(json: { error: "対象なし" }, status: :unprocessable_entity) if subs.empty?
 
         # primary user は admin (西野) を優先 → ファイル名・PDF 先頭が西野ベースになる
-        users_raw = subs.map(&:user).uniq
-        users = users_raw.partition(&:admin?).flatten
+        users = User.admin_first(subs.map(&:user))
         primary_user = users.first
         primary = subs.find { |s| s.user_id == primary_user.id } || subs.first
         others = users.drop(1)

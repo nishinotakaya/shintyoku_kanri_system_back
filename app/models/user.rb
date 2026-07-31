@@ -55,6 +55,14 @@ class User < ApplicationRecord
     display_name.to_s.include?("西野") || ADMIN_EMAILS.include?(email.to_s.downcase)
   end
 
+  # 統合帳票(請求書/立替金)の「主体」を決める並び替え。admin(西野) を必ず先頭にする。
+  # 先頭のユーザーが差出人ブロック・印鑑・振込先になるため、順序が崩れると
+  # 西野名義で出すべき統合PDFに川村さんのハンコが押されてしまう。
+  # DL・メール添付など生成経路が複数あるので、順序の決定はここ 1 箇所に集約する。
+  def self.admin_first(users)
+    users.to_a.uniq.partition(&:admin?).flatten
+  end
+
   # 機能を使えるか。admin は明示的に false にされた機能以外は使える、フラグ ON のユーザーも true。
   # 免税事業者か（消費税の納税なし・インボイス未登録前提）。税務アドバイス等の前提を切り替える。
   def exempt_business? = tax_status == "exempt"
