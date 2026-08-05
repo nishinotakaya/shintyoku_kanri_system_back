@@ -25,7 +25,14 @@ class InterviewKanpeGenerator
     EXPAND_ATTEMPTS.times do
       break if kanpe.size >= MIN_CHARS || kanpe.empty?
 
-      expanded = generate(expand_prompt(kanpe), api_key)
+      # 肉付け(2回目以降)の失敗は分量必達を諦めるだけにする。成功済みの1回目の結果を例外で
+      # 丸ごと捨てると、待たされた末にユーザーに生成物ゼロが返ってしまうため。
+      expanded = begin
+        generate(expand_prompt(kanpe), api_key)
+      rescue StandardError => error
+        Rails.logger.warn("[InterviewKanpe] 肉付け失敗 mindmap_id=#{@mindmap.id}: #{error.class}: #{error.message}")
+        break
+      end
       break if expanded.size <= kanpe.size + EXPAND_MIN_GROWTH # これ以上伸びないなら諦める
 
       kanpe = expanded

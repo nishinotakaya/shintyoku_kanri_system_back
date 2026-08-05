@@ -2,7 +2,9 @@
 # 元申請(invoice_submissions)は一切書き換えない。
 #   - items_override があればその行（氏名 prefix 付き）
 #   - 無ければ個別請求書とまったく同じ明細（注文書の時給 + 控除行など）を氏名 prefix 付きで使う
-#   - それも取れないときだけ確定額(税抜)を1行に集約
+#   - それも取れない（明細合計が0円）ときだけ確定額(税抜)を1行に集約
+#   - total_override(確定額)がある申請は、明細合計とのズレを「調整額」行で埋め、明細合計 == 小計 を必ず成立させる
+#     （total_override が無い申請は確定額という概念自体が無いので調整行は入れない。明細合計がそのまま請求額になる）
 module MergedInvoiceItems
   module_function
 
@@ -27,11 +29,29 @@ module MergedInvoiceItems
     # 個別請求書とまったく同じ明細（注文書の時給 × 稼働時間 + シェアラウンジ等の控除行）を使う。
     # 以前は「確定額(税抜) ÷ 稼働時間」で単価を逆算していたため、控除行が単価に溶けて
     # 統合すると時給が下がって見えていた（例: 西野 3,750円/h → 3,310円/h）。
-    # 統合の請求金額そのものは confirmed_total で各申請の確定額に固定するので、ここは表示明細に徹する。
     items = invoice_items_for(submission, prefix)
-    return items if items.present?
+    items_amount_sum = items.sum { |item| item[:amount].to_i }
 
-    # 時給が引けないカテゴリ(resystems 等)や稼働 0 のときだけ、確定額(税抜)を1式に集約する。
+    # 時給が引けないカテゴリ(resystems 等)や稼働 0 のときは明細行の合計が 0 円になる
+    # （＝行が確定額を何も説明できていない）。この場合だけ確定額(税抜)を1式に集約する。
+    return lump_sum_item(submission, prefix) if items_amount_sum.zero?
+
+    # 明細合計と確定額(税抜)がズレていれば調整行を足し、「明細合計 == 小計」を必ず成立させる。
+    # 統合請求書の小計・合計は confirmed_total 経由で各申請の確定額(total_override)から作られるため、
+    # 放置すると明細合計と小計が食い違うインボイスが客先に出てしまう。
+    # total_override が無い申請は確定額そのものが存在しない（confirmed_total_for が明細合計から
+    # 逆に請求額を算出する）ので、ここで調整行を足すと明細合計を 0 円に打ち消してしまう。対象外にする。
+    if submission.total_override.present?
+      confirmed_subtotal = subtotal_of(submission)
+      adjustment = confirmed_subtotal - items_amount_sum
+      items << { label: "調整額", qty: 1, unit: "式", unit_price: adjustment, amount: adjustment } unless adjustment.zero?
+    end
+    items
+  end
+
+  # 明細行が確定額を説明できないとき（0円行のみ／稼働なしで行が作れない）に使う、
+  # 確定額(税抜)を1式に集約したフォールバック行。
+  def lump_sum_item(submission, prefix)
     setting = submission.user.invoice_setting_for(submission.category)
     label = "#{prefix}#{submission.subject_override.presence || submission.item_label_override.presence || setting.item_label}"
     subtotal = subtotal_of(submission)
@@ -52,7 +72,14 @@ module MergedInvoiceItems
       label = "#{prefix}#{label}" unless prefix.empty? || label.start_with?(prefix)
       item.merge(label: label)
     end
-  rescue StandardError
+  rescue StandardError => error
+    # 明細生成に失敗しても、確定額の1式フォールバックで請求書自体は出す（金額の違う請求書を
+    # 無言で出さないため、原因はログに残す）。for_submission 側の items_amount_sum.zero? が
+    # 空配列を検知して lump_sum_item に落とす。
+    Rails.logger.error(
+      "[MergedInvoiceItems] 明細生成に失敗 submission_id=#{submission.id} " \
+      "user_id=#{submission.user_id}: #{error.class}: #{error.message}"
+    )
     []
   end
 
@@ -73,15 +100,6 @@ module MergedInvoiceItems
     tax_rate = InvoiceSetting.defaults_for(submission.category)[:tax_rate].to_i
     subtotal = submission.total_override.to_i
     tax_rate > 0 ? (subtotal / (1.0 + tax_rate / 100.0)).round : subtotal
-  end
-
-  # 申請ユーザーのその月・カテゴリの稼働時間(業務報告書)。整数時間に丸めて返す（0=取得不可）。
-  def worked_hours_for(submission)
-    user = submission.user
-    period = user.period_for(submission.year, submission.month)
-    user.work_reports.in_range(period).by_category(submission.category).sum(:hours).to_f.round
-  rescue
-    0
   end
 
   # admin(西野) を先頭に並べた順序で submissions を返す

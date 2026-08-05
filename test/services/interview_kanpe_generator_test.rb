@@ -182,6 +182,25 @@ class InterviewKanpeGeneratorTest < Minitest::Test
     refute_includes prompt, "【フック】"
   end
 
+  # 5. 肉付け(2回目)リクエストが例外を投げても、成功済みの1回目のカンペをそのまま返す(捨てて500にしない)。
+  def test_call_returns_first_result_when_expand_request_raises
+    generator = InterviewKanpeGenerator.new(user: @operator_user, mindmap: @mindmap)
+    call_count = 0
+
+    result = with_stubbed_method(OpenaiClient, :api_key_for, ->(*) { "dummy-api-key" }) do
+      with_stubbed_method(OpenaiJson, :chat_json, ->(**) {
+        call_count += 1
+        raise "OpenAI エラー (429): rate limited" if call_count > 1
+        { "kanpe" => "薄いカンペ本文" }
+      }) do
+        generator.call
+      end
+    end
+
+    assert_equal "薄いカンペ本文", result, "肉付けが例外でも初回生成結果を返すべき"
+    assert_equal 2, call_count, "1回目成功→2回目の肉付けで例外が起きて打ち切られるはず"
+  end
+
   private
 
   # 対象(module/class)のメソッドをブロックの間だけ差し替え、終了後に必ず元へ戻す。

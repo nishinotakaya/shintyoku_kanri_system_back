@@ -34,9 +34,17 @@ class MyDocumentManifest
     @doc_types.include?(doc_type)
   end
 
-  # 1) 本人が発行した確定PDF（統合請求書・立替金）。実体が DB にあるのでそのまま落とせる。
+  # 発行済PDFのメタ情報だけ（file_data は SELECT しない）。issued_pdf_documents と
+  # submission_documents の covered 判定の両方から使うので 1 クエリに集約する。
+  ISSUED_PDF_META_COLUMNS = %i[id kind year month category filename].freeze
+
+  def issued_pdf_records
+    @issued_pdf_records ||= IssuedInvoicePdf.where(user_id: user.id).select(ISSUED_PDF_META_COLUMNS).to_a
+  end
+
+  # 1) 本人が発行した確定PDF（統合請求書・立替金）。実体は /download で別途取得する。
   def issued_pdf_documents
-    IssuedInvoicePdf.where(user_id: user.id).select { |record| include?(record.kind) }.map do |record|
+    issued_pdf_records.select { |record| include?(record.kind) }.map do |record|
       document(
         key: "issued-#{record.id}",
         doc_type: record.kind,
@@ -50,12 +58,11 @@ class MyDocumentManifest
   # 2) 本人の承認済み申請から生成する請求書 / 立替金。
   #    確定PDFが既にある (年・月・カテゴリ・種別) は重複するので出さない。
   def submission_documents
-    covered = IssuedInvoicePdf.where(user_id: user.id)
-                              .map { |record| [ record.kind, record.year, record.month, record.category ] }.to_set
+    covered = issued_pdf_records.map { |record| [ record.kind, record.year, record.month, record.category ] }.to_set
 
-    approved_submissions.reject { |submission|
-      covered.include?([ submission.kind, submission.year, submission.month, submission.category ])
-    }.map do |submission|
+    approved_submissions.select { |submission| include?(submission.kind) }
+                        .reject { |submission| covered.include?([ submission.kind, submission.year, submission.month, submission.category ]) }
+                        .map do |submission|
       extension = submission.kind == "expense" ? "expense.pdf" : "invoice.pdf"
       document(
         key: "submission-#{submission.id}",
@@ -68,11 +75,14 @@ class MyDocumentManifest
     end
   end
 
-  # 3) 本人宛に受領した注文書（PDF 実体があるものだけ）。
+  # 3) 本人宛に受領した注文書（PDF 実体があるものだけ）。実体は /download で別途取得する。
   def purchase_order_documents
     return [] unless include?("purchase_order")
 
-    ReceivedPurchaseOrder.where(user_id: user.id).reject { |record| record.file_data.blank? }.map do |record|
+    ReceivedPurchaseOrder.where(user_id: user.id)
+                         .where("file_data IS NOT NULL AND length(file_data) > 0")
+                         .select(:id, :category, :period_start, :created_at, :filename, :order_no)
+                         .map do |record|
       issued_on = record.period_start || record.created_at.to_date
       document(
         key: "purchase-order-#{record.id}",
@@ -85,13 +95,14 @@ class MyDocumentManifest
   end
 
   # 4) 請求書を出した月ぶんの業務報告書。請求書の裏付けなので同じ (年・月・カテゴリ) で揃える。
+  #    doc_types で "invoice" 自体が外れていても業務報告書は出す必要があるので、
+  #    絞り込み済みの approved_submissions ではなく invoice_submissions（種別のみで絞ったもの）を使う。
   def work_report_documents
     return [] unless include?("work_report")
 
-    approved_submissions.select { |submission| submission.kind == "invoice" }
-                        .map { |submission| [ submission.year, submission.month, submission.category ] }
-                        .uniq
-                        .map do |year, month, category|
+    invoice_submissions.map { |submission| [ submission.year, submission.month, submission.category ] }
+                       .uniq
+                       .map do |year, month, category|
       document(
         key: "work-report-#{year}-#{month}-#{category}",
         doc_type: "work_report",
@@ -103,9 +114,14 @@ class MyDocumentManifest
     end
   end
 
+  # 承認済み申請は種別で絞らずロードし、doc_types の絞り込みは呼び出し側の用途ごとに行う
+  # （invoice を doc_types から外しても work_report_documents は invoice 種別の申請が必要なため）。
   def approved_submissions
-    @approved_submissions ||= InvoiceSubmission.where(user_id: user.id).approved
-                                               .select { |submission| include?(submission.kind) }
+    @approved_submissions ||= InvoiceSubmission.where(user_id: user.id).approved.to_a
+  end
+
+  def invoice_submissions
+    @invoice_submissions ||= approved_submissions.select { |submission| submission.kind == "invoice" }
   end
 
   def document(key:, doc_type:, year:, month:, category:, filename:, path:, params: {})

@@ -99,4 +99,55 @@ class MergedInvoiceItemsTest < Minitest::Test
 
     assert_equal 575_300, MergedInvoiceItems.confirmed_total([ sub ])
   end
+
+  # 6. 不変条件: 明細合計(amount の合計) は必ず確定額(税抜) と一致する。
+  #    158h × 3,750円 = 592,500 と控除 -30,000 の明細合計(562,500)は
+  #    確定額(税抜) 523,000(=575,300÷1.1) と一致しないので、差額 -39,500 の「調整額」行が入る。
+  def test_adds_adjustment_row_to_match_confirmed_subtotal
+    add_hours(158)
+    sub = make_sub(total_override: 575_300)
+
+    items = MergedInvoiceItems.for_submission(sub)
+    adjustment = items.find { |item| item[:label] == "調整額" }
+
+    assert adjustment, "明細合計と確定額(税抜)がズレる場合は調整額行が入るべき"
+    assert_equal(-39_500, adjustment[:amount])
+    assert_equal 523_000, items.sum { |item| item[:amount].to_i }, "明細合計は確定額(税抜)と一致すること"
+  end
+
+  # 7. 明細行があっても合計が0円（0円行のみ）なら、確定額を説明できていないので1式にフォールバックする。
+  #    techleaders は時給0・default_items が「プロアカ歩合報酬 1式 0円」のため、稼働0だと0円行1本だけになる。
+  def test_falls_back_to_lump_when_items_sum_to_zero
+    sub = make_sub(total_override: 50_000, category: "techleaders")
+
+    items = MergedInvoiceItems.for_submission(sub)
+
+    assert_equal 1, items.size
+    assert_equal "式", items.first[:unit]
+    assert_equal 1, items.first[:qty]
+    assert_equal 50_000, items.first[:amount], "techleaders は税率0%なので税抜=税込"
+  end
+
+  # 8. total_override が無い申請（確定額という概念自体が無い）は調整額行を入れない。
+  #    調整行は subtotal_of(=total_override÷税率) が 0 になるので、入れてしまうと
+  #    「調整額 -明細合計」の行が明細合計を 0 円に打ち消してしまう。
+  def test_no_adjustment_row_when_total_override_is_absent
+    add_hours(158)
+    sub = make_sub(total_override: nil)
+
+    items = MergedInvoiceItems.for_submission(sub)
+
+    refute items.any? { |item| item[:label] == "調整額" }, "total_override が無いときは調整額行を入れない"
+    assert_equal 562_500, items.sum { |item| item[:amount].to_i }, "明細合計(158h×3,750-30,000)がそのまま残る"
+  end
+
+  # 9. total_override が無い申請の confirmed_total_for は、明細合計から請求額(税込)を算出する。
+  #    修正前は調整額行で明細合計が 0 円に打ち消され、請求額まで 0 円になっていた。
+  def test_confirmed_total_for_computes_from_items_when_total_override_is_absent
+    add_hours(158)
+    sub = make_sub(total_override: nil)
+
+    # 562,500(明細合計・税抜) + 10%(wings の税率) = 618,750
+    assert_equal 618_750, MergedInvoiceItems.confirmed_total_for(sub)
+  end
 end

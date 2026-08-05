@@ -118,4 +118,19 @@ class MyDocumentManifestTest < Minitest::Test
     assert documents.any?
     assert_equal [ "purchase_order" ], documents.map { |doc| doc[:doc_type] }.uniq
   end
+
+  # 7. doc_types に work_report だけを指定しても業務報告書は 0 件にならない。
+  #    業務報告書は kind="invoice" の承認済み申請から作るが、doc_types から "invoice" を
+  #    外していても取得対象を絞り込む前の承認済み申請リストを参照できているべき。
+  def test_doc_types_work_report_only_still_returns_work_reports
+    approved_invoice(@owner, month: 7)
+
+    documents = MyDocumentManifest.new(@owner, doc_types: [ "work_report" ]).call
+
+    assert documents.any?, "work_report のみ指定でも業務報告書は返るべき"
+    assert_equal [ "work_report" ], documents.map { |doc| doc[:doc_type] }.uniq
+    work_report = documents.first
+    assert_equal "/exports/work_report.xlsx", work_report.dig(:fetch, :path)
+    assert_equal "2026-07", work_report.dig(:fetch, :params, :month)
+  end
 end
