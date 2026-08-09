@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_17_112359) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_09_093446) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -281,6 +281,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_17_112359) do
     t.string "mode", default: "interview", null: false
     t.text "kanpe_script"
     t.string "kanpe_style", default: "sales", null: false
+    t.boolean "filmed", default: false, null: false
     t.index ["user_id"], name: "index_interview_mindmaps_on_user_id"
   end
 

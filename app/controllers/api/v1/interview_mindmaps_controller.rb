@@ -55,12 +55,20 @@ module Api
       # PATCH /api/v1/interview_mindmaps/:id  { title }
       # タイトル変更。YouTube は起点(root)テキストもタイトルに追従させる。
       def update
-        m = find_map or return
-        m.update!(title: params[:title]) if params[:title].present?
-        m.update!(kanpe_script: params[:kanpe_script].to_s) if params.key?(:kanpe_script)
-        m.update!(kanpe_style: params[:kanpe_style]) if params[:kanpe_style].present?
-        m.nodes.find_by(kind: "root")&.update!(text: m.title) if m.youtube? || m.love_youtube?
-        render json: m.reload.as_payload.merge(user: user_brief(m.user))
+        mindmap = find_map or return
+        attrs = {}
+        attrs[:title] = params[:title] if params[:title].present?
+        attrs[:kanpe_script] = params[:kanpe_script].to_s if params.key?(:kanpe_script)
+        attrs[:kanpe_style] = params[:kanpe_style] if params[:kanpe_style].present?
+        mindmap.update!(attrs) if attrs.any?
+        # 撮影済フラグは updated_at を動かさない(一覧は updated_at desc 順で先頭が初期表示になるため、
+        # チェックを付けた撮影済マップが先頭に上がってくると機能の意図と逆になる)
+        if params.key?(:filmed)
+          filmed = ActiveModel::Type::Boolean.new.cast(params[:filmed])
+          mindmap.update_column(:filmed, filmed) unless filmed.nil?
+        end
+        mindmap.nodes.find_by(kind: "root")&.update!(text: mindmap.title) if attrs.key?(:title) && (mindmap.youtube? || mindmap.love_youtube?)
+        render json: mindmap.reload.as_payload.merge(user: user_brief(mindmap.user))
       rescue => e
         render_error(e.message)
       end
@@ -73,8 +81,10 @@ module Api
         children_spec = InterviewNodeExpander.new(mindmap: m, node: node, user: current_user).call
         created = []
         InterviewMindmap.transaction do
+          # 再展開でも既存の子の後ろに積む（0 から振り直すと既存の質問と並び順が混ざる）
+          base = node.children.maximum(:position).to_i + (node.children.exists? ? 1 : 0)
           children_spec.each_with_index do |c, idx|
-            created << m.nodes.create!(parent_id: node.id, kind: c[:kind], text: c[:text], position: idx)
+            created << m.nodes.create!(parent_id: node.id, kind: c[:kind], text: c[:text], position: base + idx)
           end
           node.update!(expanded: true)
         end

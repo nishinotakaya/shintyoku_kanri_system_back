@@ -162,6 +162,7 @@ class InterviewMindmap < ApplicationRecord
       spreadsheet_url: spreadsheet_url,
       kanpe_script: kanpe_script,
       kanpe_style: kanpe_style,
+      filmed: filmed,
       nodes: nodes.map(&:as_payload)
     }
   end
