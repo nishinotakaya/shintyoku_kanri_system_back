@@ -186,6 +186,25 @@
       "user_input": "InvoiceSubmission.where(:id => Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)).where(:kind => \"invoice\")",
       "confidence": "Weak",
       "note": "ファイル名にカテゴリ(enum相当)と表示名を使うだけでユーザー入力はパスに入らない。既存ignoreと同一パターン(統合請求書/立替金DL)。"
+    },
+    {
+      "warning_type": "Unmaintained Dependency",
+      "warning_code": 121,
+      "fingerprint": "21ab0fe00fdd5899ffc405cff75aadb91b805ee996a614f7e27b08a287e9062d",
+      "check_name": "EOLRails",
+      "message": "Support for Rails 8.0.5 ends on 2026-10-07",
+      "file": "Gemfile.lock",
+      "line": 297,
+      "link": "https://brakemanscanner.org/docs/warning_types/unmaintained_dependency/",
+      "code": null,
+      "render_path": null,
+      "location": null,
+      "user_input": null,
+      "confidence": "Weak",
+      "cwe_id": [
+        1104
+      ],
+      "note": "Rails 8.0 EOL(2026-10-07)の時限警告。CIを止めないため一時ignore。Rails 8.1系へのアップグレードを別途計画すること"
     }
   ],
   "updated": "2026-05-03 00:00:00 +0900",
