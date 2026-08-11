@@ -71,16 +71,21 @@ class TeamScheduleExpenseSync
     created
   end
 
-  # User.display_name から TeamSchedule.person ("大隅" / "川村" / "西野") へ逆引き
+  # User.display_name から TeamSchedule.person ("大隅" / "川村" / "西野" 等) へ逆引き。
+  # 対象者はシート由来で動的に増えるため、実データ(team_schedules)に現れた人名から探す。
+  # 「川村」「川村卓也」のような表記ゆれが併存しても結果が揺れないよう最長一致にする
   def self.person_for(user)
     name = user.display_name.to_s
-    TeamScheduleImporter::PERSONS.find { |person_name| name.include?(person_name) }
+    TeamSchedule.distinct.pluck(:person)
+                .compact
+                .sort_by { |person_name| -person_name.length }
+                .find { |person_name| person_name.present? && name.include?(person_name) }
   end
 
   # TeamSchedule.person ("川村" 等) から実ユーザを引く。
   # wing-prefix の別アカウントは除外し、admin 本体に当たるレコードを優先。
   def self.user_for(person_name)
-    User.where("display_name LIKE ?", "%#{person_name}%")
+    User.where("display_name LIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(person_name.to_s)}%")
         .find_each
         .reject { |u| u.display_name.to_s.start_with?("wing") }
         .first

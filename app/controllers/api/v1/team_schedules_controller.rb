@@ -30,7 +30,8 @@ module Api
             results << { sheet: format("%04d%02d", y, m), error: e.message }
           end
         end
-        render json: { imported: total_imported, persons: TeamScheduleImporter::PERSONS, sheets: results }
+        imported_persons = results.flat_map { |result| result[:persons].to_a }.uniq
+        render json: { imported: total_imported, persons: imported_persons, sheets: results }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -54,6 +55,7 @@ module Api
 
       def update
         record = TeamSchedule.find(params[:id])
+        return render_person_forbidden unless person_editable_by_current_user?(record.person.to_s)
         record.update!(params.permit(:status, :location, :memo))
         sync_transit_if_attended(record)
         render json: serialize_record(record)
@@ -69,7 +71,8 @@ module Api
         results = []
         total = 0
         target_year_months.each do |y, m|
-          TeamScheduleImporter::PERSONS.each do |person_name|
+          year_month = format("%04d%02d", y, m)
+          TeamSchedule.where(year_month: year_month).distinct.pluck(:person).each do |person_name|
             target = TeamScheduleExpenseSync.user_for(person_name)
             next unless target
             created = TeamScheduleExpenseSync.new(user: target, year: y, month: m).call
@@ -83,6 +86,7 @@ module Api
       end
 
       def create
+        return render_person_forbidden unless person_editable_by_current_user?(params[:person].to_s)
         date = Date.iso8601(params[:date].to_s)
         record = TeamSchedule.find_or_initialize_by(date: date, person: params[:person].to_s)
         record.assign_attributes(
@@ -97,6 +101,20 @@ module Api
       end
 
       private
+
+      # 他人の予定の作成・変更は admin のみ。一般ユーザーは自分の苗字に一致する行だけ編集できる。
+      # フロント(CalendarPage の canEditPerson)と同じ規則をサーバ側でも強制する(直接APIを叩く迂回の防止)。
+      # 「川村」ヘッダ×「川村 卓也」・「川村卓也」ヘッダ×「川村」の両方向の表記ゆれを許容する
+      def person_editable_by_current_user?(person_name)
+        return true if current_user.admin?
+        surname = current_user.display_name.to_s.split(/[\s　]/).first.to_s
+        return false if surname.blank? || person_name.blank?
+        person_name.include?(surname) || surname.include?(person_name)
+      end
+
+      def render_person_forbidden
+        render json: { error: "この人の予定を編集する権限がありません" }, status: :forbidden
+      end
 
       # status が "出社" を含むなら、対応ユーザーの default_transit_* で
       # その日の work_report + expense を upsert する。

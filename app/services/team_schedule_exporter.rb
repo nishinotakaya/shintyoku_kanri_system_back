@@ -2,9 +2,9 @@ require "google/apis/sheets_v4"
 require "signet/oauth_2/client"
 
 # DB の team_schedules を Google スプレッドシートに書き戻す。
-# シート構成は TeamScheduleImporter と同じ前提。
+# シート構成は TeamScheduleImporter と同じ前提。対象者はヘッダから動的検出。
 class TeamScheduleExporter
-  PERSONS = %w[大隅 川村 西野].freeze
+  include TeamScheduleSheetPersons
 
   def initialize(user:, year:, month:)
     @user = user
@@ -38,18 +38,13 @@ class TeamScheduleExporter
 
     response = service.get_spreadsheet_values(spreadsheet_id, "#{sheet_title}!A1:AZ50")
     rows = response.values || []
-    header = rows[1] || []
 
-    person_columns = PERSONS.to_h do |person_name|
-      column_index = header.each_with_index.find { |value, _| value.to_s.include?(person_name) }&.last
-      [ person_name, column_index ? column_index + 2 : nil ]
-    end
+    person_columns = detect_person_columns(rows)
 
     schedules = TeamSchedule.where(year_month: sheet_title).index_by { |record| [ record.person, record.date ] }
 
     update_value_ranges = []
     person_columns.each do |person_name, status_column|
-      next if status_column.nil?
       # 制限ユーザーは指定された人物の行のみ
       next if @restrict_to_persons && !@restrict_to_persons.any? { |p| person_name.include?(p) || p.include?(person_name) }
 

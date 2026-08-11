@@ -1,7 +1,9 @@
 require "google/apis/sheets_v4"
 require "signet/oauth_2/client"
 
-# 勤怠スケジュール Google スプレッドシートから複数人（大隅 / 川村 / 西野）のステータスを取り込む。
+# 勤怠スケジュール Google スプレッドシートから複数人のステータスを取り込む。
+# 対象者はシートの人名ヘッダ(2行目)から動的に検出する(TeamScheduleSheetPersons)。
+# シートに新メンバーの列が増えたら、コード変更なしで取込対象になる。
 # 既存の AttendanceScheduleImporter は単一ユーザー（自分の休み）専用なので分離。
 #
 # シート構成:
@@ -9,7 +11,7 @@ require "signet/oauth_2/client"
 #   - 2行目に人名ヘッダ。各人 3 列占有（日 / 曜 / ステータス）
 #   - ステータス例: "出社", "リモート", "リビング リモート", "休み", "高田馬場" 等
 class TeamScheduleImporter
-  PERSONS = %w[大隅 川村 西野].freeze
+  include TeamScheduleSheetPersons
 
   def initialize(user:, year:, month:)
     @user = user
@@ -35,18 +37,12 @@ class TeamScheduleImporter
 
     response = service.get_spreadsheet_values(spreadsheet_id, "#{sheet_title}!A1:AZ50")
     rows = response.values || []
-    header = rows[1] || []
 
-    # 人名 → ステータス列のマッピング
-    person_columns = PERSONS.to_h do |person_name|
-      column_index = header.each_with_index.find { |value, _| value.to_s.include?(person_name) }&.last
-      [ person_name, column_index ? column_index + 2 : nil ]
-    end
+    # 人名 → ステータス列のマッピング(ヘッダから動的検出)
+    person_columns = detect_person_columns(rows)
 
     imported = 0
     person_columns.each do |person_name, status_column|
-      next if status_column.nil?
-
       (2..rows.size - 1).each do |row_index|
         row = rows[row_index] || []
         # day 列（status 列 - 2）
@@ -71,17 +67,17 @@ class TeamScheduleImporter
     write_totals_back(service, spreadsheet_id, sheet_title, person_columns)
 
     # 出社予定の日に交通費を自動作成（取り込んだ team_schedule に基づく）
-    expenses_created = sync_commute_expenses
+    expenses_created = sync_commute_expenses(person_columns.keys)
 
-    { sheet: sheet_title, imported: imported, persons: PERSONS, expenses_created: expenses_created }
+    { sheet: sheet_title, imported: imported, persons: person_columns.keys, expenses_created: expenses_created }
   end
 
   # team_schedules の status が "出社" の日に、display_name でマッチするユーザーごとの
   # default_transit_* で Expense を自動作成する。
-  def sync_commute_expenses
+  def sync_commute_expenses(person_names)
     total = 0
-    PERSONS.each do |person_name|
-      target = User.where("display_name LIKE ?", "%#{person_name}%").find_each.find { |u| !u.display_name.to_s.start_with?("wing") }
+    person_names.each do |person_name|
+      target = TeamScheduleExpenseSync.user_for(person_name)
       next unless target
       created = TeamScheduleExpenseSync.new(user: target, year: @year, month: @month).call
       total += created.size
@@ -129,12 +125,14 @@ class TeamScheduleImporter
       Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!A35", values: [ [ "L合計" ] ])
     ]
 
-    # 西野・川村は formula、それ以外（大隅・土倉等）は空にする
-    target_persons = %w[西野 川村]
+    # 西野・川村は formula、大隅・土倉は空にする。
+    # 人物列はシートヘッダから動的検出されるため、上記以外の想定外の列は
+    # 34/35行のセルを壊さないよう一切触らない(誤検出時の破壊防止)
+    formula_persons = %w[西野 川村]
+    blank_persons = %w[大隅 土倉]
     person_columns.each do |person, status_col|
-      next if status_col.nil?
       letter = column_letter(status_col)
-      if target_persons.include?(person)
+      if formula_persons.any? { |name| person.include?(name) }
         curr_range = "#{letter}#{curr_first_row}:#{letter}#{curr_last_row}"
         prev_range = prev_sheet ? "'#{prev_sheet}'!#{letter}#{prev_first_row}:#{letter}#{prev_last_row}" : nil
         ranges = [ curr_range, prev_range ].compact
@@ -158,8 +156,8 @@ class TeamScheduleImporter
 
         data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ tama_formula ] ])
         data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ living_formula ] ])
-      else
-        # 対象外は空文字で上書き（古い値が残らないように）
+      elsif blank_persons.any? { |name| person.include?(name) }
+        # 合計対象外のメンバーは空文字で上書き（古い値が残らないように）
         data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}34", values: [ [ "" ] ])
         data << Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!#{letter}35", values: [ [ "" ] ])
       end
