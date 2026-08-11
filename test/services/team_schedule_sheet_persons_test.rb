@@ -56,6 +56,12 @@ class TeamScheduleSheetPersonsTest < ActiveSupport::TestCase
     refute_includes columns.keys, "５月"
   end
 
+  test "detect_day_columns は凡例列(タマ/5月)も含めて日付トリオの先頭列を返す" do
+    columns = detect_day_columns(build_rows)
+
+    assert_equal [ 1, 4, 7, 10, 13, 16 ], columns
+  end
+
   test "日番号が月途中(15日分)までのシートでも人物を検出できる" do
     header = []
     header[1] = "西野"

@@ -22,6 +22,16 @@ module TeamScheduleSheetPersons
     }.to_h
   end
 
+  # 人物・凡例(タマ/N月)を問わず、日番号トリオ(日/曜/ステータス)の先頭列をすべて返す。
+  # 新規月シート作成時に、全トリオの日付・曜日を対象月へ書き換えるために使う
+  def detect_day_columns(rows)
+    header = rows[1] || []
+    header.each_with_index.filter_map { |cell, column_index|
+      next if cell.to_s.strip.empty?
+      column_index if day_number_column?(rows, column_index)
+    }
+  end
+
   private
 
   # ヘッダ直下(3行目以降)に日番号が 1 から連番で並ぶ列か。

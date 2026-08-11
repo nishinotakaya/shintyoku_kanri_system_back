@@ -34,7 +34,8 @@ class TeamScheduleExporter
 
     spreadsheet = service.get_spreadsheet(spreadsheet_id)
     sheet = spreadsheet.sheets.find { |target| target.properties.title == sheet_title }
-    raise "対象シートが見つかりません: #{sheet_title}" unless sheet
+    # 対象月のシートが無ければ、直近の月シートを複製して同じレイアウトで自動作成する
+    sheet ||= create_month_sheet(service, spreadsheet_id, spreadsheet, sheet_title)
 
     response = service.get_spreadsheet_values(spreadsheet_id, "#{sheet_title}!A1:AZ50")
     rows = response.values || []
@@ -83,6 +84,76 @@ class TeamScheduleExporter
   end
 
   private
+
+  # 対象月のシートが無いとき、直近の既存月シートを複製して同じレイアウトで作成する。
+  # 複製後にタイトル行と全トリオ(日/曜)を対象月の日付へ書き換え、ステータス列は空にする。
+  # 祝日などの凡例列の名前は手入力運用のため空のまま(レイアウト・書式は複製で引き継がれる)
+  def create_month_sheet(service, spreadsheet_id, spreadsheet, sheet_title)
+    template = latest_month_sheet_before(spreadsheet, sheet_title)
+    raise "対象シートが見つかりません: #{sheet_title}（複製元になる月シートもありません）" unless template
+
+    duplicate_request = Google::Apis::SheetsV4::Request.new(
+      duplicate_sheet: Google::Apis::SheetsV4::DuplicateSheetRequest.new(
+        source_sheet_id: template.properties.sheet_id,
+        new_sheet_name: sheet_title,
+        insert_sheet_index: spreadsheet.sheets.size
+      )
+    )
+    reply = service.batch_update_spreadsheet(
+      spreadsheet_id,
+      Google::Apis::SheetsV4::BatchUpdateSpreadsheetRequest.new(requests: [ duplicate_request ])
+    )
+    new_sheet_properties = reply.replies.first.duplicate_sheet.properties
+
+    write_month_skeleton(service, spreadsheet_id, template, sheet_title)
+
+    Google::Apis::SheetsV4::Sheet.new(properties: new_sheet_properties)
+  end
+
+  # 「YYYYMM」名のシートのうち、対象より前で最も新しいものを複製元にする(無ければ全体で最新)
+  def latest_month_sheet_before(spreadsheet, sheet_title)
+    month_sheets = spreadsheet.sheets.select { |candidate| candidate.properties.title.match?(/\A\d{6}\z/) }
+    earlier_sheets = month_sheets.select { |candidate| candidate.properties.title < sheet_title }
+    (earlier_sheets.presence || month_sheets).max_by { |candidate| candidate.properties.title }
+  end
+
+  # 複製したシートの中身を対象月に書き換える。
+  # - タイトル行(B1): 「YYYY年M月作業予定」
+  # - 全トリオ(人物・凡例とも): 日番号と曜日を対象月で書き直し、ステータスは空にする
+  def write_month_skeleton(service, spreadsheet_id, template, sheet_title)
+    year = sheet_title[0, 4].to_i
+    month = sheet_title[4, 2].to_i
+
+    template_rows = service.get_spreadsheet_values(spreadsheet_id, "#{template.properties.title}!A1:AZ50").values || []
+    day_columns = detect_day_columns(template_rows)
+
+    data = [ Google::Apis::SheetsV4::ValueRange.new(range: "#{sheet_title}!B1", values: [ [ "#{year}年#{month}月作業予定" ] ]) ]
+    day_columns.each do |day_column|
+      from_letter = column_letter_for(day_column)
+      to_letter = column_letter_for(day_column + 2)
+      data << Google::Apis::SheetsV4::ValueRange.new(
+        range: "#{sheet_title}!#{from_letter}3:#{to_letter}33",
+        values: month_day_rows(year, month)
+      )
+    end
+    service.batch_update_values(
+      spreadsheet_id,
+      Google::Apis::SheetsV4::BatchUpdateValuesRequest.new(value_input_option: "USER_ENTERED", data: data)
+    )
+  end
+
+  # 対象月の [日番号, 曜日, ステータス(空)] を31行分。月の日数を超える行は空にする
+  def month_day_rows(year, month)
+    days_in_month = Date.new(year, month, -1).day
+    weekday_kanji = %w[日 月 火 水 木 金 土]
+    (1..31).map do |day|
+      if day <= days_in_month
+        [ day, weekday_kanji[Date.new(year, month, day).wday], "" ]
+      else
+        [ "", "", "" ]
+      end
+    end
+  end
 
   def pick_credentials_user(user)
     admin = User.where("display_name LIKE ?", "%西野%").find do |candidate|
