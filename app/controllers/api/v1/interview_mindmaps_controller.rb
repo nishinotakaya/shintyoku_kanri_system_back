@@ -115,9 +115,7 @@ module Api
         return render_error("起点ノードがありません") unless root
         return import_youtube_bank(m, root) if m.youtube?
         return import_youtube_bank(m, root, InterviewMindmap::LOVE_YOUTUBE_QUESTIONS) if m.love_youtube?
-        if m.talk_cards? # 通常デッキ + ぶっこみデッキ(🌶付き)をまとめて入れ、出し分けはフロントで行う
-          return import_mote_bank(m, root, InterviewMindmap::TALK_THEME_CARDS + InterviewMindmap::TALK_THEME_CARDS_SPICY)
-        end
+        return import_talk_cards(m, root) if m.talk_cards?
         return import_mote_bank(m, root) if m.mote?
         if m.mote_qa?
           dialogues = m.user&.gender == "female" ? InterviewMindmap::MOTE_QA_DIALOGUES_FOR_FEMALE : InterviewMindmap::MOTE_QA_DIALOGUES
@@ -185,6 +183,30 @@ module Api
           root.update!(expanded: true)
         end
         render json: m.reload.as_payload.merge(imported: questions.size)
+      rescue => e
+        render_error(e.message)
+      end
+
+      # トークテーマトランプ: 通常デッキ + ぶっこみデッキ(🌶付き)の計108枚を root 配下に並べる。
+      # 出し分け(🌶か否か)はフロントが札の先頭文字で判定する。
+      # 取込ボタンは何度押されても山札が増えないよう、まだ無い札だけを足す。
+      # 「取り込み済みを消して入れ直す」方式にしないのは、札に AI 展開でぶら下げた子ノードが
+      # dependent: :destroy で一緒に消えてしまうため。
+      def import_talk_cards(m, root)
+        cards = InterviewMindmap::TALK_THEME_CARDS + InterviewMindmap::TALK_THEME_CARDS_SPICY
+        existing_card_texts = m.nodes.where(kind: "question").pluck(:text).to_set
+        missing_cards = cards.reject { |card| existing_card_texts.include?(card[:q]) }
+
+        InterviewMindmap.transaction do
+          base = root.children.maximum(:position).to_i + 1
+          missing_cards.each_with_index do |card, index|
+            question = m.nodes.create!(parent_id: root.id, kind: "question", text: card[:q],
+                                       position: base + index, source: "bank", expanded: true)
+            m.nodes.create!(parent_id: question.id, kind: "answer", text: card[:a], position: 0, source: "bank")
+          end
+          root.update!(expanded: true)
+        end
+        render json: m.reload.as_payload.merge(imported: missing_cards.size)
       rescue => e
         render_error(e.message)
       end
