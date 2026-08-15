@@ -115,6 +115,7 @@ module Api
         return render_error("起点ノードがありません") unless root
         return import_youtube_bank(m, root) if m.youtube?
         return import_youtube_bank(m, root, InterviewMindmap::LOVE_YOUTUBE_QUESTIONS) if m.love_youtube?
+        return import_mote_bank(m, root, InterviewMindmap::TALK_THEME_CARDS) if m.talk_cards?
         return import_mote_bank(m, root) if m.mote?
         if m.mote_qa?
           dialogues = m.user&.gender == "female" ? InterviewMindmap::MOTE_QA_DIALOGUES_FOR_FEMALE : InterviewMindmap::MOTE_QA_DIALOGUES
@@ -294,7 +295,7 @@ module Api
       HOVER_TTL = 10 # 秒。これより古いホバーは無視(mouseleave取りこぼし対策)
 
       def ensure_feature
-        mindmap_features = %i[interview_mindmap youtube_mindmap mote_mindmap mote_qa_mindmap love_youtube_mindmap]
+        mindmap_features = %i[interview_mindmap youtube_mindmap mote_mindmap mote_qa_mindmap love_youtube_mindmap talk_cards_mindmap]
         return if mindmap_features.any? { |feature| current_user.can_use?(feature) }
         render json: { error: "面談対策マインドマップの利用権限がありません" }, status: :forbidden
       end
@@ -312,9 +313,9 @@ module Api
         m
       end
 
-      # interview は誰でも(ensure_feature 済み)、youtube/mote/mote_qa/love_youtube は専用フラグ(admin素通り)が要る
+      # interview は誰でも(ensure_feature 済み)、youtube/mote/mote_qa/love_youtube/talk_cards は専用フラグ(admin素通り)が要る
       def mode_allowed?(mode)
-        return true unless %w[youtube mote mote_qa love_youtube].include?(mode)
+        return true unless %w[youtube mote mote_qa love_youtube talk_cards].include?(mode)
         current_user.can_use?(:"#{mode}_mindmap")
       end
 
@@ -324,6 +325,7 @@ module Api
         when "mote"         then "#{target.display_name} モテ会話"
         when "mote_qa"      then "#{target.display_name} モテ質問Q&A"
         when "love_youtube" then "#{target.display_name} 恋愛系YouTube"
+        when "talk_cards"   then "#{target.display_name} トークテーマトランプ"
         else "#{target.display_name} 面談対策"
         end
       end
@@ -333,6 +335,7 @@ module Api
         when "youtube"      then title # 動画タイトル/テーマを起点に表示
         when "mote"         then "モテコミュニケーション"
         when "mote_qa"      then "モテ質問Q&A"
+        when "talk_cards"   then "トークテーマトランプ"
         when "love_youtube" then title # 動画タイトル/テーマを起点に表示
         else "#{target.display_name} のスキルシート"
         end

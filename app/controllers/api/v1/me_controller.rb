@@ -75,6 +75,7 @@ module Api
           can_use_mote_mindmap: current_user.can_use?(:mote_mindmap),
           can_use_mote_qa_mindmap: current_user.can_use?(:mote_qa_mindmap),
           can_use_love_youtube_mindmap: current_user.can_use?(:love_youtube_mindmap),
+          can_use_talk_cards_mindmap: current_user.can_use?(:talk_cards_mindmap),
           sub_admin: current_user.sub_admin?
         }
       end
