@@ -115,7 +115,9 @@ module Api
         return render_error("起点ノードがありません") unless root
         return import_youtube_bank(m, root) if m.youtube?
         return import_youtube_bank(m, root, InterviewMindmap::LOVE_YOUTUBE_QUESTIONS) if m.love_youtube?
-        return import_mote_bank(m, root, InterviewMindmap::TALK_THEME_CARDS) if m.talk_cards?
+        if m.talk_cards? # 通常デッキ + ぶっこみデッキ(🌶付き)をまとめて入れ、出し分けはフロントで行う
+          return import_mote_bank(m, root, InterviewMindmap::TALK_THEME_CARDS + InterviewMindmap::TALK_THEME_CARDS_SPICY)
+        end
         return import_mote_bank(m, root) if m.mote?
         if m.mote_qa?
           dialogues = m.user&.gender == "female" ? InterviewMindmap::MOTE_QA_DIALOGUES_FOR_FEMALE : InterviewMindmap::MOTE_QA_DIALOGUES
