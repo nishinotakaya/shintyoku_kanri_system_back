@@ -29,6 +29,20 @@ module Api
         Date.iso8601(params[:application_date]) if params[:application_date].present?
       end
 
+      # 進捗データソースの権限ゲート。before_action から使う前提で、権限が無ければ 403 を返して
+      # アクション本体を実行させない。mode: :view(閲覧) / :sync(取込) / :write(外部サービスへの書き込み)
+      def require_data_source!(source_type, mode)
+        allowed = case mode
+        when :view then current_user.can_view_data_source?(source_type)
+        when :sync then current_user.can_sync_data_source?(source_type)
+        when :write then current_user.can_write_data_source?(source_type)
+        end
+        return if allowed
+
+        label = UserDataSourcePermission::SOURCE_LABELS[source_type]
+        render json: { error: "#{label} を扱う権限がありません" }, status: :forbidden
+      end
+
       # 管理者は params[:as_user_id] で他ユーザーとして閲覧可能。
       # それ以外は常に current_user。
       def viewing_user

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_09_093446) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_21_000002) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -723,6 +723,19 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_09_093446) do
     t.index ["trello_card_id"], name: "index_trello_tasks_on_trello_card_id", unique: true
   end
 
+  create_table "user_data_source_permissions", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "source_type", null: false
+    t.boolean "can_view", default: false, null: false
+    t.boolean "can_sync", default: false, null: false
+    t.boolean "can_write", default: false, null: false
+    t.integer "credential_owner_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "source_type"], name: "index_data_source_permissions_on_user_and_source", unique: true
+    t.index ["user_id"], name: "index_user_data_source_permissions_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "email", default: "", null: false
     t.string "encrypted_password", default: "", null: false
@@ -819,6 +832,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_09_093446) do
   add_foreign_key "skill_sheet_evaluations", "skill_sheets"
   add_foreign_key "skill_sheet_review_items", "skill_sheets"
   add_foreign_key "todos", "users"
+  add_foreign_key "user_data_source_permissions", "users"
+  add_foreign_key "user_data_source_permissions", "users", column: "credential_owner_id"
   add_foreign_key "users", "users", column: "linked_user_id"
   add_foreign_key "work_reports", "users"
 end

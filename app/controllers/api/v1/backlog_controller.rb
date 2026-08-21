@@ -1,6 +1,15 @@
 module Api
   module V1
     class BacklogController < BaseController
+      # Wing(Backlog) の権限表。閲覧・取込・外部への書き込みを分けて持つ。
+      # 借りたキーで Backlog 本体を触られないよう、書き込みは :write を持つ人だけ。
+      before_action -> { require_data_source!("backlog", :view) }, only: %i[tasks_on_date task_comments users]
+      before_action -> { require_data_source!("backlog", :sync) }, only: :sync
+      before_action -> { require_data_source!("backlog", :write) },
+                    only: %i[create_task_comment update_task_comment destroy_task_comment create_attachment]
+      before_action -> { require_data_source!("notion", :sync) }, only: :sync_notion
+      before_action -> { require_data_source!("trello", :sync) }, only: :sync_trello
+
       def show_setting
         s = current_user.backlog_setting || current_user.build_backlog_setting(BacklogSetting::DEFAULTS)
         render json: serialize_setting(s)
@@ -14,8 +23,8 @@ module Api
       end
 
       def test_connection
-        s = current_user.backlog_setting
-        return render(json: { success: false, error: "設定が未保存です" }) unless s
+        s = current_user.backlog_connection_setting
+        return render(json: { success: false, error: "設定が未保存です" }) unless s&.api_key.present?
 
         client = BacklogClient.new(s)
         result = client.test_connection
@@ -68,7 +77,10 @@ module Api
         task = current_user.backlog_tasks.find(params[:id])
         permitted = params.permit(:memo, :summary, :start_date, :end_date, :status_id, :progress_value, :deploy_date, :deploy_note, :url, :assignee_name, :did_previous, :do_today)
         # ワークスペース間のタスク移動 (ワークスペース削除前の退避などで使う)
-        permitted[:progress_workspace_id] = params[:workspace_id] if params[:workspace_id].present?
+        if params[:workspace_id].present?
+          workspace_id = own_workspace_id(params[:workspace_id]) or return
+          permitted[:progress_workspace_id] = workspace_id
+        end
         if permitted[:status_id].present?
           permitted[:status_name] = BacklogTask::STATUS_NAMES[permitted[:status_id].to_i]
           if permitted[:status_id].to_i == 4 && task.completed_on.nil?
@@ -99,7 +111,10 @@ module Api
         # カレンダーから日付指定で作る場合は start_date/end_date を渡してその日だけ表示
         attrs[:start_date] = params[:start_date] if params[:start_date].present?
         attrs[:end_date]   = params[:end_date]   if params[:end_date].present?
-        attrs[:progress_workspace_id] = params[:workspace_id] if params[:workspace_id].present?
+        if params[:workspace_id].present?
+          workspace_id = own_workspace_id(params[:workspace_id]) or return
+          attrs[:progress_workspace_id] = workspace_id
+        end
         task = current_user.backlog_tasks.create!(attrs)
         push_to_calendar(task) # プライベートTodoのみGoogleカレンダーへ反映
         render json: serialize_task(task), status: :created
@@ -186,8 +201,8 @@ module Api
       end
 
       def tasks
-        tasks = current_user.backlog_tasks.order(:status_id, Arel.sql("COALESCE(position, 9999)"), :issue_key)
-        # ワークスペースでフィルタ (未指定時は従来どおり全件=後方互換)
+        tasks = viewable_backlog_tasks.order(:status_id, Arel.sql("COALESCE(position, 9999)"), :issue_key)
+        # ワークスペースでフィルタ (未指定時は権限のあるワークスペース全件)
         tasks = tasks.where(progress_workspace_id: params[:workspace_id]) if params[:workspace_id].present?
         # ステータスでフィルタ
         if params[:status_ids].present?
@@ -201,7 +216,7 @@ module Api
       # assignee 指定で担当者名で絞り込み
       def task_comments
         task = current_user.backlog_tasks.find_by!(issue_key: params[:issue_key])
-        s = current_user.backlog_setting
+        s = current_user.backlog_connection_setting
         return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
         comments = BacklogClient.new(s).fetch_comments(task.issue_key)
         render json: comments.map { |c| serialize_comment(c) }
@@ -215,7 +230,7 @@ module Api
       # body: { content: "...", notified_user_ids: [...], attachment_ids: [...] }
       def create_task_comment
         task = current_user.backlog_tasks.find_by!(issue_key: params[:issue_key])
-        s = current_user.backlog_setting
+        s = current_user.backlog_connection_setting
         return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
         content = params.require(:content)
         notified = (params[:notified_user_ids] || []).map(&:to_i)
@@ -280,7 +295,7 @@ module Api
       def create_attachment
         file = params[:file]
         return render(json: { error: "ファイルを添付してください" }, status: :unprocessable_entity) unless file.respond_to?(:read)
-        s = current_user.backlog_setting
+        s = current_user.backlog_connection_setting
         return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
         io = file.tempfile.presence || file
         io.rewind if io.respond_to?(:rewind)
@@ -299,7 +314,7 @@ module Api
       # body: { content: "..." }
       def update_task_comment
         task = current_user.backlog_tasks.find_by!(issue_key: params[:issue_key])
-        s = current_user.backlog_setting
+        s = current_user.backlog_connection_setting
         return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
         c = BacklogClient.new(s).update_comment(task.issue_key, params[:comment_id], content: params.require(:content))
         render json: serialize_comment(c)
@@ -310,7 +325,7 @@ module Api
       # DELETE /api/v1/backlog/tasks/:issue_key/comments/:comment_id
       def destroy_task_comment
         task = current_user.backlog_tasks.find_by!(issue_key: params[:issue_key])
-        s = current_user.backlog_setting
+        s = current_user.backlog_connection_setting
         return render(json: { error: "Backlog 設定が未保存です" }, status: :bad_request) unless s&.api_key.present?
         BacklogClient.new(s).delete_comment(task.issue_key, params[:comment_id])
         head :no_content
@@ -323,13 +338,16 @@ module Api
       # 1) Backlog API から取得（admin 不要、project members 経由）
       # 2) 取れない／取れたが少ない場合、DB の backlog_tasks.assignee_name から補完
       def users
-        s = current_user.backlog_setting
+        s = current_user.backlog_connection_setting
         api_users = s&.api_key.present? ? BacklogClient.new(s).fetch_users : []
         result = api_users.map { |u| { id: u["id"], name: u["name"], mail_address: u["mailAddress"] } }
 
-        # DB に同期されている assignee を補完（admin 権限が無くて API で取れなかった人を救う）
+        # DB に同期されている assignee を補完（admin 権限が無くて API で取れなかった人を救う）。
+        # 補完元は自分と、Backlog キーの貸し元(＝同じボードを見ている人)に限る。全ユーザーから拾うと
+        # 権限の無いボードの担当者名まで漏れる。
         existing_ids = result.map { |u| u[:id] }.compact
         db_assignees = BacklogTask
+          .where(user_id: [ current_user.id, current_user.credential_owner_for("backlog").id ].uniq)
           .where.not(assignee_name: [ nil, "" ])
           .where.not(assignee_id: existing_ids)
           .distinct
@@ -358,6 +376,24 @@ module Api
       end
 
       private
+
+      # 権限のあるデータソースのワークスペースに属するタスクだけを見せる。
+      # manual(ReRe/プライベート)は外部連携を伴わないので常に見える。
+      def viewable_backlog_tasks
+        blocked_workspace_ids = current_user.progress_workspaces
+          .where(source_type: current_user.hidden_data_source_types)
+          .pluck(:id)
+        return current_user.backlog_tasks if blocked_workspace_ids.empty?
+        current_user.backlog_tasks.where.not(progress_workspace_id: blocked_workspace_ids)
+      end
+
+      # 自分のワークスペース以外を指定されたら 403。他人のワークスペースへタスクを移せないようにする。
+      def own_workspace_id(raw_workspace_id)
+        workspace_id = raw_workspace_id.to_i
+        return workspace_id if current_user.progress_workspaces.exists?(id: workspace_id)
+        render json: { error: "指定のワークスペースは使用できません" }, status: :forbidden
+        nil
+      end
 
       # current_user の「プライベート」ワークスペース(builtin manual)。無ければ nil。
       def private_workspace

@@ -150,13 +150,13 @@ module Api
       end
 
       def require_setting!
-        s = current_user.backlog_setting
+        s = current_user.backlog_connection_setting
         return if s&.api_key.present?
         render json: { error: "Backlog 設定（APIキー）が未保存です。設定画面から登録してください。" }, status: :bad_request
       end
 
       def client
-        @client ||= BacklogClient.new(current_user.backlog_setting)
+        @client ||= BacklogClient.new(current_user.backlog_connection_setting)
       end
 
       def build_mirror
@@ -165,7 +165,7 @@ module Api
 
       # Backlog 上の PR ページへの直リンク
       def pull_request_url(project_key, repo_name, pr_number)
-        backlog_url = current_user.backlog_setting.backlog_url.to_s.chomp("/")
+        backlog_url = current_user.backlog_connection_setting.backlog_url.to_s.chomp("/")
         return nil if backlog_url.blank?
         "#{backlog_url}/git/#{project_key}/#{repo_name}/pullRequests/#{pr_number}"
       end

@@ -1,6 +1,11 @@
 module Api
   module V1
     class NotionTasksController < BaseController
+      # リビングは全ユーザー共通の1テーブルなので、権限のある人だけに開ける
+      before_action -> { require_data_source!("notion", :view) }, only: :index
+      before_action -> { require_data_source!("notion", :sync) }, only: :sync
+      before_action -> { require_data_source!("notion", :write) }, only: :update
+
       def index
         scope = NotionTask.active
         scope = scope.for_date(parse_date) if params[:date].present? && params[:ignore_date] != "true"

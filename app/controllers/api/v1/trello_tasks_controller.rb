@@ -1,6 +1,11 @@
 module Api
   module V1
     class TrelloTasksController < BaseController
+      # テックリーダーズは全ユーザー共通の1テーブルなので、権限のある人だけに開ける
+      before_action -> { require_data_source!("trello", :view) }, only: :index
+      before_action -> { require_data_source!("trello", :sync) }, only: :sync
+      before_action -> { require_data_source!("trello", :write) }, only: :update
+
       def index
         scope = TrelloTask.active
         scope = scope.for_date(parse_date) if params[:date].present? && params[:ignore_date] != "true"

@@ -16,7 +16,7 @@ class BacklogActivitySummary
 
   def initialize(user)
     @user = user
-    @backlog_url = user.backlog_setting&.backlog_url.to_s.chomp("/")
+    @backlog_url = user.backlog_connection_setting&.backlog_url.to_s.chomp("/")
   end
 
   # 上司報告サマリの行（課題ごとに1行・最新月に集約／最新月が新しい順）。

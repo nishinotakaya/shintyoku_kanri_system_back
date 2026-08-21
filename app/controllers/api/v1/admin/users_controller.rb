@@ -37,6 +37,8 @@ module Api
             end
           end
 
+          update_data_source_permission(user) if params.key?(:data_source_permission)
+
           render json: serialize(user.reload)
         rescue => e
           render json: { error: e.message }, status: :unprocessable_entity
@@ -82,6 +84,32 @@ module Api
 
         private
 
+        # params: data_source_permission { source_type, can_view, can_sync, can_write, credential_owner_id }
+        # 1ソースずつ更新する。can_view が false になったらそのソースは丸ごと不可に倒す
+        # (閲覧できないのに同期・書き込みだけ通る状態を作らない)。
+        def update_data_source_permission(user)
+          permission_params = params[:data_source_permission]
+          source_type = permission_params[:source_type].to_s
+          return unless UserDataSourcePermission::SOURCE_TYPES.include?(source_type)
+
+          permission = user.user_data_source_permissions.find_or_initialize_by(source_type: source_type)
+          permission.can_view = boolean_param(permission_params[:can_view]) if permission_params.key?(:can_view)
+          permission.can_sync = boolean_param(permission_params[:can_sync]) if permission_params.key?(:can_sync)
+          permission.can_write = boolean_param(permission_params[:can_write]) if permission_params.key?(:can_write)
+          if permission_params.key?(:credential_owner_id)
+            permission.credential_owner_id = permission_params[:credential_owner_id].presence&.to_i
+          end
+          unless permission.can_view
+            permission.can_sync = false
+            permission.can_write = false
+          end
+          permission.save!
+        end
+
+        def boolean_param(value)
+          ActiveModel::Type::Boolean.new.cast(value) || false
+        end
+
         def serialize(user)
           {
             id: user.id, email: user.email, display_name: user.display_name,
@@ -89,6 +117,7 @@ module Api
             feature_flags: user.feature_flags.to_h,
             sub_admin: user.sub_admin?,
             managee_ids: user.managees.map(&:id),
+            data_source_permissions: user.user_data_source_permissions.map(&:as_payload),
             created_at: user.created_at&.iso8601
           }
         end

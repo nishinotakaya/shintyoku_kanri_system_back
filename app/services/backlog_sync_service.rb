@@ -3,7 +3,7 @@
 class BacklogSyncService
   def initialize(user)
     @user = user
-    @setting = user.backlog_setting
+    @setting = user.backlog_connection_setting
     raise "バックログ設定がありません。設定画面で API キーを保存してください。" unless @setting&.api_key.present?
   end
 

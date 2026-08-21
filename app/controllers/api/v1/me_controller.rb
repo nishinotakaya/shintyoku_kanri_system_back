@@ -76,6 +76,9 @@ module Api
           can_use_mote_qa_mindmap: current_user.can_use?(:mote_qa_mindmap),
           can_use_love_youtube_mindmap: current_user.can_use?(:love_youtube_mindmap),
           can_use_talk_cards_mindmap: current_user.can_use?(:talk_cards_mindmap),
+          # 進捗データソースごとの可否。フロントはこれでリビング/テックリーダーズの表示を出し分ける
+          viewable_data_sources: current_user.viewable_data_source_types,
+          writable_data_sources: UserDataSourcePermission::SOURCE_TYPES.select { |source| current_user.can_write_data_source?(source) },
           sub_admin: current_user.sub_admin?
         }
       end

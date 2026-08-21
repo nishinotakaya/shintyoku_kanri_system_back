@@ -154,7 +154,7 @@ class SkillSheetActivityComposer
   # @user の Backlog 設定からクライアントを生成 (API キー未設定なら nil = コメント取り込みをスキップ)。
   def backlog_client
     return @backlog_client if defined?(@backlog_client)
-    setting = @user.backlog_setting
+    setting = @user.backlog_connection_setting
     @backlog_client = (setting && setting.api_key.present?) ? BacklogClient.new(setting) : nil
   rescue => e
     Rails.logger.warn("[SkillSheetActivityComposer] Backlog クライアント生成失敗: #{e.message}")

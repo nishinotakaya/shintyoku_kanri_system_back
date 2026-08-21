@@ -14,6 +14,10 @@ class User < ApplicationRecord
   has_one  :github_setting, dependent: :destroy
   has_many :backlog_tasks, dependent: :destroy
   has_many :progress_workspaces, dependent: :destroy
+  has_many :user_data_source_permissions, dependent: :destroy
+  # 自分のキーを貸している相手の権限。退職などで消えたら貸与を解除する(相手の権限行ごとは消さない)
+  has_many :lent_data_source_permissions, class_name: "UserDataSourcePermission",
+           foreign_key: :credential_owner_id, dependent: :nullify, inverse_of: :credential_owner
   has_many :backlog_activities, dependent: :destroy
   has_many :backlog_summary_notes, dependent: :destroy
   has_many :backlog_completions, dependent: :destroy
@@ -70,6 +74,65 @@ class User < ApplicationRecord
   def can_use?(feature)
     return feature_flags.to_h[feature.to_s] != false if admin?
     feature_flags.to_h[feature.to_s] == true
+  end
+
+  # 進捗管理の外部データソース(backlog / notion / trello)の権限。
+  # レコードが無ければ不可(fail-closed)。admin は全ソースを扱える。
+  # find(Enumerable)で引くのは、関連のキャッシュに乗せて reload でも正しく捨てさせるため。
+  def data_source_permission(source_type)
+    user_data_source_permissions.find { |permission| permission.source_type == source_type.to_s }
+  end
+
+  def can_view_data_source?(source_type)
+    return true if admin?
+    data_source_permission(source_type)&.can_view == true
+  end
+
+  def can_sync_data_source?(source_type)
+    return true if admin?
+    data_source_permission(source_type)&.can_sync == true
+  end
+
+  # 外部サービス(Backlog など)へ書き込めるか。借りたキーでの書き込みは既定で不可。
+  def can_write_data_source?(source_type)
+    return true if admin?
+    data_source_permission(source_type)&.can_write == true
+  end
+
+  def viewable_data_source_types
+    UserDataSourcePermission::SOURCE_TYPES.select { |source_type| can_view_data_source?(source_type) }
+  end
+
+  # 閲覧できないデータソース。タブやタスク一覧から外す判定に使う。
+  def hidden_data_source_types
+    UserDataSourcePermission::SOURCE_TYPES - viewable_data_source_types
+  end
+
+  # API キーの持ち主。他人から借りている場合はその人、既定は自分。
+  def credential_owner_for(source_type)
+    owner_id = data_source_permission(source_type)&.credential_owner_id
+    return self if owner_id.nil?
+    ::User.find_by(id: owner_id) || self
+  end
+
+  # Backlog 接続に使う設定。認証情報だけ貸し元から借り、担当者フィルタ等の個人設定は自分のものを使う。
+  # 借用時は保存しない複製を返すので、うっかり貸し元の設定を書き換えることはない。
+  def backlog_connection_setting
+    own_setting = backlog_setting || build_backlog_setting(BacklogSetting::DEFAULTS)
+    owner = credential_owner_for("backlog")
+    return own_setting if owner.id == id
+
+    # 貸し元のキーが空なら借りずに自分の設定で動かす。貸し元の設定漏れで、それまで
+    # 動いていた同期が止まる方が事故として重い。
+    owner_setting = owner.backlog_setting
+    return own_setting if owner_setting&.api_key.blank?
+
+    own_setting.dup.tap do |borrowed|
+      borrowed.backlog_url = owner_setting.backlog_url
+      borrowed.backlog_email = owner_setting.backlog_email
+      borrowed.api_key = owner_setting.api_key
+      borrowed.board_id = owner_setting.board_id
+    end
   end
 
   # 誰かを管理しているサブ管理者か (admin は別枠)。

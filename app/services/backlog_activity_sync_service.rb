@@ -5,7 +5,7 @@ class BacklogActivitySyncService
 
   def initialize(user)
     @user = user
-    @setting = user.backlog_setting
+    @setting = user.backlog_connection_setting
     raise "バックログ設定がありません。" unless @setting&.api_key.present?
   end
 

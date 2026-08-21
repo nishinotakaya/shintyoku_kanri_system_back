@@ -30,7 +30,7 @@ class BacklogActivityExporter
     @user = user
     @operator = operator
     @spreadsheet_id = extract_spreadsheet_id(spreadsheet_url)
-    @backlog_url = user.backlog_setting&.backlog_url.to_s.chomp("/")
+    @backlog_url = user.backlog_connection_setting&.backlog_url.to_s.chomp("/")
   end
 
   def call
@@ -68,7 +68,7 @@ class BacklogActivityExporter
     (@assignee_cache ||= {})[key] ||= backlog_client.fetch_assignee_name(key)
   end
 
-  def backlog_client = @backlog_client ||= BacklogClient.new(@user.backlog_setting)
+  def backlog_client = @backlog_client ||= BacklogClient.new(@user.backlog_connection_setting)
 
   # ── Backlog 由来の集計 ───────────────────────
   def activities = @activities ||= @user.backlog_activities.order(:occurred_on, :activity_id).to_a
