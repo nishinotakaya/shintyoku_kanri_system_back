@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_21_000002) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_21_000003) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -789,6 +789,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_21_000002) do
     t.string "trello_api_token"
     t.string "trello_board_id"
     t.string "gender"
+    t.text "calendar_persons"
     t.index ["canva_oauth_state"], name: "index_users_on_canva_oauth_state"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"

@@ -11,7 +11,7 @@ module Api
         # GET /api/v1/admin/users
         def index
           users = User.order(:id).includes(:managees)
-          render json: users.map { |u| serialize(u) }
+          render json: { users: users.map { |u| serialize(u) }, calendar_person_candidates: TeamSchedule.selectable_persons }
         end
 
         # PATCH /api/v1/admin/users/:id
@@ -37,6 +37,11 @@ module Api
             end
           end
 
+          # 配列は permit を通さないと取り出せない(params[:calendar_persons] だけでは nil になる)
+          if params.key?(:calendar_persons)
+            persons = params.permit(calendar_persons: [])[:calendar_persons]
+            user.update!(calendar_persons: Array(persons).map(&:to_s).reject(&:empty?))
+          end
           update_data_source_permission(user) if params.key?(:data_source_permission)
 
           render json: serialize(user.reload)
@@ -118,6 +123,7 @@ module Api
             sub_admin: user.sub_admin?,
             managee_ids: user.managees.map(&:id),
             data_source_permissions: user.user_data_source_permissions.map(&:as_payload),
+            calendar_persons: user.visible_calendar_persons,
             created_at: user.created_at&.iso8601
           }
         end

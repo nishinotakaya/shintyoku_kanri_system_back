@@ -78,6 +78,7 @@ module Api
           can_use_talk_cards_mindmap: current_user.can_use?(:talk_cards_mindmap),
           # 進捗データソースごとの可否。フロントはこれでリビング/テックリーダーズの表示を出し分ける
           viewable_data_sources: current_user.viewable_data_source_types,
+          calendar_persons: current_user.visible_calendar_persons,
           writable_data_sources: UserDataSourcePermission::SOURCE_TYPES.select { |source| current_user.can_write_data_source?(source) },
           sub_admin: current_user.sub_admin?
         }

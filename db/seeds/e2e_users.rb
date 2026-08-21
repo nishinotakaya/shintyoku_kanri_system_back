@@ -10,6 +10,7 @@ def upsert_e2e_user(email:, display_name:)
   user = User.find_or_initialize_by(email: email)
   user.assign_attributes(password: "password", display_name: display_name, closing_day: 25)
   user.feature_flags = user.feature_flags.to_h.merge(SCREEN_FLAGS)
+  user.calendar_persons = [] # 既定(西野川村は全員/それ以外は本人)に戻してから流す
   user.save!
   ProgressWorkspace.ensure_defaults!(user)
   user

@@ -1,6 +1,6 @@
 # 進捗管理(/progress)のワークスペース。ユーザーごとに backlog_tasks を束ねる箱。
-# デフォルトで Wing(backlog連携)/リビング(Notion連携)/テックリーダーズ/ReRe/プライベート の
-# 5個(builtin)を持ち、ユーザーは追加でワークスペースを作成できる。
+# デフォルトで Wing(backlog連携)/リビング(Notion連携)/テックリーダーズ/プライベート の
+# 4個(builtin)を持ち、ユーザーは追加でワークスペースを作成できる。
 class ProgressWorkspace < ApplicationRecord
   belongs_to :user
   has_many :backlog_tasks, foreign_key: :progress_workspace_id, dependent: :nullify
@@ -13,7 +13,7 @@ class ProgressWorkspace < ApplicationRecord
     { name: "Wing", source_type: "backlog" },
     { name: "リビング", source_type: "notion" },
     { name: "テックリーダーズ", source_type: "trello" },
-    { name: "ReRe", source_type: "manual" },
+    # ReRe は西野さん・川村さんだけが使う案件なので既定では作らない。必要な人は ＋ から追加する
     { name: "プライベート", source_type: "manual" }
   ].freeze
 

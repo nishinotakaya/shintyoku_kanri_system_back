@@ -42,6 +42,8 @@ class User < ApplicationRecord
 
   # 機能フラグ (例: {"skill_sheet" => true})。SQLite なので text + serialize JSON。
   serialize :feature_flags, coder: JSON, type: Hash
+  # カレンダーで予定行を出す人物名。空 = 既定メンバー
+  serialize :calendar_persons, coder: JSON, type: Array
 
   # 別アカウントを admin の同一人物としてリンク。
   # 例: wing西野 鷹也 (taka-nishino@tamahome.jp) を admin 西野 鷹也 (takaya314boxing@gmail.com) にリンク
@@ -101,6 +103,28 @@ class User < ApplicationRecord
 
   def viewable_data_source_types
     UserDataSourcePermission::SOURCE_TYPES.select { |source_type| can_view_data_source?(source_type) }
+  end
+
+  # カレンダーに予定行を出す人物名。管理者が /users で設定でき、未設定なら次の既定になる。
+  # - 西野さん・川村さん: 既定メンバー全員(お互いの予定を見る従来どおりの運用)
+  # - それ以外: 自分の予定だけ
+  def visible_calendar_persons
+    configured = calendar_persons.to_a.map(&:to_s).reject(&:empty?)
+    return configured if configured.present?
+    return TeamSchedule::DEFAULT_PERSONS if sees_whole_team_calendar?
+
+    [ own_calendar_person ].reject(&:empty?)
+  end
+
+  # team_schedules の person 名(苗字)に相当する自分の名前
+  def own_calendar_person
+    name = display_name.to_s
+    TeamSchedule.selectable_persons.find { |person| name.include?(person) } ||
+      name.split(/[[:space:]]+/).first.to_s
+  end
+
+  def sees_whole_team_calendar?
+    TeamSchedule::FULL_CALENDAR_PERSONS.any? { |person| display_name.to_s.include?(person) }
   end
 
   # 閲覧できないデータソース。タブやタスク一覧から外す判定に使う。

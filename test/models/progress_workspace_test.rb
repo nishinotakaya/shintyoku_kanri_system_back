@@ -1,7 +1,7 @@
 require "test_helper"
 
 # ProgressWorkspace: 進捗管理(/progress)のワークスペース切替機能。
-# デフォルト5個(Wing/リビング/テックリーダーズ/ReRe/プライベート)の生成と、
+# デフォルト4個(Wing/リビング/テックリーダーズ/プライベート)の生成と、
 # 削除ガード(builtin/タスク残存)が依拠する条件を検証する。
 class ProgressWorkspaceTest < Minitest::Test
   def setup
@@ -16,14 +16,14 @@ class ProgressWorkspaceTest < Minitest::Test
     @user&.destroy
   end
 
-  # 1. ensure_defaults! は builtin が無ければデフォルト5個を position 順に作成する
-  def test_ensure_defaults_creates_five_builtin_workspaces_in_order
+  # 1. ensure_defaults! は builtin が無ければデフォルト4個を position 順に作成する
+  def test_ensure_defaults_creates_four_builtin_workspaces_in_order
     ProgressWorkspace.ensure_defaults!(@user)
 
     workspaces = @user.progress_workspaces.order(:position)
-    assert_equal 5, workspaces.size
-    assert_equal [ "Wing", "リビング", "テックリーダーズ", "ReRe", "プライベート" ], workspaces.map(&:name)
-    assert_equal [ "backlog", "notion", "trello", "manual", "manual" ], workspaces.map(&:source_type)
+    assert_equal 4, workspaces.size
+    assert_equal [ "Wing", "リビング", "テックリーダーズ", "プライベート" ], workspaces.map(&:name)
+    assert_equal [ "backlog", "notion", "trello", "manual" ], workspaces.map(&:source_type)
     assert workspaces.all?(&:builtin?), "デフォルトワークスペースは全て builtin であるべき"
   end
 
@@ -32,7 +32,7 @@ class ProgressWorkspaceTest < Minitest::Test
     ProgressWorkspace.ensure_defaults!(@user)
     ProgressWorkspace.ensure_defaults!(@user)
 
-    assert_equal 5, @user.progress_workspaces.count
+    assert_equal ProgressWorkspace::DEFAULTS.size, @user.progress_workspaces.count
   end
 
   # 3. as_payload はワークスペース情報を返す
