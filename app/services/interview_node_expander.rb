@@ -5,6 +5,9 @@
 # - answer    → 回答を受けた深掘り質問(followups[])。モテは言い回しバリエーション(answer[])
 # 返り値: [{ kind:, text: }, ...]（呼び出し側で DB 保存）
 class InterviewNodeExpander
+  # 面談の起点展開で作る質問数の上限(一般6問 + 案件8件×4問を想定)
+  MAX_INTERVIEW_ROOT_QUESTIONS = 40
+
   def initialize(mindmap:, node:, user:)
     @mindmap = mindmap
     @node = node
@@ -47,8 +50,11 @@ class InterviewNodeExpander
           Array(data["categories"]).first(6).map { |c| { kind: "question", text: c.to_s } }.reject { |c| c[:text].strip.empty? }
         end
       else
-        data = OpenaiJson.chat_json(system: ROOT_SYS, user: root_prompt, api_key: api_key, temperature: 0.5)
-        Array(data["questions"]).first(8).map { |q| { kind: "question", text: q.to_s } }.reject { |c| c[:text].strip.empty? }
+        # 面談: 一般質問 → 案件ごとの質問(スキルシート記載順)の並びで出す。再展開時は既出を渡して重複させない。
+        # 上限40問 = 一般6問 + 案件8件×4問程度。max_tokens もこの分量に合わせてある
+        existing_question_texts = @node.children.where(kind: "question").pluck(:text)
+        data = OpenaiJson.chat_json(system: ROOT_SYS, user: root_prompt(existing_question_texts), api_key: api_key, model: "gpt-4o", temperature: 0.6, max_tokens: 4000)
+        interview_questions_in_sheet_order(data).first(MAX_INTERVIEW_ROOT_QUESTIONS).map { |text| { kind: "question", text: text } }
       end
     when "answer"
       if mote? || mote_qa?
@@ -110,17 +116,22 @@ class InterviewNodeExpander
 
   ROOT_SYS = <<~SYS.freeze
     あなたはIT業界の面接・商談同席経験が豊富な面接対策コーチです。与えられたスキルシートを読み込み、
-    実際の面談で聞かれる可能性が高い順に、答える価値のある質問を予測します。
-    次の JSON で返してください: { "questions": ["質問1", "質問2", ...] }  ※6〜8個。
+    実際の面談で聞かれる可能性が高い質問を予測します。
+    次の JSON で返してください:
+    { "general": ["案件に依存しない一般的な質問", ...],
+      "projects": [ { "title": "スキルシートの案件名をそのままコピー", "questions": ["その案件についての質問", ...] } ] }
 
-    【質問者の視点を混ぜる】
-    - 技術リーダー視点: 直近案件の技術選定・設計判断・実装の深掘り
-    - 現場PM視点: 進め方・チーム開発・コミュニケーション・トラブル対応
-    - 決裁者視点: 強み(自己PR)・キャリア観・カルチャーフィット・逆質問
-    【質問の作り方】
-    - スキルシートの**固有名詞(案件名・技術名)を質問文に入れて具体的に**する（例:「Railsの案件では〜」）。誰にでも聞ける一般論だけにしない。
-    - 「定番で必ず聞かれる質問」と「答えに詰まりやすい鋭い質問」を両方入れる。
-    - 直近の案件・得意技術ほど優先して深掘りする。
+    【general(一般的な質問): 5〜6問】
+    - 自己紹介・強み/自己PR・志望動機・キャリア観・働き方(参画時期/稼働/リモート)・逆質問など、
+      特定の案件に依存せずどの面談でも必ず聞かれる定番質問。
+    【projects(案件ごとの質問)】
+    - スキルシートに載っている案件を**1つも飛ばさず、載っている順にすべて**挙げる。各案件3〜4問。
+    - title は**スキルシートの案件名を一字一句そのままコピー**する(言い換え・省略・要約をしない)。
+    - questions は**その案件の記述だけ**を根拠にする。担当業務・使った技術・主な指摘や成果・アピールポイントから作る。
+    - 各案件に最低1問は**答えに詰まりやすい鋭い質問**を入れる(その判断をした理由・他案件での再現性・うまくいかなかった時の対応・成果の定量化)。
+    【共通】
+    - **固有名詞(案件名・技術名・数字)を質問文に入れて具体的に**する。誰にでも聞ける一般論だけにしない。
+    - 口頭でそのまま聞ける長さにする(1問1文)。
     - 事実(スキルシート)に無い経歴・技術を前提にした質問は作らない。
   SYS
 
@@ -262,17 +273,51 @@ class InterviewNodeExpander
 
   def person_name = @mindmap.user&.display_name.to_s
 
-  def sheet_summary
+  # description_limit: 案件説明の切り出し文字数。案件ごとに質問を作らせる面談の起点展開では
+  # 担当業務やアピールポイントまで読ませたいので長めに渡す。
+  def sheet_summary(description_limit: 300)
     return "（スキルシート情報なし）" unless @sheet
     lines = []
     lines << "得意技術: #{@sheet.skills}" if @sheet.skills.present?
     lines << "得意分野: #{@sheet.specialties}" if @sheet.specialties.present?
     lines << "自己PR: #{@sheet.self_pr.to_s.slice(0, 600)}" if @sheet.self_pr.present?
-    @sheet.projects.order(:position).each do |p|
-      lines << "■案件: #{p.title}（#{p.period_from}〜#{p.period_to}）使用技術: #{[ p.languages, p.tools ].compact.join(' ')}"
-      lines << "  #{p.description.to_s.gsub(/\s+/, ' ').slice(0, 300)}"
+    @sheet.projects.order(:position).each do |project|
+      lines << "■案件: #{project.title}（#{project.period_from}〜#{project.period_to}）使用技術: #{[ project.languages, project.tools ].compact.join(' ')}"
+      lines << "  #{project.description.to_s.gsub(/\s+/, ' ').slice(0, description_limit)}"
     end
     lines.join("\n")
+  end
+
+  # スキルシートに載っている案件名（＝質問を並べる順番）
+  def project_titles
+    return [] unless @sheet
+    @sheet.projects.order(:position).pluck(:title).map { |title| title.to_s.strip }.reject(&:empty?)
+  end
+
+  # AI の返り値を「一般的な質問 → 案件ごとの質問(スキルシート記載順)」に並べ直す。
+  # AI が案件名を微妙に言い換えても拾えるよう、完全一致 → 部分一致の順で突き合わせる。
+  def interview_questions_in_sheet_order(data)
+    groups = Array(data["projects"]).map { |group| [ group["title"].to_s.strip, Array(group["questions"]).map(&:to_s) ] }
+    ordered_questions = Array(data["general"]).map(&:to_s)
+    used_titles = Set.new
+
+    project_titles.each do |sheet_title|
+      exact_match = groups.find { |title, _| title == sheet_title && !used_titles.include?(title) }
+      partial_match = groups.find do |title, _|
+        !used_titles.include?(title) && title.present? && (title.include?(sheet_title) || sheet_title.include?(title))
+      end
+      matched_title, matched_questions = exact_match || partial_match
+      next if matched_title.nil?
+
+      used_titles << matched_title
+      ordered_questions.concat(matched_questions)
+    end
+
+    # スキルシートの案件名と結び付かなかったグループは末尾に回す（質問を捨てない）
+    groups.reject { |title, _| used_titles.include?(title) }.each { |_, questions| ordered_questions.concat(questions) }
+    # NOTE: 旧形式({ questions: [...] })で返ってきた場合のフォールバック。ROOT_SYS が新形式で安定したら消せる
+    ordered_questions.concat(Array(data["questions"]).map(&:to_s)) if ordered_questions.empty?
+    ordered_questions.map(&:strip).reject(&:empty?).uniq
   end
 
   def path_to_root
@@ -285,11 +330,32 @@ class InterviewNodeExpander
     chain.join(" / ")
   end
 
-  def root_prompt = "次のスキルシートから想定質問を予測してください:\n\n#{sheet_summary}"
+  # 再展開時に「すでにある質問」を渡して重複を避けさせるプロンプトの一段落
+  def already_asked_block(existing_question_texts, heading = "【すでにある質問(重複させない)】")
+    return "" if existing_question_texts.blank?
+    "#{heading}\n#{existing_question_texts.map { |text| "・#{text}" }.join("\n")}\n\n"
+  end
+
+  # 案件を1つも飛ばさせないために、スキルシート記載順の案件名を番号付きで渡す一段落
+  def project_order_block
+    return "" if project_titles.blank?
+    numbered = project_titles.map.with_index(1) { |title, number| "#{number}. #{title}" }
+    "【案件はこの順で、1つも飛ばさずに扱ってください】\n#{numbered.join("\n")}\n\n"
+  end
+
+  def root_prompt(existing_question_texts = [])
+    <<~TXT
+      【対象者】#{person_name}
+
+      【スキルシート】
+      #{sheet_summary(description_limit: 1200)}
+
+      #{project_order_block}#{already_asked_block(existing_question_texts, "【すでにある質問(これらと重複させない)】")}このスキルシートから、一般的な質問と、案件ごとの想定質問を作ってください。
+    TXT
+  end
 
   # YouTube 起点展開: 動画タイトル/テーマに沿った想定質問を作らせる
-  def youtube_root_prompt(existing = [])
-    dup = existing.present? ? "【すでにある質問(重複させない)】\n#{existing.map { |t| "・#{t}" }.join("\n")}\n\n" : ""
+  def youtube_root_prompt(existing_question_texts = [])
     <<~TXT
       【動画タイトル/テーマ】#{@mindmap.title}
       【出演者】#{person_name}
@@ -299,17 +365,16 @@ class InterviewNodeExpander
       【スキルシート】
       #{sheet_summary}
       #{research_block}
-      #{dup}このタイトル/テーマに厳密に沿った、動画で聞く想定質問を作ってください。
+      #{already_asked_block(existing_question_texts)}このタイトル/テーマに厳密に沿った、動画で聞く想定質問を作ってください。
     TXT
   end
 
   # 恋愛系YouTube 起点展開: 動画タイトル/テーマに沿った想定質問を作らせる(スキルシートは使わない)
-  def love_youtube_root_prompt(existing = [])
-    dup = existing.present? ? "【すでにある質問(重複させない)】\n#{existing.map { |t| "・#{t}" }.join("\n")}\n\n" : ""
+  def love_youtube_root_prompt(existing_question_texts = [])
     <<~TXT
       【動画タイトル/テーマ】#{@mindmap.title}
       【出演者】#{person_name}
-      #{dup}このタイトル/テーマに厳密に沿った、動画で聞く想定質問を作ってください。
+      #{already_asked_block(existing_question_texts)}このタイトル/テーマに厳密に沿った、動画で聞く想定質問を作ってください。
     TXT
   end
 

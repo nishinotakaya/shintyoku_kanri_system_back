@@ -82,9 +82,9 @@ module Api
         created = []
         InterviewMindmap.transaction do
           # 再展開でも既存の子の後ろに積む（0 から振り直すと既存の質問と並び順が混ざる）
-          base = node.children.maximum(:position).to_i + (node.children.exists? ? 1 : 0)
+          base_position = node.children.maximum(:position).to_i + (node.children.exists? ? 1 : 0)
           children_spec.each_with_index do |c, idx|
-            created << m.nodes.create!(parent_id: node.id, kind: c[:kind], text: c[:text], position: base + idx)
+            created << m.nodes.create!(parent_id: node.id, kind: c[:kind], text: c[:text], position: base_position + idx)
           end
           node.update!(expanded: true)
         end
@@ -117,15 +117,12 @@ module Api
         return import_youtube_bank(m, root, InterviewMindmap::LOVE_YOUTUBE_QUESTIONS) if m.love_youtube?
         return import_talk_cards(m, root) if m.talk_cards?
         return import_mote_bank(m, root) if m.mote?
-        if m.mote_qa?
-          dialogues = m.user&.gender == "female" ? InterviewMindmap::MOTE_QA_DIALOGUES_FOR_FEMALE : InterviewMindmap::MOTE_QA_DIALOGUES
-          return import_mote_bank(m, root, dialogues)
-        end
+        return import_mote_qa_bank(m, root) if m.mote_qa?
         bank = InterviewBankImporter.new(user: current_user).call
         InterviewMindmap.transaction do
-          base = root.children.maximum(:position).to_i + 1
+          base_position = root.children.maximum(:position).to_i + 1
           bank.each_with_index do |row, i|
-            q = m.nodes.create!(parent_id: root.id, kind: "question", text: row[:question], position: base + i, expanded: true, source: "bank")
+            q = m.nodes.create!(parent_id: root.id, kind: "question", text: row[:question], position: base_position + i, expanded: true, source: "bank")
             m.nodes.create!(parent_id: q.id, kind: "answer",  text: row[:answer],  position: 0, source: "bank") if row[:answer].present?
             m.nodes.create!(parent_id: q.id, kind: "followup", text: row[:followup], position: 1, source: "bank") if row[:followup].present?
           end
@@ -176,9 +173,9 @@ module Api
       # love_youtube は questions に LOVE_YOUTUBE_QUESTIONS を渡して呼び出す。
       def import_youtube_bank(m, root, questions = InterviewMindmap::YOUTUBE_QUESTIONS)
         InterviewMindmap.transaction do
-          base = root.children.maximum(:position).to_i + 1
+          base_position = root.children.maximum(:position).to_i + 1
           questions.each_with_index do |question_text, index|
-            m.nodes.create!(parent_id: root.id, kind: "question", text: question_text, position: base + index, source: "bank")
+            m.nodes.create!(parent_id: root.id, kind: "question", text: question_text, position: base_position + index, source: "bank")
           end
           root.update!(expanded: true)
         end
@@ -195,14 +192,14 @@ module Api
       def import_talk_cards(m, root)
         cards = InterviewMindmap::TALK_THEME_CARDS + InterviewMindmap::TALK_THEME_CARDS_SPICY
         existing_card_texts = m.nodes.where(kind: "question").pluck(:text).to_set
-        missing_cards = cards.reject { |card| existing_card_texts.include?(card[:q]) }
+        missing_cards = cards.reject { |card| existing_card_texts.include?(card[:theme]) }
 
         InterviewMindmap.transaction do
-          base = root.children.maximum(:position).to_i + 1
+          base_position = root.children.maximum(:position).to_i + 1
           missing_cards.each_with_index do |card, index|
-            question = m.nodes.create!(parent_id: root.id, kind: "question", text: card[:q],
-                                       position: base + index, source: "bank", expanded: true)
-            m.nodes.create!(parent_id: question.id, kind: "answer", text: card[:a], position: 0, source: "bank")
+            question = m.nodes.create!(parent_id: root.id, kind: "question", text: card[:theme],
+                                       position: base_position + index, source: "bank", expanded: true)
+            m.nodes.create!(parent_id: question.id, kind: "answer", text: card[:play_notes], position: 0, source: "bank")
           end
           root.update!(expanded: true)
         end
@@ -216,9 +213,9 @@ module Api
       # mote_qa は entries に MOTE_QA_DIALOGUES(持ち主が女性なら MOTE_QA_DIALOGUES_FOR_FEMALE) を渡して呼び出す(ゲームは含めない)。
       def import_mote_bank(m, root, entries = InterviewMindmap::MOTE_DIALOGUES + InterviewMindmap::GOKON_GAMES)
         InterviewMindmap.transaction do
-          base = root.children.maximum(:position).to_i + 1
+          base_position = root.children.maximum(:position).to_i + 1
           entries.each_with_index do |dialogue, index|
-            question = m.nodes.create!(parent_id: root.id, kind: "question", text: dialogue[:q], position: base + index, source: "bank", expanded: true)
+            question = m.nodes.create!(parent_id: root.id, kind: "question", text: dialogue[:q], position: base_position + index, source: "bank", expanded: true)
             m.nodes.create!(parent_id: question.id, kind: "answer", text: dialogue[:a], position: 0, source: "bank")
           end
           root.update!(expanded: true)
@@ -226,6 +223,16 @@ module Api
         render json: m.reload.as_payload.merge(imported: entries.size)
       rescue => e
         render_error(e.message)
+      end
+
+      # モテQ&A: 相手からの質問と模範回答。女性は返しの言い回しが変わるので専用の会話集を使う。
+      def import_mote_qa_bank(m, root)
+        dialogues = if m.user&.gender == "female"
+          InterviewMindmap::MOTE_QA_DIALOGUES_FOR_FEMALE
+        else
+          InterviewMindmap::MOTE_QA_DIALOGUES
+        end
+        import_mote_bank(m, root, dialogues)
       end
 
       # POST /api/v1/interview_mindmaps/:id/nodes/:node_id/speech
