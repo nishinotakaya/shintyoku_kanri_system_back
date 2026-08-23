@@ -53,8 +53,12 @@ module Api
           return render json: { registered: true, business_expense_id: existing.id, message: "既に登録済み" }
         end
 
+        # 科目の決め方: ①画面で選んだ値 ②摘要(店名)からの判定 ③freeeの推奨科目。
+        # ②を③より先に見るのは、freee の推奨が Peatix/LINE/Amazon を「交際費」にするなど
+        # 当てにならず、海外SaaS(Anthropic/OpenAI等)ではそもそも空だから。
         category = params[:account_category].to_s.presence
-        category = Freee::ExpenseImporter::ACCOUNT_ALIASES[txn.suggested_account_item] || txn.suggested_account_item if category.nil?
+        category ||= MerchantCategoryGuesser.call(txn.description)
+        category ||= Freee::ExpenseImporter::ACCOUNT_ALIASES[txn.suggested_account_item] || txn.suggested_account_item
         category = nil unless BusinessExpense::ACCOUNT_CATEGORIES.include?(category)
 
         expense = current_user.business_expenses.create!(
