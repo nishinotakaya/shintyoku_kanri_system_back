@@ -54,6 +54,42 @@ class FreeeBulkExpenseReporterTest < Minitest::Test
     assert_empty result.failed
   end
 
+  # freee から取り込んだ経費(import_hash が freee_deal:)は、フラグが未連携でも計上しない。
+  # 2026-07-11 にこれで67件が freee へ再投稿され重複 deal ができた事故の再発防止。
+  def test_freee_imported_expense_is_never_reported_even_when_flag_is_false
+    expense = create_expense(account_category: "消耗品費", store_name: "Amazon", freee_synced: false,
+                             import_hash: "freee_deal:3180494764:9999")
+    reporter = build_reporter(
+      account_item_lookup: stub_account_item_lookup("消耗品費" => 502),
+      partner_lookup: stub_partner_lookup("Amazon" => 9002),
+      report_sale_class: stub_report_sale_class(ok: true, deal_id: 8888)
+    )
+
+    result = reporter.call([ expense.id ])
+
+    assert_equal [ { id: expense.id, reason: "freeeから取り込んだ経費のため計上しません(重複防止)" } ], result.skipped
+    assert_empty result.succeeded
+    assert_empty result.failed
+    expense.reload
+    refute expense.freee_synced?
+    assert_nil expense.freee_deal_id
+  end
+
+  # 口座明細から登録した経費(freee_wtxn:)は freee 側に deal が無いので計上対象のまま
+  def test_wallet_txn_origin_expense_is_still_reportable
+    expense = create_expense(account_category: "通信費", store_name: "KDDI", freee_synced: false,
+                             import_hash: "freee_wtxn:12345")
+    reporter = build_reporter(
+      account_item_lookup: stub_account_item_lookup("通信費" => 503),
+      partner_lookup: stub_partner_lookup("KDDI" => 9003),
+      report_sale_class: stub_report_sale_class(ok: true, deal_id: 6666)
+    )
+
+    result = reporter.call([ expense.id ])
+
+    assert_equal [ { id: expense.id, deal_id: 6666 } ], result.succeeded
+  end
+
   def test_unresolvable_account_category_is_failed
     expense = create_expense(account_category: "旅費交通費", store_name: "JR東日本", freee_synced: false)
     reporter = build_reporter(
@@ -130,7 +166,7 @@ class FreeeBulkExpenseReporterTest < Minitest::Test
     )
   end
 
-  def create_expense(account_category:, store_name:, freee_synced:)
+  def create_expense(account_category:, store_name:, freee_synced:, import_hash: nil)
     @user.business_expenses.create!(
       expense_date: Date.new(2026, 6, 15),
       store_name: store_name,
@@ -138,7 +174,8 @@ class FreeeBulkExpenseReporterTest < Minitest::Test
       tax_rate: 10,
       account_category: account_category,
       status: "confirmed",
-      freee_synced: freee_synced
+      freee_synced: freee_synced,
+      import_hash: import_hash
     )
   end
 

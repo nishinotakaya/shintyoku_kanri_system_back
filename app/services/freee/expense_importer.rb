@@ -88,7 +88,11 @@ module Freee
           source: "freee",
           import_hash: row[:import_hash],
           payment_source: row[:payment_source],
-          payment_method: row[:payment_method]
+          payment_method: row[:payment_method],
+          # freee から取り込んだ時点で freee 側には既に deal がある。
+          # ここを立て忘れると「未連携」に見えて一括計上で再投稿され、freee に重複ができる。
+          freee_synced: true,
+          freee_deal_id: row[:deal_id]
         }
         if download_receipts && row[:receipt_id]
           image = fetch_receipt_image(row[:receipt_id])
@@ -300,6 +304,7 @@ module Freee
           tax_rate: tax_rate_from(detail["tax_name"]),
           memo: [ "freee", raw_name, deal["partner_name"] ].compact.reject(&:blank?).uniq.join(" / "),
           import_hash: "freee_deal:#{deal['id']}:#{detail['id']}",
+          deal_id: deal["id"].to_s,
           receipt_id: receipt_id,
           payment_source: payment_source,
           payment_method: payment_method

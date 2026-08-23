@@ -37,8 +37,16 @@ module Freee
 
     private
 
+    # freee から取り込んだ経費は freee 側に既に deal がある。
+    # freee_synced フラグが何らかの理由で落ちていても、ここで必ず止める(重複計上の最後の砦)。
+    FREEE_ORIGIN_PREFIX = "freee_deal:".freeze
+
     def report_one(expense)
       return { status: :skipped, payload: { id: expense.id, reason: "連携済み" } } if expense.freee_synced?
+
+      if expense.import_hash.to_s.start_with?(FREEE_ORIGIN_PREFIX)
+        return { status: :skipped, payload: { id: expense.id, reason: "freeeから取り込んだ経費のため計上しません(重複防止)" } }
+      end
 
       if expense.account_category.blank?
         return { status: :failed, payload: { id: expense.id, reason: "勘定科目が未設定です。経費で科目を選択してください" } }
