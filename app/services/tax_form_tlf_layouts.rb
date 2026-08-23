@@ -59,6 +59,7 @@ module TaxFormTlfLayouts
     f = []
     f << { id: :address, x: 38.92, y: 12.89, w: 18.5, size: 11, ja: true, lines: 2 }
     f << { id: :doujou,  x: 38.92, y: 18.37, w: 8.0,  size: 11, ja: true }  # 事業所所在地「同上」
+    f << { id: :name_kana, x: 62.4, y: 13.4, w: 12.0, size: 9, ja: true }   # 氏名欄上部のフリガナ
     f << { id: :name,    x: 62.05, y: 14.69, w: 14.5, size: 14, ja: true }
     f << { id: :job,     x: 38.80, y: 22.90, w: 9.4, size: 7, ja: true }
     f << { id: :tel,     x: 66.10, y: 17.12, w: 9.0, size: 11 }
@@ -120,13 +121,17 @@ module TaxFormTlfLayouts
 
     # ============ 確定申告書 第一表 (A4縦・令和7年分 FA2205) ============
     f = []
-    f << { id: :tax_office, x: 8.4, y: 3.45, w: 9.6, size: 11, ja: true, align: :center } # 「＿＿税務署長」の下線中央
+    f << { id: :tax_office, x: 8.4, y: 3.02, w: 9.6, size: 11, ja: true, align: :center } # 「＿＿税務署長」の下線中央
     f << { id: :submit_year,  x: 11.5, y: 4.55, w: 2.0, size: 10.5, align: :center } # 提出日「令和[ ]年[ ]月[ ]日」
     f << { id: :submit_month, x: 15.4, y: 4.55, w: 2.0, size: 10.5, align: :center }
     f << { id: :submit_day,   x: 19.7, y: 4.55, w: 2.0, size: 10.5, align: :center }
     f << { id: :address, x: 14.5, y: 10.0, w: 42.0, size: 12, fit: true, ja: true }
     f << { id: :juminzei_address, x: 14.7, y: 14.6, w: 42.0, size: 11, ja: true } # 「令和N年1月1日の住所」(通常は同上)
     f << { id: :name,    x: 60.0, y: 11.8, w: 25.0, size: 12.5, ja: true }
+    # フリガナ(1マス1字・14マス。マス中心は 60.76% から 2.401% 刻み)
+    14.times do |cell|
+      f << { id: :"kana_#{cell}", x: 59.56 + cell * 2.401, y: 8.95, w: 2.4, size: 13, ja: true, align: :center }
+    end
     f << { id: :job,     x: 49.0, y: 15.1, w: 20.0, size: 7,    ja: true }
     f << { id: :blue_mark, x: 25.35, y: 16.43, w: 5.6, size: 24, ja: true, align: :center } # 種類「青色」を囲む〇
     f << { id: :tel_a, x: 79.5, y: 17.35, w: 3.2, size: 10, align: :center } # 電話番号(プレ印字の「ー」区切り)
@@ -162,6 +167,7 @@ module TaxFormTlfLayouts
     f << { id: :tel_a, x: 31.26, y: 11.36, w: 4.5, size: 10.5, align: :center }
     f << { id: :tel_b, x: 38.11, y: 11.36, w: 4.5, size: 10.5, align: :center }
     f << { id: :tel_c, x: 45.69, y: 11.36, w: 4.5, size: 10.5, align: :center }
+    f << { id: :name_kana, x: 14.8, y: 19.65, w: 25.0, size: 9.5, ja: true } # 氏名の(フリガナ)点線上
     f << { id: :name,  x: 14.68, y: 21.82, w: 30.0, size: 14, ja: true }
     f << { id: :year_from, x: 13.7, y: 25.4, w: 3.0, size: 13 }
     f << { id: :year_to,   x: 13.7, y: 29.9, w: 3.0, size: 13 }
@@ -183,6 +189,7 @@ module TaxFormTlfLayouts
     f << { id: :tel_a, x: 31.26, y: 11.79, w: 4.5, size: 10.5, align: :center }
     f << { id: :tel_b, x: 38.11, y: 11.79, w: 4.5, size: 10.5, align: :center }
     f << { id: :tel_c, x: 45.69, y: 11.79, w: 4.5, size: 10.5, align: :center }
+    f << { id: :name_kana, x: 14.8, y: 16.68, w: 25.0, size: 9.5, ja: true } # 氏名の(フリガナ)点線上
     f << { id: :name,  x: 14.76, y: 18.85, w: 30.0, size: 14, ja: true }
     f << { id: :year_from, x: 14.2, y: 25.3, w: 3.0, size: 13 }
     f << { id: :year_to,   x: 14.2, y: 29.7, w: 3.0, size: 13 }

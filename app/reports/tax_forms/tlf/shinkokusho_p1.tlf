@@ -21,7 +21,7 @@
       "display": true,
       "description": "",
       "x": 50.0,
-      "y": 30.5,
+      "y": 26.9,
       "width": 57.1,
       "height": 12.0,
       "style": {
@@ -223,6 +223,454 @@
         "font-size": 9.4,
         "color": "#000000",
         "text-align": "left",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_0",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 354.5,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_1",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 368.8,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_2",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 383.1,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_3",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 397.4,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_4",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 411.7,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_5",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 426.0,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_6",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 440.3,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_7",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 454.6,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_8",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 468.9,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_9",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 483.2,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_10",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 497.5,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_11",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 511.8,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_12",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 526.1,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "kana_13",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 540.4,
+      "y": 77.1,
+      "width": 14.3,
+      "height": 14.2,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 9.8,
+        "color": "#000000",
+        "text-align": "center",
         "vertical-align": "top",
         "line-height": "",
         "line-height-ratio": "",

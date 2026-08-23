@@ -87,7 +87,7 @@ class OfficialTaxFormRenderer
   def kessansho_p1_values
     totals = category_totals
     values = {
-      address: taxpayer_address, doujou: "同上", name: @user.display_name,
+      address: taxpayer_address, doujou: "同上", name: @user.display_name, name_kana: user_name_kana,
       job: "ソフトウェア・情報サービス業", tel: formatted_tel,
       from_month: 1, from_day: 1, to_month: 12, to_day: 31
     }
@@ -149,6 +149,20 @@ class OfficialTaxFormRenderer
     { tel_a: digits[0, 3], tel_b: digits[3, 4], tel_c: digits[7, 4] }
   end
 
+  # フリガナ(users.name_kana、カタカナ)。migrate前でも落ちないよう try
+  def user_name_kana
+    @user.try(:name_kana).to_s.strip.presence
+  end
+
+  # 第一表のフリガナ枠(1マス1字・14マス)。スペースは空マスとして残す
+  def name_kana_cells
+    kana = user_name_kana
+    return {} unless kana
+    kana.chars.first(14).each_with_index.to_h do |char, cell|
+      [ :"kana_#{cell}", [ " ", "　" ].include?(char) ? "" : char ]
+    end
+  end
+
   # 郵便番号を第一表の〒マス(3桁+4桁)へ。7桁が取れない場合は空欄のまま
   def postal_code_combs
     digits = (@user.postal_code.presence || @setting&.postal_code).to_s.delete("^0-9")
@@ -204,6 +218,7 @@ class OfficialTaxFormRenderer
       name: @user.display_name, job: "ソフトウェア・情報サービス業" }
       .merge(tel_values)
       .merge(postal_code_combs)
+      .merge(name_kana_cells)
       .merge(
       comb(:shinkokusho_p1, :wareki, format("%02d", wareki)),
       comb(:shinkokusho_p1, :income_total, @summary[:income_total]),
@@ -228,7 +243,7 @@ class OfficialTaxFormRenderer
 
   def shohi_p1_values
     { year_from: wareki, year_to: wareki,
-      tax_office: @user.tax_office, address: taxpayer_address, name: @user.display_name }
+      tax_office: @user.tax_office, address: taxpayer_address, name: @user.display_name, name_kana: user_name_kana }
       .merge(tel_values)
       .merge(
       comb(:shohi_p1, :taxable_base, ct[:taxable_base]),
@@ -246,7 +261,7 @@ class OfficialTaxFormRenderer
 
   def shohi_p2_values
     { year_from: wareki, year_to: wareki,
-      address: taxpayer_address, name: @user.display_name }
+      address: taxpayer_address, name: @user.display_name, name_kana: user_name_kana }
       .merge(tel_values)
       .merge(
       comb(:shohi_p2, :taxable_base_1, ct[:taxable_base]),

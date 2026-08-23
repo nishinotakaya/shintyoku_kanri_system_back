@@ -144,6 +144,38 @@
       }
     },
     {
+      "id": "name_kana",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 88.1,
+      "y": 141.7,
+      "width": 148.8,
+      "height": 10.3,
+      "style": {
+        "font-family": [
+          "IPAMincho"
+        ],
+        "font-size": 7.1,
+        "color": "#000000",
+        "text-align": "left",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
       "id": "name",
       "type": "text-block",
       "display": true,
