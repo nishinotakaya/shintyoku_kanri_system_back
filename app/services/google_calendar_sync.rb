@@ -88,22 +88,52 @@ class GoogleCalendarSync
 
   # 専用カレンダーを取得。無ければ作成しトークン保有者に保存。名前一致の既存があれば再利用。
   def ensure_calendar(service)
-    if @token_user.private_todo_calendar_id.present?
-      begin
-        service.get_calendar(@token_user.private_todo_calendar_id)
-        return @token_user.private_todo_calendar_id
-      rescue Google::Apis::ClientError => e
-        raise unless e.status_code == 404 # 消されていたら作り直す
-      end
-    end
-    existing = (service.list_calendar_lists.items || []).find { |c| c.summary == CALENDAR_SUMMARY }
-    id = existing&.id || service.insert_calendar(Cal::Calendar.new(summary: CALENDAR_SUMMARY, time_zone: "Asia/Tokyo")).id
-    @token_user.update_column(:private_todo_calendar_id, id)
-    id
+    stored_calendar_id = verified_calendar_id(service)
+    return stored_calendar_id if stored_calendar_id
+
+    existing = (service.list_calendar_lists.items || []).find { |calendar| calendar.summary == CALENDAR_SUMMARY }
+    return claim_calendar_id(service, existing.id, created_now: false) if existing
+
+    created = service.insert_calendar(Cal::Calendar.new(summary: CALENDAR_SUMMARY, time_zone: "Asia/Tokyo"))
+    claim_calendar_id(service, created.id, created_now: true)
   rescue Google::Apis::AuthorizationError, Google::Apis::ClientError => e
     # 403 insufficient scope 等
     raise ScopeError, e.message if e.respond_to?(:status_code) && e.status_code == 403
     raise
+  end
+
+  # DB に持っている専用カレンダーが今も Google 側にあれば返す。消されていたら nil(=作り直す)。
+  def verified_calendar_id(service)
+    calendar_id = @token_user.private_todo_calendar_id
+    return nil if calendar_id.blank?
+
+    service.get_calendar(calendar_id)
+    calendar_id
+  rescue Google::Apis::ClientError => e
+    raise unless e.status_code == 404
+    nil
+  end
+
+  # 専用カレンダーの id を1トランザクションで確定させる。
+  # 同時リクエストが揃って「まだ無い」と判断した場合は先に登録された方を正とし、
+  # 自分が作ってしまった空カレンダーは消す(放置すると同名カレンダーが増え続けるため)。
+  def claim_calendar_id(service, calendar_id, created_now:)
+    winner_id = @token_user.with_lock do
+      stored_calendar_id = @token_user.private_todo_calendar_id
+      next stored_calendar_id if stored_calendar_id.present?
+
+      @token_user.update_column(:private_todo_calendar_id, calendar_id)
+      calendar_id
+    end
+    delete_spare_calendar(service, calendar_id) if created_now && winner_id != calendar_id
+    winner_id
+  end
+
+  # 競合で余った空カレンダーを削除する。消せなくても同期自体は続行させる。
+  def delete_spare_calendar(service, calendar_id)
+    service.delete_calendar(calendar_id)
+  rescue => e
+    Rails.logger.warn("[GoogleCalendarSync] 余分な専用カレンダーを削除できませんでした #{calendar_id}: #{e.class}: #{e.message}")
   end
 
   # Todo → 終日イベント(due_date 優先、無ければ start_date、それも無ければ今日)。

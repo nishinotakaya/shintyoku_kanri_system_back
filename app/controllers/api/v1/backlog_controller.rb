@@ -10,6 +10,10 @@ module Api
       before_action -> { require_data_source!("notion", :sync) }, only: :sync_notion
       before_action -> { require_data_source!("trello", :sync) }, only: :sync_trello
 
+      # 追加ボタンの連打や通信リトライで同じ Todo が積み上がらないよう、
+      # この時間内に作られた同一タイトル(同一ワークスペース)の Todo は作り直さず既存を返す。
+      DUPLICATE_TASK_WINDOW = 10.seconds
+
       def show_setting
         s = current_user.backlog_setting || current_user.build_backlog_setting(BacklogSetting::DEFAULTS)
         render json: serialize_setting(s)
@@ -115,6 +119,9 @@ module Api
           workspace_id = own_workspace_id(params[:workspace_id]) or return
           attrs[:progress_workspace_id] = workspace_id
         end
+        recent_duplicate = find_recent_duplicate_task(attrs)
+        return render(json: serialize_task(recent_duplicate), status: :created) if recent_duplicate
+
         task = current_user.backlog_tasks.create!(attrs)
         push_to_calendar(task) # プライベートTodoのみGoogleカレンダーへ反映
         render json: serialize_task(task), status: :created
@@ -393,6 +400,18 @@ module Api
         return workspace_id if current_user.progress_workspaces.exists?(id: workspace_id)
         render json: { error: "指定のワークスペースは使用できません" }, status: :forbidden
         nil
+      end
+
+      # 直近 DUPLICATE_TASK_WINDOW 内に作られた、同じワークスペースの同じタイトルの Todo。
+      # 二重送信の受け口。無題(タイトル空)は同一視できないので対象外。
+      def find_recent_duplicate_task(attrs)
+        return nil if attrs[:summary].to_s.strip.blank?
+
+        current_user.backlog_tasks
+          .where(progress_workspace_id: attrs[:progress_workspace_id], summary: attrs[:summary])
+          .where(created_at: DUPLICATE_TASK_WINDOW.ago..)
+          .order(:created_at)
+          .last
       end
 
       # current_user の「プライベート」ワークスペース(builtin manual)。無ければ nil。
