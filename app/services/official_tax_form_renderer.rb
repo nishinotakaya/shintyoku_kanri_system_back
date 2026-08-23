@@ -149,6 +149,13 @@ class OfficialTaxFormRenderer
     { tel_a: digits[0, 3], tel_b: digits[3, 4], tel_c: digits[7, 4] }
   end
 
+  # 郵便番号を第一表の〒マス(3桁+4桁)へ。7桁が取れない場合は空欄のまま
+  def postal_code_combs
+    digits = (@user.postal_code.presence || @setting&.postal_code).to_s.delete("^0-9")
+    return {} if digits.length != 7
+    comb(:shinkokusho_p1, :zip_a, digits[0, 3]).merge(comb(:shinkokusho_p1, :zip_b, digits[3, 4]))
+  end
+
   # ============ 決算書 P3: 売上明細 + 減価償却費の計算 ============
   def kessansho_p3_values
     values = {
@@ -190,8 +197,14 @@ class OfficialTaxFormRenderer
     total_tax = tax + reconstruction
     payment = (total_tax / 100) * 100
 
+    today = Date.current
     { tax_office: @user.tax_office, address: taxpayer_address,
-      name: @user.display_name, job: "ソフトウェア・情報サービス業" }.merge(
+      juminzei_address: "同上", blue_mark: "〇",
+      submit_year: today.year - 2018, submit_month: today.month, submit_day: today.day,
+      name: @user.display_name, job: "ソフトウェア・情報サービス業" }
+      .merge(tel_values)
+      .merge(postal_code_combs)
+      .merge(
       comb(:shinkokusho_p1, :wareki, format("%02d", wareki)),
       comb(:shinkokusho_p1, :income_total, @summary[:income_total]),
       comb(:shinkokusho_p1, :business_income, final_income),

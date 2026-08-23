@@ -120,15 +120,25 @@ module TaxFormTlfLayouts
 
     # ============ 確定申告書 第一表 (A4縦・令和7年分 FA2205) ============
     f = []
-    f << { id: :tax_office, x: 8.03, y: 3.33, w: 9.6, size: 11, ja: true, align: :right } # 「◯◯税務署長」の前
+    f << { id: :tax_office, x: 8.4, y: 3.45, w: 9.6, size: 11, ja: true, align: :center } # 「＿＿税務署長」の下線中央
+    f << { id: :submit_year,  x: 11.5, y: 4.55, w: 2.0, size: 10.5, align: :center } # 提出日「令和[ ]年[ ]月[ ]日」
+    f << { id: :submit_month, x: 15.4, y: 4.55, w: 2.0, size: 10.5, align: :center }
+    f << { id: :submit_day,   x: 19.7, y: 4.55, w: 2.0, size: 10.5, align: :center }
     f << { id: :address, x: 14.5, y: 10.0, w: 42.0, size: 12, fit: true, ja: true }
+    f << { id: :juminzei_address, x: 14.7, y: 14.6, w: 42.0, size: 11, ja: true } # 「令和N年1月1日の住所」(通常は同上)
     f << { id: :name,    x: 60.0, y: 11.8, w: 25.0, size: 12.5, ja: true }
     f << { id: :job,     x: 49.0, y: 15.1, w: 20.0, size: 7,    ja: true }
+    f << { id: :blue_mark, x: 25.35, y: 16.43, w: 5.6, size: 24, ja: true, align: :center } # 種類「青色」を囲む〇
+    f << { id: :tel_a, x: 79.5, y: 17.35, w: 3.2, size: 10, align: :center } # 電話番号(プレ印字の「ー」区切り)
+    f << { id: :tel_b, x: 84.1, y: 17.35, w: 5.0, size: 10, align: :center }
+    f << { id: :tel_c, x: 90.2, y: 17.35, w: 5.0, size: 10, align: :center }
     # 左列(収入・所得・控除)/右列(税金の計算)の桁マス。行ピッチ2.024%(=34.375px@150dpi)
     left_grid  = { x_right: 48.80, pitch: 2.401, cells: 7, size: 22, overflow: { x: 30.71, w: 4.30 } }
     right_grid = { x_right: 92.22, pitch: 2.421, cells: 7, size: 22, overflow: { x: 74.13, w: 4.39 } }
     combs = []
     combs << { id: :wareki, x_right: 34.27, pitch: 2.401, cells: 2, size: 22, y: 5.035 } # 「令和[ ][ ]年分」(背景PNGの07は消去済み)
+    combs << { id: :zip_a, x_right: 21.73, pitch: 2.401, cells: 3, size: 17, y: 7.36 } # 〒上3桁
+    combs << { id: :zip_b, x_right: 32.57, pitch: 2.401, cells: 4, size: 17, y: 7.36 } # 〒下4桁
     combs << left_grid.merge(id: :income_total,        y: 20.26)          # (ア)営業等収入
     combs << left_grid.merge(id: :business_income,     y: 42.52)          # ①事業所得
     combs << left_grid.merge(id: :total_income,        y: 64.78)          # ⑫合計
