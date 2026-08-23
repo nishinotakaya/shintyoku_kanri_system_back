@@ -180,10 +180,10 @@ class OfficialTaxFormRenderer
     values
   end
 
-  # ============ 確定申告書 第一表 (令和7年分 FA2205) ============
+  # ============ 確定申告書 第一表 (FA2205様式) ============
   # ㉕基礎控除は下4桁0000・㉛課税所得は下3桁000・(52)納める税金は下2桁00がプレ印字
   def shinkokusho_values
-    basic_deduction = 680_000
+    basic_deduction = basic_deduction_for(final_income)
     taxable = [ ((final_income - basic_deduction) / 1000) * 1000, 0 ].max
     tax = income_tax_for(taxable)
     reconstruction = (tax * 0.021).floor
@@ -192,6 +192,7 @@ class OfficialTaxFormRenderer
 
     { tax_office: @user.tax_office, address: taxpayer_address,
       name: @user.display_name, job: "ソフトウェア・情報サービス業" }.merge(
+      comb(:shinkokusho_p1, :wareki, format("%02d", wareki)),
       comb(:shinkokusho_p1, :income_total, @summary[:income_total]),
       comb(:shinkokusho_p1, :business_income, final_income),
       comb(:shinkokusho_p1, :total_income, final_income),
@@ -253,6 +254,22 @@ class OfficialTaxFormRenderer
       values[:"#{id}_c"] = fmt0(v)
     end
     values
+  end
+
+  # 基礎控除 (国税庁タックスアンサーNo.1199)。合計所得金額の帯で決まり、
+  # 令和7・8年分(2025・2026)は改正の上乗せ特例で帯が細かい。令和9年分以後は特例が縮む。
+  def basic_deduction_for(total_income)
+    tiers =
+      if @year >= 2027      # 令和9年分以後
+        [ [ 1_320_000, 950_000 ], [ 23_500_000, 580_000 ] ]
+      elsif @year >= 2025   # 令和7・8年分(上乗せ特例)
+        [ [ 1_320_000, 950_000 ], [ 3_360_000, 880_000 ], [ 4_890_000, 680_000 ],
+          [ 6_550_000, 630_000 ], [ 23_500_000, 580_000 ] ]
+      else                  # 令和6年分以前
+        [ [ 24_000_000, 480_000 ] ]
+      end
+    tiers += [ [ 24_000_000, 480_000 ], [ 24_500_000, 320_000 ], [ 25_000_000, 160_000 ] ]
+    tiers.find { |limit, _| total_income <= limit }&.last || 0
   end
 
   # 所得税の速算表 (令和方式)

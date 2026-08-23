@@ -121,13 +121,14 @@ module TaxFormTlfLayouts
     # ============ 確定申告書 第一表 (A4縦・令和7年分 FA2205) ============
     f = []
     f << { id: :tax_office, x: 8.03, y: 3.33, w: 9.6, size: 11, ja: true, align: :right } # 「◯◯税務署長」の前
-    f << { id: :address, x: 14.5, y: 10.0, w: 42.0, size: 9.5,  ja: true }
+    f << { id: :address, x: 14.5, y: 10.0, w: 42.0, size: 12, fit: true, ja: true }
     f << { id: :name,    x: 60.0, y: 11.8, w: 25.0, size: 12.5, ja: true }
     f << { id: :job,     x: 49.0, y: 15.1, w: 20.0, size: 7,    ja: true }
     # 左列(収入・所得・控除)/右列(税金の計算)の桁マス。行ピッチ2.024%(=34.375px@150dpi)
     left_grid  = { x_right: 48.80, pitch: 2.401, cells: 7, size: 22, overflow: { x: 30.71, w: 4.30 } }
     right_grid = { x_right: 92.22, pitch: 2.421, cells: 7, size: 22, overflow: { x: 74.13, w: 4.39 } }
     combs = []
+    combs << { id: :wareki, x_right: 34.27, pitch: 2.401, cells: 2, size: 22, y: 5.035 } # 「令和[ ][ ]年分」(背景PNGの07は消去済み)
     combs << left_grid.merge(id: :income_total,        y: 20.26)          # (ア)営業等収入
     combs << left_grid.merge(id: :business_income,     y: 42.52)          # ①事業所得
     combs << left_grid.merge(id: :total_income,        y: 64.78)          # ⑫合計
