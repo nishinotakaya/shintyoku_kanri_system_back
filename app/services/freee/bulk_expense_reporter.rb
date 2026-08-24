@@ -40,6 +40,7 @@ module Freee
     # freee から取り込んだ経費は freee 側に既に deal がある。
     # freee_synced フラグが何らかの理由で落ちていても、ここで必ず止める(重複計上の最後の砦)。
     FREEE_ORIGIN_PREFIX = "freee_deal:".freeze
+    WALLET_TXN_PREFIX = "freee_wtxn:".freeze
 
     def report_one(expense)
       return { status: :skipped, payload: { id: expense.id, reason: "連携済み" } } if expense.freee_synced?
@@ -60,7 +61,14 @@ module Freee
 
       # 取引先は「あれば紐づける」任意項目。経費は freee 上でも取引先なしで登録できるため、
       # 未解決(店名なし/freeeの取引先作成失敗)でも失敗にせず、取引先なしで計上する(店名は摘要に残る)。
-      partner_id = expense.store_name.present? ? @partner_lookup.find_or_create(name: expense.store_name) : nil
+      # ただし口座明細由来の店名は「ＡＮＴＨＲＯＰＩＣ＊ ＣＬＡＵＤＥ ＳＵ 220.00 USD」のような
+      # カードの生の摘要なので、取引先として登録するとfreeeのマスタが荒れる。摘要に残すだけにする。
+      partner_id =
+        if expense.store_name.blank? || expense.import_hash.to_s.start_with?(WALLET_TXN_PREFIX)
+          nil
+        else
+          @partner_lookup.find_or_create(name: expense.store_name)
+        end
 
       result = @report_sale_class.new(
         invoice: {

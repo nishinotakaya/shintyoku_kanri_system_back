@@ -76,18 +76,37 @@ class FreeeBulkExpenseReporterTest < Minitest::Test
   end
 
   # 口座明細から登録した経費(freee_wtxn:)は freee 側に deal が無いので計上対象のまま
-  def test_wallet_txn_origin_expense_is_still_reportable
-    expense = create_expense(account_category: "通信費", store_name: "KDDI", freee_synced: false,
-                             import_hash: "freee_wtxn:12345")
+  # 店名はカードの生の摘要なので freee の取引先には登録しない(摘要に残すだけ)
+  def test_wallet_txn_origin_expense_is_reported_without_creating_partner
+    expense = create_expense(account_category: "通信費",
+                             store_name: "ＡＮＴＨＲＯＰＩＣ＊  ＣＬＡＵＤＥ  ＳＵ 220.00 USD",
+                             freee_synced: false, import_hash: "freee_wtxn:12345")
+    partner_lookup = recording_partner_lookup
     reporter = build_reporter(
       account_item_lookup: stub_account_item_lookup("通信費" => 503),
-      partner_lookup: stub_partner_lookup("KDDI" => 9003),
+      partner_lookup: partner_lookup,
       report_sale_class: stub_report_sale_class(ok: true, deal_id: 6666)
     )
 
     result = reporter.call([ expense.id ])
 
     assert_equal [ { id: expense.id, deal_id: 6666 } ], result.succeeded
+    assert_empty partner_lookup.requested_names, "口座明細由来の店名で取引先を作ってはいけない"
+  end
+
+  # レシート由来(import_hash なし)は従来どおり取引先を解決する
+  def test_receipt_origin_expense_still_resolves_partner
+    expense = create_expense(account_category: "会議費", store_name: "ドトール", freee_synced: false)
+    partner_lookup = recording_partner_lookup
+    reporter = build_reporter(
+      account_item_lookup: stub_account_item_lookup("会議費" => 504),
+      partner_lookup: partner_lookup,
+      report_sale_class: stub_report_sale_class(ok: true, deal_id: 5555)
+    )
+
+    reporter.call([ expense.id ])
+
+    assert_equal [ "ドトール" ], partner_lookup.requested_names
   end
 
   def test_unresolvable_account_category_is_failed
@@ -190,6 +209,15 @@ class FreeeBulkExpenseReporterTest < Minitest::Test
   end
 
   # name => partner_id の Hash で find_or_create(name:) を返す簡易スタブ
+  # find_or_create に渡された名前を記録するスタブ(取引先を作ろうとしたかの検証用)
+  def recording_partner_lookup
+    Class.new do
+      attr_reader :requested_names
+      define_method(:initialize) { @requested_names = [] }
+      define_method(:find_or_create) { |name:| @requested_names << name; nil }
+    end.new
+  end
+
   def stub_partner_lookup(name_to_id)
     Class.new do
       define_method(:initialize) { |map| @map = map }
