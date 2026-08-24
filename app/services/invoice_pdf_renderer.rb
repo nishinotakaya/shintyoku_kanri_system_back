@@ -218,7 +218,7 @@ class InvoicePdfRenderer
         .where("period_start IS NULL OR period_start <= ?", u_period.last)
         .where("period_end   IS NULL OR period_end   >= ?", u_period.first)
         .order(period_start: :desc).first
-      # 時給: ①対応する注文書(PO)の rate_per_hour を最優先 → ②カテゴリ別デフォルト(living=3750/wings=3500)。
+      # 時給: ①対応する注文書(PO)の rate_per_hour を最優先 → ②カテゴリ別デフォルト(living=3,250/wings=3,750)。
       # 人別に保存された unit_price はフォールバックには使わない（カテゴリで一律にする方針）。
       effective_unit_price = (matched_po&.rate_per_hour.to_i.nonzero?) || InvoiceSetting.default_unit_price_for(@category || "wings")
       name_prefix = u.display_name.to_s.strip
