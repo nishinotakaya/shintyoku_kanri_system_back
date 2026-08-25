@@ -86,9 +86,11 @@ class OfficialTaxFormRenderer
   # ============ 決算書 P1: 損益計算書 ============
   def kessansho_p1_values
     totals = category_totals
+    today = Date.current
     values = {
       address: taxpayer_address, doujou: "同上", name: @user.display_name, name_kana: user_name_kana,
       job: "ソフトウェア・情報サービス業", tel: formatted_tel,
+      submit_year: today.year - 2018, submit_month: today.month, submit_day: today.day,
       from_month: 1, from_day: 1, to_month: 12, to_day: 31
     }
     values.merge!(
@@ -117,8 +119,8 @@ class OfficialTaxFormRenderer
   def kessansho_p2_values
     values = {
       name: @user.display_name,
-      profit_8: fmt0(profit_before_deduction),
-      deduction_9: fmt0(deduction_applied)
+      profit_7: fmt0(profit_before_deduction),   # ⑦ 青色申告特別控除前の所得金額(P1の㊸)
+      deduction_9: fmt0(deduction_applied)       # ⑨ 青色申告特別控除額(65万円の場合)
     }
     values.merge!(
       comb(:kessansho_p2, :wareki, format("%02d", wareki)),
@@ -172,10 +174,16 @@ class OfficialTaxFormRenderer
 
   # ============ 決算書 P3: 売上明細 + 減価償却費の計算 ============
   def kessansho_p3_values
+    clients = client_sales_rows
+    named_total = clients.sum { |row| row[:total] }
     values = {
-      sales_other: fmt0(@summary[:income_total]),
+      sales_other: fmt(@summary[:income_total] - named_total), # 上記以外の売上先の計(0なら空欄)
       sales_total: fmt0(@summary[:income_total])
     }
+    clients.each_with_index do |row, i|
+      values[:"client_#{i + 1}_name"] = row[:name]
+      values[:"client_#{i + 1}_amount"] = fmt0(row[:total])
+    end
     @assets.first(7).each_with_index do |asset, i|
       n = i + 1
       annual = (asset.cost / asset.useful_life_years.to_f).floor
@@ -199,6 +207,26 @@ class OfficialTaxFormRenderer
       values[:dep_total_expense] = fmt0(@summary[:depreciation_total])
     end
     values
+  end
+
+  # 売上先明細(P3): 承認済み請求(パートナー合算込み)を請求先名で集計する。
+  # 請求先名はカテゴリの請求書設定(client_name)から引く(wings/living は同じラボップ名に名寄せされる)。
+  # 名前が引けないカテゴリ(video等)は「上記以外の売上先の計」に残す。所在地・登録番号は未管理のため空欄。
+  def client_sales_rows
+    @summary[:income_items]
+      .group_by { |item| client_name_for(item[:category]) }
+      .filter_map do |client_name, items|
+        next if client_name.blank?
+        { name: client_name, total: items.sum { |item| item[:total] } }
+      end
+      .select { |row| row[:total].positive? }
+      .sort_by { |row| -row[:total] }
+      .first(4)
+  end
+
+  def client_name_for(category)
+    @user.invoice_setting_for(category.to_s).client_name.presence ||
+      InvoiceSetting.defaults_for(category.to_s)[:client_name].presence
   end
 
   # ============ 確定申告書 第一表 (FA2205様式) ============
@@ -242,7 +270,9 @@ class OfficialTaxFormRenderer
   def ct = @summary[:consumption_tax][:breakdown]
 
   def shohi_p1_values
+    today = Date.current
     { year_from: wareki, year_to: wareki,
+      submit_year: today.year - 2018, submit_month: today.month, submit_day: today.day,
       tax_office: @user.tax_office, address: taxpayer_address, name: @user.display_name, name_kana: user_name_kana }
       .merge(tel_values)
       .merge(

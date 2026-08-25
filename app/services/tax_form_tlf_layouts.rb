@@ -61,8 +61,12 @@ module TaxFormTlfLayouts
     f << { id: :doujou,  x: 38.92, y: 18.37, w: 8.0,  size: 11, ja: true }  # 事業所所在地「同上」
     f << { id: :name_kana, x: 62.4, y: 13.4, w: 12.0, size: 9, ja: true }   # 氏名欄上部のフリガナ
     f << { id: :name,    x: 62.05, y: 14.69, w: 14.5, size: 14, ja: true }
-    f << { id: :job,     x: 38.80, y: 22.90, w: 9.4, size: 7, ja: true }
+    f << { id: :job,     x: 38.90, y: 23.15, w: 7.4, size: 5.5, ja: true, fit: true } # 業種名(屋号欄に食み出さないよう幅=セル幅・縮小フィット)
     f << { id: :tel,     x: 66.10, y: 17.12, w: 9.0, size: 11 }
+    # 提出日「令和[ ]年[ ]月[ ]日」(損益計算書タイトル左)
+    f << { id: :submit_year,  x: 8.8,  y: 31.0, w: 2.0, size: 10.5, align: :center }
+    f << { id: :submit_month, x: 11.9, y: 31.0, w: 2.0, size: 10.5, align: :center }
+    f << { id: :submit_day,   x: 14.9, y: 31.0, w: 2.0, size: 10.5, align: :center }
     # 損益計算書の期間 (自[1]月[1]日 至[12]月[31]日) — 各ボックス中央寄せ
     f << { id: :from_month, x: 53.23, y: 30.99, w: 3.0, size: 19, align: :center }
     f << { id: :from_day,   x: 58.19, y: 30.99, w: 3.0, size: 19, align: :center }
@@ -86,7 +90,9 @@ module TaxFormTlfLayouts
     KESSANSHO_MONTH_YS.each_with_index do |y, i|
       f << { id: :"month_#{i + 1}", x: 10.56, y: y, w: 15.0, size: 15, align: :right }
     end
-    f << { id: :profit_8,    x: 77.5, y: 80.6, w: 13.0, size: 14, align: :right }
+    # 青色申告特別控除額の計算: ⑦=控除前の所得金額(行77.0〜80.0%) / ⑨=控除額(行82.9〜85.9%)。
+    # 以前は所得金額を1行下の⑧(不動産分の控除欄)に書いてしまっていた。
+    f << { id: :profit_7,    x: 77.5, y: 78.15, w: 13.0, size: 14, align: :right }
     f << { id: :deduction_9, x: 77.5, y: 83.4, w: 13.0, size: 14, align: :right }
     combs = [
       { id: :wareki, x_right: 14.42, pitch: 1.595, cells: 2, size: 21, y: 6.64 },
@@ -97,6 +103,14 @@ module TaxFormTlfLayouts
 
     # ============ 決算書 P3: 売上明細 + 減価償却費の計算 (A4横) ============
     f = []
+    # 売上先明細4行(行 8.5/11.6/14.8/17.9〜21.0%)。列: 売上先名7.0〜19.5% / 所在地19.5〜40.9% / 金額56.8〜70.1%
+    4.times do |i|
+      y = 8.75 + [ 3.10, 3.20, 3.10 ].first(i).sum
+      n = i + 1
+      f << { id: :"client_#{n}_name",    x: 7.3,  y: y, w: 12.0, size: 9.5, ja: true, fit: true }
+      f << { id: :"client_#{n}_address", x: 19.8, y: y, w: 21.0, size: 9.5, ja: true, fit: true }
+      f << { id: :"client_#{n}_amount",  x: 57.0, y: y + 0.35, w: 11.5, size: 13, align: :right }
+    end
     f << { id: :sales_other, x: 57.0, y: 21.3, w: 11.5, size: 13, align: :right }
     f << { id: :sales_total, x: 57.0, y: 24.6, w: 11.5, size: 13, align: :right }
     7.times do |i|
@@ -163,6 +177,10 @@ module TaxFormTlfLayouts
     # ============ 消費税申告書 第一表 GK0306 (A4縦) ============
     f = []
     f << { id: :tax_office, x: 30.00, y: 5.82,  w: 14.35, size: 13, ja: true, align: :right } # 「◯◯税務署長殿」の前
+    # 提出日「令和[ ]年[ ]月[ ]日」(左上・収受印の上)
+    f << { id: :submit_year,  x: 9.3,  y: 5.55, w: 2.2, size: 10.5, align: :center }
+    f << { id: :submit_month, x: 13.0, y: 5.55, w: 2.2, size: 10.5, align: :center }
+    f << { id: :submit_day,   x: 16.6, y: 5.55, w: 2.2, size: 10.5, align: :center }
     f << { id: :address,    x: 15.73, y: 9.03,  w: 37.5,  size: 11, ja: true }
     f << { id: :tel_a, x: 31.26, y: 11.36, w: 4.5, size: 10.5, align: :center }
     f << { id: :tel_b, x: 38.11, y: 11.36, w: 4.5, size: 10.5, align: :center }

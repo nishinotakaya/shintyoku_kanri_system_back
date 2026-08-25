@@ -432,12 +432,12 @@
       }
     },
     {
-      "id": "profit_8",
+      "id": "profit_7",
       "type": "text-block",
       "display": true,
       "description": "",
       "x": 652.5,
-      "y": 481.7,
+      "y": 467.1,
       "width": 109.4,
       "height": 15.2,
       "style": {
