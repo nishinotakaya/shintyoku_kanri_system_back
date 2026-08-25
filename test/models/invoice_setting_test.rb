@@ -29,10 +29,10 @@ class InvoiceSettingTest < Minitest::Test
   end
 
   # 注文書(PO)の期間が切れている月のフォールバック時給。
-  # living は注文書を 3,250 円で発行しているのに既定が 3,750 円のままだったため、
-  # 注文書が引けない月(2026年7・8月分)の請求書が 3,750 円で出ていた。
+  # ラボップ宛(統合請求書)の時給。川村さんへ発行する注文書の 3,250 円とは別物で、
+  # 川村さんのレートは purchase_order_settings.rate_per_hour が持つ。
   def test_category_default_unit_price
-    assert_equal 3250, InvoiceSetting.default_unit_price_for("living")
+    assert_equal 3750, InvoiceSetting.default_unit_price_for("living")
     assert_equal 3750, InvoiceSetting.default_unit_price_for("wings")
   end
 
