@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_21_000003) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_27_000001) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -329,6 +329,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_21_000003) do
     t.string "category"
     t.string "payment_due_type"
     t.string "honorific"
+    t.integer "merged_unit_price"
     t.index ["user_id"], name: "index_invoice_settings_on_user_id"
   end
 
@@ -359,6 +360,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_21_000003) do
     t.date "due_date_override"
     t.string "registration_no_override"
     t.string "bank_info_override"
+    t.boolean "auto_synced", default: false, null: false
     t.index ["kind"], name: "index_invoice_submissions_on_kind"
     t.index ["paid_at"], name: "index_invoice_submissions_on_paid_at"
     t.index ["received_purchase_order_id"], name: "index_invoice_submissions_on_received_purchase_order_id"
@@ -790,6 +792,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_21_000003) do
     t.string "trello_board_id"
     t.string "gender"
     t.text "calendar_persons"
+    t.string "name_kana"
     t.index ["canva_oauth_state"], name: "index_users_on_canva_oauth_state"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"

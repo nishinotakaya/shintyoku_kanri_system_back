@@ -1,0 +1,22 @@
+# 請求書の月次自動運転。毎日 JST 07:00 に本番で InvoiceAutoGenerator を回す。
+#   - 当月分(締め日ベース。26日始まりなら 8/26〜9/25 が9月分)の請求書申請を全員分 draft で作成
+#   - 作成済みの draft は毎日その日までの勤怠時間で請求額を再計算(手編集したものは対象外)
+#   - 締め(25日)を過ぎたら前月分を承認し、ラボップ宛の統合請求書PDFを発行
+# 全処理が冪等なので、日に何度流れても二重に作られない。
+name: Invoice Auto Generate
+
+on:
+  schedule:
+    - cron: "0 22 * * *" # UTC 22:00 = JST 07:00
+  workflow_dispatch: # 手動実行も可(Actions タブから)
+
+jobs:
+  auto-generate:
+    name: 請求書の自動生成
+    runs-on: ubuntu-latest
+    concurrency: invoice-auto-generate
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl ssh console -a shintyoku-app -C "/rails/bin/rails invoices:auto_generate"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

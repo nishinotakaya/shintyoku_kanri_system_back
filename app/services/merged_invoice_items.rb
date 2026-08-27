@@ -14,6 +14,60 @@ module MergedInvoiceItems
     submissions.flat_map { |submission| for_submission(submission) }
   end
 
+  # ============ 統合時給モード（月次自動生成用） ============
+  # ラボップへの統合請求は「人ごとに決めた請求時給 × 稼働時間」で組む。
+  # 支払側の申請(total_override=注文書レート)とは金額が独立する
+  # (例: 川村さん wings は支払 2,875円/h・請求 3,500円/h)。
+  # 時給は InvoiceSetting.billing_unit_price_for(user, category) が解決する。
+  def build_billed(submissions)
+    submissions.flat_map { |submission| billed_items_for(submission) }
+  end
+
+  # 統合請求の税込合計。明細合計(税抜)＋税で組む（申請の確定額は使わない）。
+  def billed_total(submissions)
+    return 0 if submissions.empty?
+    tax_rate = InvoiceSetting.defaults_for(submissions.first.category)[:tax_rate].to_i
+    subtotal = build_billed(submissions).sum { |item| item[:amount].to_i }
+    subtotal + (subtotal * tax_rate / 100.0).round
+  end
+
+  def billed_items_for(submission)
+    name = submission.user.display_name.to_s.strip
+    prefix = name.empty? ? "" : "#{name} "
+    # 手編集した明細は統合時給よりも優先する（明示的な上書き）
+    return for_submission(submission) if submission.items_override.present?
+
+    rate = InvoiceSetting.billing_unit_price_for(submission.user, submission.category)
+    hours = billed_hours_for(submission)
+    # 時給が引けないカテゴリや稼働 0 は従来ロジック(確定額ベース)に落とす
+    return for_submission(submission) if rate.zero? || hours.zero?
+
+    setting = submission.user.invoice_setting_for(submission.category)
+    quantity = hours == hours.to_i ? hours.to_i : hours.round(1)
+    items = [ {
+      label: "#{prefix}#{setting.item_label}(#{format('%.1f', hours)}hまで)",
+      qty: quantity, unit: "時間", unit_price: rate, amount: (hours * rate).round
+    } ]
+    # シェアラウンジ利用料などの固定行(控除含む)は統合請求にもそのまま載せる
+    Array(setting.default_items).each do |it|
+      qty = (it["qty"] || it[:qty] || 1).to_f
+      price = (it["price"] || it[:price] || 0).to_i
+      label = (it["label"] || it[:label]).to_s
+      label = "#{prefix}#{label}" unless prefix.empty? || label.start_with?(prefix)
+      items << { label: label, qty: qty, unit: (it["unit"] || it[:unit]).to_s.presence || "式",
+                 unit_price: price, amount: (qty * price).round }
+    end
+    items
+  end
+
+  # 統合請求の稼働時間（個別請求書と同じ範囲: billing period × カテゴリ）
+  def billed_hours_for(submission)
+    period = submission.user.period_for(submission.year, submission.month)
+    scope = submission.user.work_reports.in_range(period)
+    scope = scope.by_category(submission.category) if submission.category.present?
+    scope.sum(:hours).to_f
+  end
+
   def for_submission(submission)
     name = submission.user.display_name.to_s.strip
     prefix = name.empty? ? "" : "#{name} "

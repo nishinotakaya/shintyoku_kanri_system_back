@@ -154,6 +154,12 @@ module Api
           attrs[:paid_at] = raw.present? ? (Time.iso8601(raw) rescue Date.parse(raw).beginning_of_day) : nil
         end
 
+        # 金額・明細を手で編集したら月次自動同期(InvoiceAutoGenerator)の対象から外す。
+        # 外さないと翌日の cron が勤怠時間からの自動計算で手編集を上書きしてしまう。
+        if record.auto_synced? && (params.key?(:total_override) || params.key?(:items_override))
+          attrs[:auto_synced] = false
+        end
+
         record.update!(attrs) if attrs.any?
         render json: serialize(record)
       rescue => e
@@ -567,6 +573,7 @@ module Api
           note: record.note,
           review_comment: record.review_comment,
           total_override: record.total_override,
+          auto_synced: record.auto_synced,
           item_label_override: record.item_label_override,
           subject_override: record.subject_override,
           application_date_override: record.application_date_override&.iso8601,

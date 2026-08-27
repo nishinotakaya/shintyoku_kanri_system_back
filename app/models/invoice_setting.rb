@@ -93,4 +93,19 @@ class InvoiceSetting < ApplicationRecord
   def self.default_unit_price_for(category)
     CATEGORY_DEFAULT_UNIT_PRICE[category.to_s].to_i
   end
+
+  # 統合請求書(ラボップ宛)でこの人の稼働に掛ける時給。支払側の時給とは別レート。
+  #   ① 本人設定の merged_unit_price(admin が as_user_id で設定できる)
+  #   ② admin 本人は自分の unit_price(=自分の売りレート)
+  #   ③ カテゴリ既定(wings/living=3,750)
+  def self.billing_unit_price_for(user, category)
+    setting = user.invoice_settings.find_by(category: category.to_s)
+    rate = setting&.merged_unit_price.to_i
+    return rate if rate.positive?
+    if user.admin?
+      own = setting&.unit_price.to_i
+      return own if own.positive?
+    end
+    default_unit_price_for(category)
+  end
 end
