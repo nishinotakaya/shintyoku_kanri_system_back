@@ -8,6 +8,9 @@ require "google/apis/sheets_v4"
 # 版面そのものが壊れている/未作成の場合は tmp/rebuild_susaki_creator.rb で
 # テンプレ(「スキルシート(デザイン・クリエイター)」)から復元してから本クラスで値を入れる。
 class CreatorSkillSheetExporter
+  # テンプレートは BY 列(77列目)まで使う。これ未満のタブはテンプレ未適用の空シート。
+  REQUIRED_COLUMN_COUNT = 77
+
   # 記入例(gid=346304297)と同じセル位置。DB の項目をここへ書き込む。
   def initialize(skill_sheet:, user:)
     @skill_sheet    = skill_sheet
@@ -21,9 +24,26 @@ class CreatorSkillSheetExporter
     service.authorization = GoogleAuth.build_writer(@user)
 
     spreadsheet = service.get_spreadsheet(@spreadsheet_id)
-    sheet = spreadsheet.sheets.find { |s| s.properties.sheet_id.to_s == @gid.to_s } || spreadsheet.sheets.first
+    sheet = spreadsheet.sheets.find { |s| s.properties.sheet_id.to_s == @gid.to_s }
+    # 指定タブが無いときに先頭タブへ黙って書くと、テンプレの入っていない空シートに
+    # 書き込んで Google の "exceeds grid limits"(原因の分からない Invalid request)になる。
+    # どのタブへ書くつもりだったのかを名指しで返す。
+    if sheet.nil?
+      available = spreadsheet.sheets.map { |s| "#{s.properties.title}(gid=#{s.properties.sheet_id})" }.join(" / ")
+      raise "書き出し先のタブ(gid=#{@gid})がこのスプレッドシートにありません。" \
+            "存在するタブ: #{available}。設定の「書き出し先タブ」を選び直してください。"
+    end
     title = sheet.properties.title
     @sheet_id = sheet.properties.sheet_id
+
+    # クリエイター用テンプレートは BY 列(77列)まで使う。列が足りないタブ(既定の26列など)は
+    # テンプレが入っていない空シートなので、書き込む前に止める。
+    column_count = sheet.properties.grid_properties&.column_count.to_i
+    if column_count < REQUIRED_COLUMN_COUNT
+      raise "タブ「#{title}」にクリエイター用テンプレートが入っていません" \
+            "(列数 #{column_count}、必要 #{REQUIRED_COLUMN_COUNT} 以上)。" \
+            "テンプレートをコピーしたタブを選んでください。"
+    end
 
     cells = build_cells
     data = cells.map { |cell, value| Google::Apis::SheetsV4::ValueRange.new(range: "'#{title}'!#{cell}", values: [ [ value ] ]) }

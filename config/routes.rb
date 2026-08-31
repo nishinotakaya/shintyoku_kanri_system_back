@@ -43,6 +43,8 @@ Rails.application.routes.draw do
           patch  :connection, action: :update_connection
           post   :sync_external
           patch  :evaluations, action: :set_evaluations
+          # 書き出し先タブの選択肢(スプレッドシートのタブ一覧)
+          get    :sheet_tabs
         end
       end
 

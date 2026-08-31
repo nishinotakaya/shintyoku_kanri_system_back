@@ -220,6 +220,33 @@ module Api
         render_error(e.message)
       end
 
+      # GET /api/v1/skill_sheets/:id/sheet_tabs
+      # 書き出し先タブ(export_gid)を画面で選べるように、スプレッドシートのタブ一覧を返す。
+      # クリエイター用テンプレートは BY 列(77列)まで使うので、テンプレが入っているかも併せて返す。
+      def sheet_tabs
+        sheet = find_sheet or return
+        spreadsheet_id = sheet.spreadsheet_id.presence ||
+                         sheet.spreadsheet_url.to_s[%r{/spreadsheets/d/([a-zA-Z0-9_-]+)}, 1]
+        return render_error("スプレッドシートのURLが未設定です") if spreadsheet_id.blank?
+
+        service = Google::Apis::SheetsV4::SheetsService.new
+        service.authorization = GoogleAuth.build_with_fallback(current_user)
+        spreadsheet = service.get_spreadsheet(spreadsheet_id)
+
+        tabs = spreadsheet.sheets.map do |tab|
+          columns = tab.properties.grid_properties&.column_count.to_i
+          {
+            gid: tab.properties.sheet_id.to_s,
+            title: tab.properties.title,
+            columns: columns,
+            creator_ready: columns >= CreatorSkillSheetExporter::REQUIRED_COLUMN_COUNT
+          }
+        end
+        render json: { tabs: tabs }
+      rescue => e
+        render_error(e.message)
+      end
+
       # PATCH /api/v1/skill_sheets/:id/evaluations  { evaluations: [{label, level}, ...] }
       # スキル評価グリッド(A〜E)を一括 upsert。level が空/不正なら該当 label を削除。
       def set_evaluations
@@ -308,6 +335,8 @@ module Api
       def skill_sheet_params
         params.require(:skill_sheet).permit(
           *SkillSheet::HEADER_ATTRS, :spreadsheet_url, :youtube_self_pr,
+          # テンプレート種別(engineer/creator)と、creator が値を流し込む先のタブ
+          :template_type, :export_gid,
           projects: [
             :period_from, :period_to, :title, :description, :role_scale,
             :languages, :db, :server_os, :tools, :source,

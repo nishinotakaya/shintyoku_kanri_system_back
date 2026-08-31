@@ -36,6 +36,13 @@ class SkillSheet < ApplicationRecord
     HEADER_ATTRS.index_with { |a| public_send(a) }.merge("projects" => projects.map(&:as_payload))
   end
 
+  # 書き出しに使うテンプレート。
+  #   engineer … SkillSheetExporter が版面ごと組み立てる（エンジニア用）
+  #   creator  … CreatorSkillSheetExporter が既存テンプレのタブ(export_gid)へ値だけ流し込む
+  #              （デザイン・動画編集などのクリエイター用）
+  TEMPLATE_TYPES = %w[engineer creator].freeze
+  validates :template_type, inclusion: { in: TEMPLATE_TYPES }
+
   HEADER_ATTRS = %w[
     engineer_name age gender address start_date nearest_station
     specialties skills duties self_pr
@@ -101,6 +108,8 @@ class SkillSheet < ApplicationRecord
       spreadsheet_url: spreadsheet_url,
       spreadsheet_id: spreadsheet_id,
       gid: gid,
+      template_type: template_type,
+      export_gid: export_gid,
       engineer_name: engineer_name,
       age: age,
       gender: gender,
