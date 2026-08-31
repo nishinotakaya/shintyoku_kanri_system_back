@@ -92,8 +92,9 @@ class TeamScheduleImporter
 
   # 共有シート操作のため、admin (西野) を優先。admin の token は spreadsheets スコープあり前提
   def pick_credentials_user(user)
-    admin = User.where("display_name LIKE ?", "%西野%").find do |candidate|
-      candidate.attendance_schedule_url.present? && candidate.google_access_token.present?
+    # 苗字での絞り込みだと同姓の一般ユーザーも候補になるため、User#admin? で判定する
+    admin = User.order(:id).find do |candidate|
+      candidate.admin? && candidate.attendance_schedule_url.present? && candidate.google_access_token.present?
     end
     admin || user
   end

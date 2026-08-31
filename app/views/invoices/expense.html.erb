@@ -6,9 +6,10 @@ end
 require "base64"
 # 立替金は請求者=対象ユーザー(user)の印鑑。DB(seal_image)優先、無ければ従来 public ファイル。
 _db_seal = (user.respond_to?(:seal_image) ? user.seal_image.to_s : "")
-_issuer_surname = user.display_name.to_s.split(/[\s　]/).first.to_s
-_hanko_map = { "西野" => "hanko_nishino.png", "川村" => "hanko_kawamura.svg" }
-_hanko_file = _hanko_map[_issuer_surname]
+# ファイル印鑑は「氏名の完全一致」で選ぶ(苗字だけだと同姓の別人に西野 鷹也の印鑑が押される)
+_seal_name = user.display_name.to_s.gsub(/[\s　]/, "")
+_hanko_map = { "西野鷹也" => "hanko_nishino.png", "川村卓也" => "hanko_kawamura.svg" }
+_hanko_file = _hanko_map[_seal_name]
 _hanko_path = _hanko_file ? "#{Rails.root}/public/#{_hanko_file}" : nil
 _mime = _hanko_file&.end_with?(".svg") ? "image/svg+xml" : "image/png"
 _file_seal = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil

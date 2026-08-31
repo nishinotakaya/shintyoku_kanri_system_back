@@ -6,16 +6,18 @@
 end
 require "base64"
 _issuer_rep_full = data[:issuer][:representative].to_s
-_issuer_surname = _issuer_rep_full.split(/[\s　]/).first.to_s
-# DB(発行者ユーザーの seal_image)優先。発行者名(代表者)に姓一致するユーザーの印鑑を使う。
+# 印鑑の持ち主は「氏名の完全一致」で決める(空白の有無は無視)。姓の前方一致だと
+# 同姓の別人(西野 雄太郎)の注文書に西野 鷹也の印鑑が押されてしまう。
+_normalize_name = ->(name) { name.to_s.gsub(/[\s　]/, "") }
+_issuer_rep_key = _normalize_name.call(_issuer_rep_full)
+# DB(発行者ユーザーの seal_image)優先。発行者名(代表者)と氏名が一致するユーザーの印鑑を使う。
 _db_seal = ""
-if _issuer_rep_full.present?
-  _seal_owner = User.where.not(seal_image: [ nil, "" ]).detect { |u| _issuer_rep_full.start_with?(u.display_name.to_s.split(/[\s　]/).first.to_s) }
+if _issuer_rep_key.present?
+  _seal_owner = User.where.not(seal_image: [ nil, "" ]).detect { |u| _normalize_name.call(u.display_name) == _issuer_rep_key }
   _db_seal = _seal_owner&.seal_image.to_s
 end
-_hanko_map = { "西野" => "hanko_nishino.png", "川村" => "hanko_kawamura.svg" }
-# 完全一致 → だめなら姓 prefix で部分一致（"西野鷹也" のように空白なし表記も拾う）
-_hanko_file = _hanko_map[_issuer_surname] || _hanko_map.find { |k, _| _issuer_rep_full.start_with?(k) }&.last
+_hanko_map = { "西野鷹也" => "hanko_nishino.png", "川村卓也" => "hanko_kawamura.svg" }
+_hanko_file = _hanko_map[_issuer_rep_key]
 _hanko_path = _hanko_file ? "#{Rails.root}/public/#{_hanko_file}" : nil
 _mime = _hanko_file&.end_with?(".svg") ? "image/svg+xml" : "image/png"
 _file_seal = _hanko_path && File.exist?(_hanko_path) ? "data:#{_mime};base64,#{Base64.strict_encode64(File.binread(_hanko_path))}" : nil

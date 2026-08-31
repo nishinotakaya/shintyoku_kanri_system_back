@@ -55,10 +55,13 @@ class User < ApplicationRecord
     monthly_settings.find_by(year: year, month: month)&.application_date || Date.new(year.to_i, month.to_i, -1)
   end
 
-  # 管理者判定: 表示名に「西野」を含む、または email が ADMIN_EMAILS に含まれる
+  # 管理者判定: 表示名が「西野 鷹也」本人、または email が ADMIN_EMAILS に含まれる。
+  # 以前は苗字「西野」を含むだけで管理者にしていたため、同姓のユーザー(西野 雄太郎)を
+  # 追加した時点で全データが見える管理者になってしまう穴があった。
   ADMIN_EMAILS = %w[takaya314boxing@gmail.com taka-nishino@tamahome.jp].freeze
+  ADMIN_DISPLAY_NAME = "西野 鷹也".freeze
   def admin?
-    display_name.to_s.include?("西野") || ADMIN_EMAILS.include?(email.to_s.downcase)
+    display_name.to_s.include?(ADMIN_DISPLAY_NAME) || ADMIN_EMAILS.include?(email.to_s.downcase)
   end
 
   # 統合帳票(請求書/立替金)の「主体」を決める並び替え。admin(西野) を必ず先頭にする。

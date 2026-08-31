@@ -204,8 +204,9 @@ module Api
 
       private
 
+      # 苗字「西野」での判定は同姓の一般ユーザーも管理者扱いにしてしまうので、User#admin? に寄せる
       def admin_user?(user)
-        user.display_name.to_s.include?("西野")
+        user.admin?
       end
 
       def resolve_target_user(target_assignee)
