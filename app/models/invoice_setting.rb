@@ -59,13 +59,24 @@ class InvoiceSetting < ApplicationRecord
     default_items: []
   ).freeze
 
+  # 運送(西野 雄太郎等)。時給概念なし → 明細は手入力。税率10%。
+  TRANSPORT_DEFAULTS = DEFAULTS.merge(
+    client_name: "",
+    subject: "",
+    item_label: "運送業務",
+    unit_price: 0,
+    tax_rate: 10,
+    default_items: []
+  ).freeze
+
   # 画面・ファイル名で使うカテゴリの表示名。帳票名やフォルダ名の先頭に付く。
   CATEGORY_LABELS = {
     "wings" => "Wings",
     "living" => "リビング",
     "techleaders" => "テックリーダーズ",
     "resystems" => "REシステムズ",
-    "video" => "動画編集"
+    "video" => "動画編集",
+    "transport" => "運送"
   }.freeze
 
   def self.category_label(category)
@@ -77,6 +88,7 @@ class InvoiceSetting < ApplicationRecord
     when "techleaders" then TECHLEADERS_DEFAULTS
     when "resystems"   then RESYSTEMS_DEFAULTS
     when "video"       then VIDEO_DEFAULTS
+    when "transport"   then TRANSPORT_DEFAULTS
     else DEFAULTS
     end
   end

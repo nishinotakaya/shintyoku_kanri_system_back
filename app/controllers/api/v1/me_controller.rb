@@ -70,6 +70,7 @@ module Api
           gender: current_user.gender,
           admin: current_user.admin?,
           feature_flags: current_user.feature_flags.to_h,
+          work_categories: current_user.work_categories,
           tax_status: current_user.tax_status,
           can_use_skill_sheet: current_user.can_use?(:skill_sheet),
           can_use_interview_mindmap: current_user.can_use?(:interview_mindmap),

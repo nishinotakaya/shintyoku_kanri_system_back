@@ -1,7 +1,7 @@
 class WorkReport < ApplicationRecord
   belongs_to :user
 
-  CATEGORIES = %w[wings living techleaders resystems].freeze
+  CATEGORIES = %w[wings living techleaders resystems transport].freeze
 
   validates :work_date, presence: true, uniqueness: { scope: [ :user_id, :category ] }
 

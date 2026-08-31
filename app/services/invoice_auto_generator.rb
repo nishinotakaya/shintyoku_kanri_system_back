@@ -83,7 +83,9 @@ class InvoiceAutoGenerator
     recurring = InvoiceSubmission.where(user_id: user.id, kind: "invoice",
                                         year: prev_year, month: prev_mon)
                                  .where.not(category: nil).distinct.pluck(:category)
-    (with_hours + recurring).uniq & InvoiceSetting::CATEGORY_LABELS.keys
+    # visible_work_categories との積を取り、そのユーザーに見せていないカテゴリ(例: 運送専用ユーザーの wings)
+    # の下書きが誤って作られないようにする。既存ユーザー(work_categories=nil)は全カテゴリが見えるため無影響。
+    (with_hours + recurring).uniq & InvoiceSetting::CATEGORY_LABELS.keys & user.visible_work_categories
   end
 
   # ② auto_synced な draft の請求額をその日までの勤怠から再計算

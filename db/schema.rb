@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_31_000001) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_01_000003) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -150,6 +150,48 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_31_000001) do
     t.integer "freee_deal_id"
     t.index ["user_id", "expense_date"], name: "index_business_expenses_on_user_id_and_expense_date"
     t.index ["user_id", "import_hash"], name: "index_business_expenses_on_user_id_and_import_hash"
+  end
+
+  create_table "contract_events", force: :cascade do |t|
+    t.integer "contract_id", null: false
+    t.string "event", null: false
+    t.string "actor"
+    t.string "ip"
+    t.string "user_agent"
+    t.text "detail"
+    t.datetime "created_at", null: false
+    t.index ["contract_id"], name: "index_contract_events_on_contract_id"
+  end
+
+  create_table "contracts", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "title", default: "業務委託契約書", null: false
+    t.string "party_a_name"
+    t.text "party_a_address"
+    t.string "party_a_representative"
+    t.string "party_b_name"
+    t.text "party_b_address"
+    t.string "party_b_representative"
+    t.date "contract_date"
+    t.date "start_on"
+    t.date "end_on"
+    t.text "articles"
+    t.text "special_terms"
+    t.string "status", default: "draft", null: false
+    t.string "share_token_digest"
+    t.datetime "share_expires_at"
+    t.datetime "sent_at"
+    t.datetime "signed_at"
+    t.string "signer_name"
+    t.text "signature_image"
+    t.string "signer_ip"
+    t.string "signer_user_agent"
+    t.string "content_sha256"
+    t.binary "signed_pdf"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["share_token_digest"], name: "index_contracts_on_share_token_digest", unique: true
+    t.index ["user_id"], name: "index_contracts_on_user_id"
   end
 
   create_table "expenses", force: :cascade do |t|
@@ -794,6 +836,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_31_000001) do
     t.string "gender"
     t.text "calendar_persons"
     t.string "name_kana"
+    t.text "work_categories"
     t.index ["canva_oauth_state"], name: "index_users_on_canva_oauth_state"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"
@@ -821,6 +864,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_31_000001) do
   add_foreign_key "backlog_settings", "users"
   add_foreign_key "backlog_summary_notes", "users"
   add_foreign_key "backlog_tasks", "users"
+  add_foreign_key "contract_events", "contracts"
+  add_foreign_key "contracts", "users"
   add_foreign_key "expenses", "users"
   add_foreign_key "freee_connections", "users"
   add_foreign_key "generated_thumbnails", "interview_mindmaps"

@@ -16,7 +16,7 @@ module Api
       end
 
       def create
-        cat = params[:category].presence || "wings"
+        cat = params[:category].presence || viewing_user.visible_work_categories.first
         report = viewing_user.work_reports.find_or_initialize_by(work_date: params[:work_date], category: cat)
         attrs = report_params
         # リビング案件は乗車区間・交通費を持たない (連携・保存ともに無効化)
@@ -42,7 +42,7 @@ module Api
       end
 
       def clock_in
-        cat = params[:category].presence || "wings"
+        cat = params[:category].presence || current_user.visible_work_categories.first
         report = current_user.work_reports.find_or_initialize_by(work_date: Date.current, category: cat)
         report.clock_in ||= Time.current
         report.save!
@@ -50,7 +50,7 @@ module Api
       end
 
       def clock_out
-        cat = params[:category].presence || "wings"
+        cat = params[:category].presence || current_user.visible_work_categories.first
         report = current_user.work_reports.find_or_initialize_by(work_date: Date.current, category: cat)
         report.clock_out = Time.current
         if report.clock_in && report.clock_out
@@ -68,7 +68,7 @@ module Api
           base_date: Date.current,
           selected_range: params[:selected_range]
         ).call
-        cat = params[:category].presence || "wings"
+        cat = params[:category].presence || current_user.visible_work_categories.first
         applied = WorkReportBulkApplier.new(current_user, parsed[:ops], category: cat).call
         render json: { ops: parsed[:ops], applied: applied.map { |r| serialize(r) } }
       rescue => e
@@ -94,7 +94,7 @@ module Api
         to = current_user.default_transit_to
         fee = current_user.default_transit_fee
         line = current_user.default_transit_line
-        cat = params[:category] || "wings"
+        cat = params[:category] || current_user.visible_work_categories.first
 
         return render(json: { applied: 0 }) unless from.present? && fee.to_i > 0
 
@@ -141,7 +141,7 @@ module Api
         file = params[:file]
         return render(json: { error: "file missing" }, status: :bad_request) unless file
         year, month = parse_month
-        cat = params[:category].presence || "wings"
+        cat = params[:category].presence || current_user.visible_work_categories.first
 
         tmp = Rails.root.join("tmp", "progress_#{SecureRandom.hex(4)}.xlsx")
         File.open(tmp, "wb") { |f| f.write(file.read) }
@@ -179,7 +179,7 @@ module Api
         unless target == current_user || admin_user?(current_user)
           return render(json: { error: "他ユーザーへの追加権限がありません" }, status: :forbidden)
         end
-        cat = params[:category].presence || "wings"
+        cat = params[:category].presence || target.visible_work_categories.first
         issue_key = params[:issue_key].to_s
         # LOCAL-XXX (ローカル作成タスク) は summary をキーとして展開する。
         # 理由: LOCAL-9ECA30 の hex 部分が SAP 形式 (LETTERS-NUMBERS) にマッチせず、

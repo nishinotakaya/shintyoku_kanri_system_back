@@ -48,6 +48,14 @@ module Freee
       PARTNERS_BY_CATEGORY.dig(category.to_s, :id) || PARTNER_ID_LABOP
     end
 
+    # freee 売上計上の対象外カテゴリ。運送(transport)は雄太郎さんの事業で、西野さんの freee には計上しない。
+    # ここに無いカテゴリは従来どおり resolve_partner_id(未知ならラボップ扱い)に流し、既存の挙動を変えない。
+    FREEE_EXCLUDED_CATEGORIES = %w[transport].freeze
+
+    def self.category_excluded?(category)
+      FREEE_EXCLUDED_CATEGORIES.include?(category.to_s)
+    end
+
     Result = Struct.new(:ok?, :status, :body, :deal_id, :error, keyword_init: true)
 
     # invoice: { total_amount:, due_date:, subject:(optional), category:(optional), partner_id:(optional) }
@@ -65,17 +73,24 @@ module Freee
       @tax_rate = tax_rate&.to_i
       # 経費(expense)は freee 上でも取引先なしで登録できるため、partner_id は任意(nil可)。
       # 売上(income)は従来どおりカテゴリ既定値へフォールバックし、未解決なら例外。
+      # ただし取引先マッピングの無いカテゴリ(transport 等、freee 連携対象外)は例外にせず計上をスキップする。
+      @skip_category = false
       @partner_id =
         if @transaction_type == "expense"
           value = @invoice[:partner_id].to_i
           value.zero? ? nil : value
+        elsif @invoice[:partner_id].present?
+          @invoice[:partner_id].to_i
+        elsif self.class.category_excluded?(@invoice[:category])
+          @skip_category = true
+          0
         else
-          (@invoice[:partner_id] || self.class.resolve_partner_id(@invoice[:category] || "wings")).to_i
+          self.class.resolve_partner_id(@invoice[:category] || "wings")
         end
       @account_item_id = (account_item_id ||
                           (@transaction_type == "expense" ? DEFAULT_ACCOUNT_ITEM_OUTSOURCING : ACCOUNT_ITEM_SALES)).to_i
       raise "company_id 未設定。FREEE_COMPANY_ID を設定してください。" if @company_id.blank?
-      if @transaction_type != "expense" && @partner_id.to_i.zero?
+      if @transaction_type != "expense" && @partner_id.to_i.zero? && !@skip_category
         raise "partner_id 未設定 (category=#{@invoice[:category]})。FREEE_PARTNER_<CATEGORY> を設定してください。"
       end
       if @transaction_type == "expense" && @account_item_id.zero?
@@ -84,6 +99,12 @@ module Freee
     end
 
     def call
+      if @skip_category
+        category = @invoice[:category] || "wings"
+        Rails.logger.info("[Freee::ReportSale] freee 計上対象外カテゴリのため計上をスキップしました (category=#{category})")
+        return Result.new(ok?: false, status: 0, error: "freee 計上対象外カテゴリのため計上をスキップしました (category=#{category})")
+      end
+
       total = @invoice[:total_amount].to_i
       vat = compute_vat(total)
       due = @invoice[:due_date].to_s

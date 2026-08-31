@@ -341,6 +341,21 @@ Rails.application.routes.draw do
 
       # 進捗管理(/progress)のワークスペース切替
       resources :progress_workspaces, only: [ :index, :create, :update, :destroy ]
+
+      # 業務委託契約書(甲=発行者側。乙向けの公開エンドポイントは namespace :public 以下)
+      resources :contracts, only: %i[index show create update destroy] do
+        member do
+          post :issue
+          post :duplicate
+          post :void
+          get  :pdf
+        end
+      end
+      namespace :public do
+        get  "contracts/:token",     to: "contracts#show"
+        get  "contracts/:token/pdf", to: "contracts#pdf"
+        post "contracts/:token/sign", to: "contracts#sign"
+      end
     end
   end
 

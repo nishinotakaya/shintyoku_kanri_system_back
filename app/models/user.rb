@@ -33,6 +33,7 @@ class User < ApplicationRecord
   has_many :interview_mindmaps, dependent: :destroy
   has_many :interview_videos, dependent: :destroy
   has_many :heygen_assets, dependent: :destroy
+  has_many :contracts, dependent: :destroy
 
   # サブ管理者の管理割当: manager → managee。
   # 例: 加藤(manager) が 岩切(managee) を管理する。川村は割り当てない＝管理対象外。
@@ -44,6 +45,10 @@ class User < ApplicationRecord
   serialize :feature_flags, coder: JSON, type: Hash
   # カレンダーで予定行を出す人物名。空 = 既定メンバー
   serialize :calendar_persons, coder: JSON, type: Array
+  # ユーザーごとに見せる勤怠カテゴリ(例: ["transport"])。nil = 従来どおり全カテゴリ(WorkReport::CATEGORIES)。
+  serialize :work_categories, coder: JSON
+
+  validate :work_categories_must_be_known_categories
 
   # 別アカウントを admin の同一人物としてリンク。
   # 例: wing西野 鷹也 (taka-nishino@tamahome.jp) を admin 西野 鷹也 (takaya314boxing@gmail.com) にリンク
@@ -135,6 +140,12 @@ class User < ApplicationRecord
 
   def sees_whole_team_calendar?
     TeamSchedule::FULL_CALENDAR_PERSONS.any? { |person| display_name.to_s.include?(person) }
+  end
+
+  # このユーザーに見せる勤怠カテゴリ。未設定(nil)なら従来どおり全カテゴリを見せる。
+  # 例: 西野 雄太郎(運送業) は work_categories=["transport"] で「運送」だけを見る。
+  def visible_work_categories
+    Array(work_categories).presence || WorkReport::CATEGORIES
   end
 
   # 閲覧できないデータソース。タブやタスク一覧から外す判定に使う。
@@ -285,5 +296,15 @@ class User < ApplicationRecord
     end
 
     user
+  end
+
+  private
+
+  # work_categories の各要素が WorkReport::CATEGORIES に含まれるか。nil/空配列は許容(=従来どおり全カテゴリ)。
+  def work_categories_must_be_known_categories
+    return if work_categories.blank?
+    unknown = Array(work_categories) - WorkReport::CATEGORIES
+    return if unknown.empty?
+    errors.add(:work_categories, "に不正なカテゴリが含まれています: #{unknown.join(', ')}")
   end
 end

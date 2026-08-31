@@ -4,7 +4,7 @@
 # 何度実行しても同じ状態になる(冪等)。
 abort("開発環境でのみ実行してください (現在: #{Rails.env})") unless Rails.env.development?
 
-SCREEN_FLAGS = { "attendance" => true, "progress" => true }.freeze
+SCREEN_FLAGS = { "calendar" => true, "attendance" => true, "progress" => true }.freeze
 
 def upsert_e2e_user(email:, display_name:)
   user = User.find_or_initialize_by(email: email)

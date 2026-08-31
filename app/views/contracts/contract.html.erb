@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title><%= data[:title] %></title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP", sans-serif;
+    color: #1a1a1a;
+    font-size: 10.5px;
+    margin: 0;
+    padding: 22px 36px 44px;
+    line-height: 1.6;
+    position: relative;
+  }
+  h1.title { text-align: center; font-size: 20px; letter-spacing: 4px; margin: 4px 0 20px; font-weight: 600; }
+  .draft-badge {
+    position: absolute; top: 18px; right: 30px;
+    border: 2px solid #c0392b; color: #c0392b;
+    font-size: 13px; font-weight: 700; letter-spacing: 4px;
+    padding: 3px 10px; transform: rotate(6deg);
+  }
+  .preamble { margin: 0 0 16px; font-size: 10.5px; }
+  .article { margin: 0 0 10px; page-break-inside: avoid; break-inside: avoid-page; }
+  .article .heading { font-weight: 700; font-size: 11px; margin-bottom: 2px; }
+  .article .body { white-space: pre-wrap; font-size: 10.5px; }
+  .special-terms { margin: 14px 0; border: 1px solid #888; padding: 8px 10px; }
+  .special-terms .h { font-weight: 700; font-size: 11px; margin-bottom: 3px; }
+  .special-terms .body { white-space: pre-wrap; font-size: 10.5px; }
+  .postamble { margin: 18px 0 6px; font-size: 10.5px; }
+  .contract-date { margin: 4px 0 18px; font-size: 10.5px; }
+  .signatures { display: flex; justify-content: space-between; gap: 24px; margin-top: 10px; page-break-inside: avoid; break-inside: avoid-page; }
+  .signatures .party { flex: 1; border: 1px solid #888; padding: 10px 12px; position: relative; min-height: 150px; }
+  .signatures .party .label { font-weight: 700; font-size: 11px; margin-bottom: 6px; }
+  .signatures .party .name { font-weight: 700; font-size: 12px; margin-top: 4px; }
+  .signatures .party .addr { font-size: 9.5px; color: #333; margin-top: 2px; }
+  .hanko-img { position: absolute; top: 8px; right: 10px; width: 60px; height: 60px; object-fit: contain; }
+  .signature-img { display: block; margin-top: 8px; max-width: 220px; max-height: 80px; border-bottom: 1px solid #888; }
+  .signed-at { font-size: 9px; color: #555; margin-top: 4px; }
+  .footer {
+    position: fixed; bottom: 14px; left: 36px; right: 36px;
+    font-size: 8px; color: #777; border-top: 1px solid #ccc; padding-top: 4px;
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+</style>
+</head>
+<body>
+  <% if data[:is_draft] %>
+  <div class="draft-badge">下書き</div>
+  <% end %>
+
+  <h1 class="title"><%= data[:title] %></h1>
+
+  <div class="preamble">
+    甲 <%= data[:party_a][:name] %>（以下「甲」という。）と乙 <%= data[:party_b][:name] %>（以下「乙」という。）は、以下のとおり<%= data[:title] %>（以下「本契約」という。）を締結する。
+  </div>
+
+  <% data[:articles].each do |article| %>
+  <div class="article">
+    <div class="heading"><%= article[:heading] %></div>
+    <div class="body"><%= article[:body] %></div>
+  </div>
+  <% end %>
+
+  <% if data[:special_terms].present? %>
+  <div class="special-terms">
+    <div class="h">特記事項</div>
+    <div class="body"><%= data[:special_terms] %></div>
+  </div>
+  <% end %>
+
+  <div class="postamble">
+    本契約の成立を証するため、本書を電磁的記録として作成し、甲は記名押印（電子印影）、乙は電子署名を行い、各自その電磁的記録を保管する。
+  </div>
+
+  <div class="contract-date">契約日　<%= data[:contract_date] %></div>
+  <% if data[:start_on].present? || data[:end_on].present? %>
+  <% to_wareki = ->(value) { (value.is_a?(String) ? Date.parse(value) : value).strftime("%Y年%-m月%-d日") } %>
+  <div class="contract-date">契約期間　<%= data[:start_on].present? ? to_wareki.call(data[:start_on]) : "" %> 〜 <%= data[:end_on].present? ? to_wareki.call(data[:end_on]) : "" %></div>
+  <% end %>
+
+  <div class="signatures">
+    <div class="party">
+      <% if data[:hanko_src] %>
+      <img class="hanko-img" src="<%= data[:hanko_src] %>" />
+      <% end %>
+      <div class="label">甲</div>
+      <div class="name"><%= data[:party_a][:name] %></div>
+      <% if data[:party_a][:representative].to_s.present? %>
+      <div class="addr"><%= data[:party_a][:representative] %></div>
+      <% end %>
+      <% data[:party_a][:address].to_s.split("\n").each do |line| %>
+      <div class="addr"><%= line %></div>
+      <% end %>
+    </div>
+    <div class="party">
+      <div class="label">乙</div>
+      <div class="name"><%= data[:party_b][:name] %></div>
+      <% data[:party_b][:address].to_s.split("\n").each do |line| %>
+      <div class="addr"><%= line %></div>
+      <% end %>
+      <% if data[:is_signed] %>
+      <img class="signature-img" src="<%= data[:signature_image] %>" />
+      <div class="signed-at">署名日時: <%= data[:signed_at]&.strftime("%Y-%m-%d %H:%M") %></div>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>契約書ID: <%= data[:contract_id] %></span>
+    <% if data[:is_signed] %>
+    <span>内容ハッシュ(SHA-256): <%= data[:content_sha256] %></span>
+    <span>署名日時: <%= data[:signed_at]&.strftime("%Y-%m-%d %H:%M") %></span>
+    <% else %>
+    <span>下書き</span>
+    <span>未署名</span>
+    <% end %>
+  </div>
+</body>
+</html>

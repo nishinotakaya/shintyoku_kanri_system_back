@@ -307,7 +307,7 @@ module Api
       end
 
       KIND_LABELS = { "invoice" => "請求書", "expense" => "立替金", "work_report" => "業務報告書" }.freeze
-      CAT_LABELS = { "wings" => "Tama", "living" => "リビング", "techleaders" => "テックリーダーズ", "resystems" => "REシステムズ", "video" => "動画編集" }.freeze
+      CAT_LABELS = { "wings" => "Tama", "living" => "リビング", "techleaders" => "テックリーダーズ", "resystems" => "REシステムズ", "video" => "動画編集", "transport" => "運送" }.freeze
 
       # 申請レコードの「税込合計」を自動算出して total_override に入れる用ヘルパー。
       # - invoice: InvoicePdfRenderer.calculation[:total]  (税込)

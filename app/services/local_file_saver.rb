@@ -10,7 +10,8 @@ class LocalFileSaver
     "living" => "Living",
     "techleaders" => "テックリーダーズ",
     "resystems" => "REシステムズ",
-    "video" => "動画編集"
+    "video" => "動画編集",
+    "transport" => "運送"
   }.freeze
 
   class << self

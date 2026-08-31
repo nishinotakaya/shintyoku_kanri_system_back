@@ -42,6 +42,14 @@ module Api
             persons = params.permit(calendar_persons: [])[:calendar_persons]
             user.update!(calendar_persons: Array(persons).map(&:to_s).reject(&:empty?))
           end
+
+          # ユーザーごとに見せる勤怠カテゴリ。空配列/未指定は nil として保存し、
+          # visible_work_categories が従来どおり全カテゴリにフォールバックする(全解除=従来運用)。
+          # 不正なカテゴリ名は User のバリデーションで弾かれ、下の rescue で 422 になる。
+          if params.key?(:work_categories)
+            categories = params.permit(work_categories: [])[:work_categories]
+            user.update!(work_categories: Array(categories).map(&:to_s).reject(&:empty?).presence)
+          end
           update_data_source_permission(user) if params.key?(:data_source_permission)
 
           render json: serialize(user.reload)
@@ -120,6 +128,7 @@ module Api
             id: user.id, email: user.email, display_name: user.display_name,
             admin: user.admin?, has_google: user.provider.present?,
             feature_flags: user.feature_flags.to_h,
+            work_categories: user.work_categories,
             sub_admin: user.sub_admin?,
             managee_ids: user.managees.map(&:id),
             data_source_permissions: user.user_data_source_permissions.map(&:as_payload),
