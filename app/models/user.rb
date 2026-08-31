@@ -72,6 +72,13 @@ class User < ApplicationRecord
     users.to_a.uniq.partition(&:admin?).flatten
   end
 
+  # 通知の宛先や請求書の宛名に使う主管理者(西野 鷹也)。苗字 LIKE で探すと同姓の別人(西野 雄太郎)も
+  # 拾うので、管理者メール → 氏名の順で決める。
+  def self.primary_admin
+    by_email = ADMIN_EMAILS.filter_map { |email| find_by(email: email) }.first
+    by_email || where("display_name LIKE ?", "%#{ADMIN_DISPLAY_NAME}%").order(:id).first
+  end
+
   # 機能を使えるか。admin は明示的に false にされた機能以外は使える、フラグ ON のユーザーも true。
   # 免税事業者か（消費税の納税なし・インボイス未登録前提）。税務アドバイス等の前提を切り替える。
   def exempt_business? = tax_status == "exempt"
@@ -188,9 +195,7 @@ class User < ApplicationRecord
     if admin?
       I18n.t("companies.labop.name")
     else
-      ::User.find_by(email: "takaya314boxing@gmail.com")&.display_name.to_s.strip.presence ||
-        ::User.where("display_name LIKE ?", "%西野%").first&.display_name.to_s.strip.presence ||
-        "西野 鷹也"
+      self.class.primary_admin&.display_name.to_s.strip.presence || ADMIN_DISPLAY_NAME
     end
   end
 

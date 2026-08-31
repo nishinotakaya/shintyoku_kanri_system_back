@@ -364,7 +364,7 @@ module Api
         first = records.first
         applicant = first.user
         approve_url = ENV.fetch("FRONTEND_APPROVE_URL", "https://react-frontend-beige.vercel.app/attendance")
-        admin = User.where("email = ? OR display_name LIKE ?", "takaya314boxing@gmail.com", "%西野%").first
+        admin = User.primary_admin
         return unless admin&.google_access_token.present?
 
         # LINE: 集約 1 行で通知
@@ -479,7 +479,7 @@ module Api
       end
 
       def notify_admin_by_email(record, kind_label, cat_label, approve_url)
-        admin = User.where("email = ? OR display_name LIKE ?", "takaya314boxing@gmail.com", "%西野%").first
+        admin = User.primary_admin
         return unless admin&.google_access_token.present?
 
         applicant = record.user

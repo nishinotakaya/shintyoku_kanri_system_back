@@ -29,4 +29,17 @@ class UserAdminTest < Minitest::Test
   def test_unrelated_user_is_not_admin
     refute build(display_name: "川村 卓也").admin?
   end
+
+  # 通知宛先・請求書宛名に使う主管理者は、同姓の別人が先に登録されていても西野 鷹也本人
+  def test_primary_admin_prefers_takaya_over_same_surname_user
+    created = []
+    created << User.create!(email: "yutaro_#{SecureRandom.hex(4)}@example.com", password: "password123",
+                            display_name: "西野 雄太郎", closing_day: 25)
+    takaya = User.find_by(email: User::ADMIN_EMAILS.first) ||
+      User.create!(email: User::ADMIN_EMAILS.first, password: "password123",
+                   display_name: "西野 鷹也", closing_day: 25).tap { |user| created << user }
+    assert_equal takaya.id, User.primary_admin&.id
+  ensure
+    created&.each(&:destroy)
+  end
 end
