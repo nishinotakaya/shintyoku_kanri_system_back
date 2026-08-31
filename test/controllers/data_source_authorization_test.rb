@@ -135,6 +135,43 @@ class DataSourceAuthorizationTest < ActionDispatch::IntegrationTest
     assert_nil task.reload.progress_workspace_id
   end
 
+  # シート取込は task.progress_workspace_id を書き換えるので、他人のワークスペースを
+  # 指定できると他人の箱にタスクを差し込めてしまう。URL検証より先に弾く。
+  def test_他人のワークスペースを指定してシート取込できない
+    ProgressWorkspace.ensure_defaults!(@admin)
+    admin_workspace = @admin.progress_workspaces.first
+
+    post "/api/v1/backlog/import_sheet",
+         params: { spreadsheet_url: "https://docs.google.com/spreadsheets/d/DUMMY/edit", workspace_id: admin_workspace.id },
+         headers: auth_headers(@kawamura), as: :json
+
+    assert_response :forbidden
+  end
+
+  def test_他人のワークスペースを指定してシート書き出しできない
+    ProgressWorkspace.ensure_defaults!(@admin)
+    admin_workspace = @admin.progress_workspaces.first
+
+    post "/api/v1/backlog/export_sheet",
+         params: { spreadsheet_url: "https://docs.google.com/spreadsheets/d/DUMMY/edit", workspace_id: admin_workspace.id },
+         headers: auth_headers(@kawamura), as: :json
+
+    assert_response :forbidden
+  end
+
+  # 他人のワークスペースのスプレッドシートURLは書き換えられない
+  def test_他人のワークスペースのシートURLを更新できない
+    ProgressWorkspace.ensure_defaults!(@admin)
+    admin_workspace = @admin.progress_workspaces.first
+
+    patch "/api/v1/progress_workspaces/#{admin_workspace.id}",
+          params: { sheet_url: "https://docs.google.com/spreadsheets/d/HIJACK/edit" },
+          headers: auth_headers(@kawamura), as: :json
+
+    assert_response :not_found
+    assert_nil admin_workspace.reload.sheet_url
+  end
+
   # --- 権限の無いワークスペースのタスクは一覧に混ざらない ---
 
   def test_権限の無いワークスペースのタスクは一覧に出ない

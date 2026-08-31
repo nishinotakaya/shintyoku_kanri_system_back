@@ -169,12 +169,20 @@ module Api
         sheet = params[:sheet_name].presence
         return render(json: { error: "スプレッドシートURLを入力してください" }, status: :bad_request) unless url.present?
 
+        # 取込は task.progress_workspace_id にこの値を書き込むので、他人のワークスペースを
+        # 指定できると他人の箱にタスクを差し込めてしまう。自分のものか必ず確かめる
+        # (他人のIDなら own_workspace_id が 403 を返すのでここで打ち切る)。
+        workspace_id = nil
+        if params[:workspace_id].present?
+          workspace_id = own_workspace_id(params[:workspace_id]) or return
+        end
+
         result = GoogleSheetsImporter.new(
           user: current_user,
           spreadsheet_url: url,
           sheet_name: sheet,
           only_flagged: params[:only_flagged].to_s == "true",
-          workspace_id: params[:workspace_id]
+          workspace_id: workspace_id
         ).call
         render json: { imported: result[:imported], sheets: result[:sheets] }
       rescue => e
@@ -185,11 +193,16 @@ module Api
         url = params[:spreadsheet_url]
         return render(json: { error: "スプレッドシートURLを入力してください" }, status: :bad_request) unless url.present?
 
+        workspace_id = nil
+        if params[:workspace_id].present?
+          workspace_id = own_workspace_id(params[:workspace_id]) or return
+        end
+
         result = GoogleSheetsExporter.new(
           user: current_user,
           spreadsheet_url: url,
           only_flagged: params[:only_flagged].to_s == "true",
-          workspace_id: params[:workspace_id]
+          workspace_id: workspace_id
         ).call
         render json: { success: true, active: result[:active], completed: result[:completed] }
       rescue => e
