@@ -5,11 +5,13 @@ require "date"
 # 進捗管理_西野.xlsx と同じフォーマットを想定:
 # B列: タスク名(SAP-XXXX)、F:予定開始、G:予定終了、H:実績開始、I:実績終了、J:進捗率
 class GoogleSheetsImporter
-  def initialize(user:, spreadsheet_url:, sheet_name: nil, only_flagged: false)
+  # workspace_id: 案件ごとに別シートを使うため、取り込んだタスクをそのワークスペースへ入れる。
+  def initialize(user:, spreadsheet_url:, sheet_name: nil, only_flagged: false, workspace_id: nil)
     @user = user
     @spreadsheet_id = extract_id(spreadsheet_url)
     @sheet_name = sheet_name
     @only_flagged = only_flagged
+    @workspace_id = workspace_id.presence
     raise "Google アクセストークンがありません。再度 Google ログインしてください。" if @user.google_access_token.blank? && @user.google_refresh_token.blank?
   end
 
@@ -67,10 +69,10 @@ class GoogleSheetsImporter
   def parse_and_import(rows, formula_rows = [])
     imported = []
 
-    # 列構成を自動検出（進捗管理_西野.xlsx 形式）
-    # B列タイトル → col 1 (0-indexed)、F-I → col 5-8、J → col 9
-    # A列タイトル → col 0、E-H → col 4-7、I → col 8
-    title_col, plan_s, plan_e, act_s, act_e, prog_col = detect_layout(rows)
+    # 列構成を自動検出。
+    # 本アプリが書き出したシート: A=本日行う(チェック) / B=タスク名 / C〜G=日付・進捗 / J=id
+    # 進捗管理_西野.xlsx 形式: B列タイトル → F-I → J、または A列タイトル → E-H → I
+    title_col, plan_s, plan_e, act_s, act_e, prog_col, id_col, today_col = detect_layout(rows)
 
     rows.each_with_index do |row, i|
       next if i < 3 # ヘッダ行 + 空行スキップ（セクション見出し【】は下で除外）
@@ -98,8 +100,8 @@ class GoogleSheetsImporter
 
       key = sap || "SHEET-#{Digest::MD5.hexdigest(title)[0..5].upcase}"
 
-      # A列の id で既存タスクを検索（あれば更新、なければ issue_key で find_or_initialize）
-      id_val = title_col == 1 ? row[0].to_s.strip : ""
+      # id 列で既存タスクを検索（あれば更新、なければ issue_key で find_or_initialize）
+      id_val = id_col ? row[id_col].to_s.strip : ""
       task = if id_val.match?(/\A\d+\z/)
                @user.backlog_tasks.find_by(id: id_val.to_i) || @user.backlog_tasks.find_or_initialize_by(issue_key: key)
       else
@@ -113,6 +115,11 @@ class GoogleSheetsImporter
       task.end_date = actual_end || plan_end
       task.source ||= "sheet"
       task.url = url if url.present?
+      # 案件ごとのシートから取り込んだので、そのワークスペースに置く（未所属の新規タスクのみ）
+      task.progress_workspace_id ||= @workspace_id if @workspace_id
+      # A列のチェックボックス → 「本日行う」。シート上でチェックを外した場合も反映したいので、
+      # 列がある限り true/false を毎回そのまま入れる（外しても消えない、を避ける）。
+      task.do_today = parse_checkbox(row[today_col]) if today_col
 
       if progress
         task.progress_value = progress
@@ -142,16 +149,33 @@ class GoogleSheetsImporter
     imported
   end
 
+  # 戻り値: [title_col, plan_s, plan_e, act_s, act_e, prog_col, id_col, today_col]
+  # id_col / today_col は無ければ nil。
   def detect_layout(rows)
-    # B列にテキストが多ければ進捗管理_西野.xlsx形式
+    # 1) このアプリが書き出したシートは、ヘッダ行に「タスク名」と「id」が並ぶ。
+    #    列位置を数え方で推測すると、A列のチェックボックスが "TRUE"/"FALSE" という
+    #    文字として数えられて誤判定するため、ヘッダを見て確定させる。
+    header = rows[0..9].find { |r| r[1].to_s.strip == "タスク名" }
+    if header
+      id_col = header.index { |cell| cell.to_s.strip == "id" }
+      today_col = header.index { |cell| cell.to_s.strip == "本日行う" }
+      return [ 1, 2, 3, 4, 5, 6, id_col, today_col ]
+    end
+
+    # 2) 手元の 進捗管理_西野.xlsx 形式（ヘッダが無い/別名のシート）
     b_texts = rows[0..9].count { |r| r[1].to_s.strip.present? }
     a_texts = rows[0..9].count { |r| r[0].to_s.strip.present? }
 
     if b_texts > a_texts
-      [ 1, 5, 6, 7, 8, 9 ]  # B列タイトル
+      [ 1, 5, 6, 7, 8, 9, 0, nil ]  # B列タイトル / A列が id
     else
-      [ 0, 4, 5, 6, 7, 8 ]  # A列タイトル
+      [ 0, 4, 5, 6, 7, 8, nil, nil ] # A列タイトル（id 列なし）
     end
+  end
+
+  # チェックボックスは values API で "TRUE"/"FALSE" の文字列として返る。
+  def parse_checkbox(val)
+    %w[true TRUE 1 ✓].include?(val.to_s.strip)
   end
 
   def parse_date(val)

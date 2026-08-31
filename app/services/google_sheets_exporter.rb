@@ -6,28 +6,33 @@ require "google/apis/sheets_v4"
 # シート2: 完了タスク
 class GoogleSheetsExporter
   # 色定義 (RGB 0-1)
-  # 「タスク名」ヘッダ + 「完了 / 処理済 / 処理中 / 未対応」セクション見出しを全部緑に統一。
-  GREEN_SECTION = { red: 0.6, green: 0.88, blue: 0.6 }.freeze
+  # 「本日行う」は A列のチェックボックスで判別できるようになったため、
+  # 黄/ピンク/紫の色分けはやめて背景は黄色に統一する（見出しも含めて全部黄色）。
+  YELLOW = { red: 1.00, green: 0.95, blue: 0.60 }.freeze # 見出し
+  YELLOW_LIGHT = { red: 1.00, green: 0.98, blue: 0.80 }.freeze # タスク行(見出しと区別できる程度に淡く)
   COLORS = {
-    header_bg:    GREEN_SECTION,                            # ヘッダ (タスク名 ...) を緑
-    section_done: GREEN_SECTION,                            # 処理済
-    section_wip:  GREEN_SECTION,                            # 処理中
-    section_todo: GREEN_SECTION,                            # 未対応
-    completed:    GREEN_SECTION,                            # 完了
-    # 行マーキング: 「本日行う」「前回行った」「両方」 — 淡めにして見づらくしない
-    flag_today:    { red: 1.00, green: 0.97, blue: 0.70 }, # 淡い黄（本日行う）
-    flag_previous: { red: 1.00, green: 0.85, blue: 0.92 }, # 淡いピンク（前回行った）
-    flag_both:     { red: 0.85, green: 0.72, blue: 1.00 }, # 紫（両方）
+    header_bg:    YELLOW, # ヘッダ (タスク名 ...)
+    section_done: YELLOW, # 処理済
+    section_wip:  YELLOW, # 処理中
+    section_todo: YELLOW, # 未対応
+    completed:    YELLOW, # 完了
+    task_row:     YELLOW_LIGHT,
     white:        { red: 1.0, green: 1.0, blue: 1.0 }
   }.freeze
 
-  # データはA〜Iの9列。これより右(J列以降)はスキルシート同様に列ごと削除してグリッド線を消す
-  DATA_COLUMN_COUNT = 9
+  # A列=チェックボックス(本日行う) / B〜I=データ / J列=タスクid(取込の突合キー・非表示)。
+  # J までがデータなので 10 列。これより右(K列以降)は列ごと削除してグリッド線を消す
+  DATA_COLUMN_COUNT = 10
+  # 取込時に既存タスクを突き合わせる id を置く列(0-indexed)。A列はチェックボックスに使うため J へ逃がす
+  ID_COLUMN_INDEX = 9
 
-  def initialize(user:, spreadsheet_url:, only_flagged: false)
+  # workspace_id: 指定するとそのワークスペース(Wing / リビング等)のタスクだけを書き出す。
+  # 案件ごとに別のスプレッドシートを使うため、混ざらないようにする。
+  def initialize(user:, spreadsheet_url:, only_flagged: false, workspace_id: nil)
     @user = user
     @spreadsheet_id = extract_id(spreadsheet_url)
     @only_flagged = only_flagged
+    @workspace_id = workspace_id.presence
     raise "Google アクセストークンがありません。再度 Google ログインしてください。" if @user.google_access_token.blank? && @user.google_refresh_token.blank?
   end
 
@@ -46,14 +51,14 @@ class GoogleSheetsExporter
     ensure_sheet(existing, completed_sheet) unless @only_flagged
 
     # データ取得 (only_flagged=true なら do_today || did_previous のみ)
-    base = @user.backlog_tasks
+    base = scoped_tasks
     if @only_flagged
       base = base.where("do_today = ? OR did_previous = ?", true, true)
     end
     done_tasks = base.where(status_id: 3).order(:issue_key)    # 処理済
     wip_tasks = base.where(status_id: 2).order(:issue_key)     # 処理中
     todo_tasks = base.where(status_id: 1).order(:issue_key)    # 未対応
-    completed_tasks = @only_flagged ? [] : @user.backlog_tasks.where(status_id: 4).order(completed_on: :desc)
+    completed_tasks = @only_flagged ? [] : scoped_tasks.where(status_id: 4).order(completed_on: :desc)
 
     write_active_sheet(active_sheet, done_tasks, wip_tasks, todo_tasks)
     write_completed_sheet(completed_sheet, completed_tasks) unless @only_flagged
@@ -62,6 +67,11 @@ class GoogleSheetsExporter
   end
 
   private
+
+  # 案件ごとに別シートへ書き出すので、ワークスペース指定があればそれで絞る
+  def scoped_tasks
+    @workspace_id ? @user.backlog_tasks.where(progress_workspace_id: @workspace_id) : @user.backlog_tasks
+  end
 
   def extract_id(url)
     m = url.match(%r{/spreadsheets/d/([a-zA-Z0-9_-]+)})
@@ -84,21 +94,14 @@ class GoogleSheetsExporter
 
   def write_active_sheet(sheet_name, done_tasks, wip_tasks, todo_tasks)
     rows = []
-    flag_rows = [] # [row_index, color_key]
-    legend_rows = [] # 凡例ハイライト [row_index, color_key]
 
-    # 凡例（最上部）: 両方チェック時のみ紫
-    legend_rows << [ rows.size, :flag_today ]
-    rows << [ "", "■ 黄 = 本日行う", "", "", "", "", "", "", "" ]
-    legend_rows << [ rows.size, :flag_previous ]
-    rows << [ "", "■ ピンク = 前回行った", "", "", "", "", "", "", "" ]
-    legend_rows << [ rows.size, :flag_both ]
-    rows << [ "", "■ 紫 = 本日行う + 前回行った（両方）", "", "", "", "", "", "", "" ]
+    # 「本日行う」は A列のチェックボックスで見えるので、色の凡例行は置かない
+    rows << [ "", "本日行う → A列のチェックを入れる（チェックしたまま取込むとアプリにも反映されます）" ]
     rows << []
 
     # ヘッダ
-    rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
-    rows << [ "", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", "" ]
+    rows << [ "本日行う", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考", "id" ]
+    rows << [ "", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", "", "" ]
     rows << []
 
     section_rows = [] # セクション行の位置を記録 [row_index, color_key]
@@ -107,60 +110,36 @@ class GoogleSheetsExporter
       next unless tasks.any?
       section_rows << [ rows.size, color_key ]
       rows << [ "", label ]
-      tasks.each do |t|
-        flag = task_flag_color(t)
-        flag_rows << [ rows.size, flag ] if flag
-        rows << task_row(t)
-      end
+      tasks.each { |t| rows << task_row(t) }
       rows << []
     end
 
     # 完了2日以内セクション（最近完了したもの）
-    recent = @user.backlog_tasks.where(status_id: 4)
+    recent = scoped_tasks.where(status_id: 4)
       .where("completed_on >= ?", Date.current - 2).order(completed_on: :desc)
     push_section.call("【完了（2日以内）】", :completed, recent)
     push_section.call("【処理済】", :section_done, done_tasks)
     push_section.call("【処理中】", :section_wip, wip_tasks)
     push_section.call("【未対応】", :section_todo, todo_tasks)
 
-    write_and_format(sheet_name, rows, section_rows, header_row_offset: 4, flag_rows: flag_rows, legend_rows: legend_rows)
+    write_and_format(sheet_name, rows, section_rows, header_row_offset: 2)
   end
 
   def write_completed_sheet(sheet_name, tasks)
     rows = []
-    flag_rows = []
-    legend_rows = []
 
-    legend_rows << [ rows.size, :flag_today ]
-    rows << [ "", "■ 黄 = 本日行う", "", "", "", "", "", "", "" ]
-    legend_rows << [ rows.size, :flag_previous ]
-    rows << [ "", "■ ピンク = 前回行った", "", "", "", "", "", "", "" ]
-    legend_rows << [ rows.size, :flag_both ]
-    rows << [ "", "■ 紫 = 本日行う + 前回行った（両方）", "", "", "", "", "", "", "" ]
+    rows << [ "", "本日行う → A列のチェックを入れる（チェックしたまま取込むとアプリにも反映されます）" ]
     rows << []
 
-    rows << [ "", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考" ]
-    rows << [ "", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", "" ]
+    rows << [ "本日行う", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考", "id" ]
+    rows << [ "", "", "", "", "", "", "20%=調査中\n40%=実装中\n60%=実装完了\n80%=エビデンス完了\n100%=完了", "", "", "" ]
     rows << []
 
     section_rows = [ [ rows.size, :completed ] ]
     rows << [ "", "【完了】" ]
-    tasks.each do |t|
-      flag = task_flag_color(t)
-      flag_rows << [ rows.size, flag ] if flag
-      rows << task_row(t)
-    end
+    tasks.each { |t| rows << task_row(t) }
 
-    write_and_format(sheet_name, rows, section_rows, header_row_offset: 4, flag_rows: flag_rows, legend_rows: legend_rows)
-  end
-
-  # 「本日のみ」黄、「前回のみ」ピンク、「両方」紫、なし → nil(白)
-  def task_flag_color(t)
-    case [ t.do_today, t.did_previous ]
-    when [ true, true ]  then :flag_both
-    when [ true, false ] then :flag_today
-    when [ false, true ] then :flag_previous
-    end
+    write_and_format(sheet_name, rows, section_rows, header_row_offset: 2)
   end
 
   def task_row(t)
@@ -171,7 +150,7 @@ class GoogleSheetsExporter
     title_cell = t.url.present? ? %(=HYPERLINK("#{t.url.to_s.gsub('"', '""')}","#{title.gsub('"', '""')}")) : title
 
     [
-      t.id.to_s,                                  # A: id（背景色で非表示）
+      t.do_today ? true : false,                  # A: 本日行う（チェックボックス）
       title_cell,                                 # B: タスク名
       t.start_date&.to_s || t.created_on&.to_s,  # C: 予定開始
       t.end_date&.to_s || t.due_date&.to_s,      # D: 予定終了
@@ -179,16 +158,17 @@ class GoogleSheetsExporter
       t.completed_on&.to_s,                       # F: 実績終了
       progress_str,                               # G: 進捗率
       t.assignee_name.to_s,                       # H: 担当
-      t.memo.to_s                                 # I: 備考
+      t.memo.to_s,                                # I: 備考
+      t.id.to_s                                   # J: id（取込の突合キー。列ごと非表示）
     ]
   end
 
-  def write_and_format(sheet_name, rows, section_rows, header_row_offset: 0, flag_rows: [], legend_rows: [])
+  def write_and_format(sheet_name, rows, section_rows, header_row_offset: 0)
     # クリア
-    @service.clear_values(@spreadsheet_id, "#{sheet_name}!A:I")
+    @service.clear_values(@spreadsheet_id, "#{sheet_name}!A:J")
 
     # 書き込み
-    range = "#{sheet_name}!A1:I#{rows.size}"
+    range = "#{sheet_name}!A1:J#{rows.size}"
     value_range = Google::Apis::SheetsV4::ValueRange.new(range: range, values: rows)
     @service.update_spreadsheet_value(@spreadsheet_id, range, value_range, value_input_option: "USER_ENTERED")
 
@@ -201,8 +181,10 @@ class GoogleSheetsExporter
     # 書式リクエスト
     requests = []
 
-    # ★ まず全範囲(A:I, 0〜2000行)の書式を白でリセット
-    # clear_values は値しか消さないため、過去の背景色が残ってしまうのを防ぐ
+    # ★ まず全範囲(A:J, 0〜2000行)の書式を白でリセット
+    # clear_values は値しか消さないため、過去の背景色(旧仕様の黄/ピンク/紫)が残るのを防ぐ。
+    # 併せて A列の旧データ検証(チェックボックス)も消す。行数が減ったとき、
+    # 前回のチェックボックスが値のない行に居残るため。
     requests << {
       repeat_cell: {
         range: {
@@ -210,7 +192,7 @@ class GoogleSheetsExporter
           start_row_index: 0,
           end_row_index: 2000,
           start_column_index: 0,
-          end_column_index: 9
+          end_column_index: DATA_COLUMN_COUNT
         },
         cell: {
           user_entered_format: {
@@ -221,13 +203,13 @@ class GoogleSheetsExporter
         fields: "userEnteredFormat(backgroundColor,textFormat)"
       }
     }
+    requests << {
+      set_data_validation: {
+        range: { sheet_id: sheet_id, start_row_index: 0, end_row_index: 2000, start_column_index: 0, end_column_index: 1 }
+      }
+    }
 
-    # 凡例行に背景色（最上部 2 行）
-    legend_rows.each do |(row_idx, color_key)|
-      requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[color_key], true)
-    end
-
-    # ヘッダ行に背景色（凡例の下）
+    # ヘッダ行に背景色
     requests << format_rows(sheet_id, header_row_offset, header_row_offset + 2, COLORS[:header_bg], true)
 
     # 既存フィルタをクリア
@@ -235,47 +217,31 @@ class GoogleSheetsExporter
       requests << { clear_basic_filter: { sheet_id: sheet_id } }
     end
 
-    # セクション行は色付き太字、その中のタスク行はデフォルト白
-    section_rows.each_with_index do |(row_idx, color_key), i|
-      # セクション行自体は太字 + セクション色
-      requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[color_key], true)
+    # セクション見出しは濃い黄+太字、その下のタスク行は淡い黄。
+    # 「本日行う/前回行った」の色分けは廃止(A列のチェックボックスで判別する)。
+    section_rows.each_with_index do |(row_idx, _color_key), i|
+      requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[:header_bg], true)
 
-      # 次のセクションまで or 末尾まで、タスク行は白背景
+      # 次のセクション見出しまで(なければ末尾まで)がこのセクションのタスク行
       next_start = (i + 1 < section_rows.size) ? section_rows[i + 1][0] : rows.size
-      if next_start > row_idx + 1
-        requests << format_rows(sheet_id, row_idx + 1, next_start, COLORS[:white], false)
-        # A列のidを非表示（文字色=背景色=白）
-        requests << {
-          repeat_cell: {
-            range: {
-              sheet_id: sheet_id,
-              start_row_index: row_idx + 1,
-              end_row_index: next_start,
-              start_column_index: 0,
-              end_column_index: 1
-            },
-            cell: { user_entered_format: { background_color: COLORS[:white], text_format: { foreground_color: COLORS[:white] } } },
-            fields: "userEnteredFormat(backgroundColor,textFormat)"
-          }
-        }
-      end
-    end
+      next unless next_start > row_idx + 1
 
-    # フラグ行を上塗り（本日 / 前回 / 両方）
-    flag_rows.each do |(row_idx, color_key)|
-      requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[color_key], false)
-      # A列のid非表示も維持（背景=文字色）
+      requests << format_rows(sheet_id, row_idx + 1, next_start, COLORS[:task_row], false)
+      # A列にチェックボックスを出す(値は task_row が true/false で入れている)
       requests << {
         repeat_cell: {
           range: {
             sheet_id: sheet_id,
-            start_row_index: row_idx,
-            end_row_index: row_idx + 1,
+            start_row_index: row_idx + 1,
+            end_row_index: next_start,
             start_column_index: 0,
             end_column_index: 1
           },
-          cell: { user_entered_format: { background_color: COLORS[color_key], text_format: { foreground_color: COLORS[color_key] } } },
-          fields: "userEnteredFormat(backgroundColor,textFormat)"
+          cell: {
+            data_validation: { condition: { type: "BOOLEAN" } },
+            user_entered_format: { horizontal_alignment: "CENTER" }
+          },
+          fields: "dataValidation,userEnteredFormat.horizontalAlignment"
         }
       }
     end
@@ -295,6 +261,24 @@ class GoogleSheetsExporter
         range: { sheet_id: sheet_id, dimension: "COLUMNS", start_index: 8, end_index: 9 },
         properties: { pixel_size: 300 },
         fields: "pixelSize"
+      }
+    }
+
+    # A列(チェックボックス)はチェックが押せる程度の幅にする
+    requests << {
+      update_dimension_properties: {
+        range: { sheet_id: sheet_id, dimension: "COLUMNS", start_index: 0, end_index: 1 },
+        properties: { pixel_size: 70 },
+        fields: "pixelSize"
+      }
+    }
+
+    # J列(id)は取込の突合にだけ使う内部データなので列ごと隠す
+    requests << {
+      update_dimension_properties: {
+        range: { sheet_id: sheet_id, dimension: "COLUMNS", start_index: ID_COLUMN_INDEX, end_index: ID_COLUMN_INDEX + 1 },
+        properties: { hidden_by_user: true },
+        fields: "hiddenByUser"
       }
     }
 
@@ -325,7 +309,7 @@ class GoogleSheetsExporter
     filter_requests << {
       set_basic_filter: {
         filter: {
-          range: { sheet_id: sheet_id, start_row_index: header_row_offset + 2, start_column_index: 0, end_column_index: 9 }
+          range: { sheet_id: sheet_id, start_row_index: header_row_offset + 2, start_column_index: 0, end_column_index: DATA_COLUMN_COUNT }
         }
       }
     }
@@ -344,7 +328,7 @@ class GoogleSheetsExporter
           start_row_index: start_row,
           end_row_index: end_row,
           start_column_index: 0,
-          end_column_index: 9
+          end_column_index: DATA_COLUMN_COUNT
         },
         cell: { user_entered_format: cell_format },
         fields: "userEnteredFormat(backgroundColor#{bold ? ',textFormat' : ''})"

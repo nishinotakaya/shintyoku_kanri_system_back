@@ -173,7 +173,8 @@ module Api
           user: current_user,
           spreadsheet_url: url,
           sheet_name: sheet,
-          only_flagged: params[:only_flagged].to_s == "true"
+          only_flagged: params[:only_flagged].to_s == "true",
+          workspace_id: params[:workspace_id]
         ).call
         render json: { imported: result[:imported], sheets: result[:sheets] }
       rescue => e
@@ -187,7 +188,8 @@ module Api
         result = GoogleSheetsExporter.new(
           user: current_user,
           spreadsheet_url: url,
-          only_flagged: params[:only_flagged].to_s == "true"
+          only_flagged: params[:only_flagged].to_s == "true",
+          workspace_id: params[:workspace_id]
         ).call
         render json: { success: true, active: result[:active], completed: result[:completed] }
       rescue => e

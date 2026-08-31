@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_27_000001) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_31_000001) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -478,6 +478,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_27_000001) do
     t.integer "position", default: 0
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "sheet_url"
     t.index ["user_id"], name: "index_progress_workspaces_on_user_id"
   end
 

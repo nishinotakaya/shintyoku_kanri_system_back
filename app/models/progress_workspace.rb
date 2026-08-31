@@ -32,6 +32,6 @@ class ProgressWorkspace < ApplicationRecord
   end
 
   def as_payload
-    { id: id, name: name, source_type: source_type, builtin: builtin, position: position }
+    { id: id, name: name, source_type: source_type, builtin: builtin, position: position, sheet_url: sheet_url }
   end
 end

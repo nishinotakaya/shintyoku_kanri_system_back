@@ -29,7 +29,12 @@ module Api
       end
 
       def update
-        @progress_workspace.update!(name: params[:name])
+        # 名前とスプレッドシートURLはそれぞれ単独でも更新できるようにする
+        # (URLだけ保存したいときに name を送らずに済ませる)。
+        attributes = {}
+        attributes[:name] = params[:name] if params.key?(:name)
+        attributes[:sheet_url] = params[:sheet_url].to_s.strip.presence if params.key?(:sheet_url)
+        @progress_workspace.update!(attributes) if attributes.any?
         render json: @progress_workspace.as_payload
       end
 
