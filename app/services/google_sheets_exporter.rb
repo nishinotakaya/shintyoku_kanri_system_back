@@ -6,17 +6,17 @@ require "google/apis/sheets_v4"
 # シート2: 完了タスク
 class GoogleSheetsExporter
   # 色定義 (RGB 0-1)
-  # 「本日行う」は A列のチェックボックスで判別できるようになったため、
-  # 黄/ピンク/紫の色分けはやめて背景は黄色に統一する（見出しも含めて全部黄色）。
-  YELLOW = { red: 1.00, green: 0.95, blue: 0.60 }.freeze # 見出し
-  YELLOW_LIGHT = { red: 1.00, green: 0.98, blue: 0.80 }.freeze # タスク行(見出しと区別できる程度に淡く)
+  # 色を付けるのは見出しだけ:
+  #   ヘッダ行(本日行う/タスク名/…/id) と セクション見出し(【処理中】など) を黄色。
+  # タスク行は白。「本日行う」は A列のチェックボックスで判別するので、
+  # 行を色分けする必要がなくなった(旧仕様の 黄/ピンク/紫 は廃止)。
+  YELLOW = { red: 1.00, green: 0.95, blue: 0.60 }.freeze
   COLORS = {
-    header_bg:    YELLOW, # ヘッダ (タスク名 ...)
+    header_bg:    YELLOW, # ヘッダ (本日行う / タスク名 ...)
     section_done: YELLOW, # 処理済
     section_wip:  YELLOW, # 処理中
     section_todo: YELLOW, # 未対応
     completed:    YELLOW, # 完了
-    task_row:     YELLOW_LIGHT,
     white:        { red: 1.0, green: 1.0, blue: 1.0 }
   }.freeze
 
@@ -220,7 +220,7 @@ class GoogleSheetsExporter
       requests << { clear_basic_filter: { sheet_id: sheet_id } }
     end
 
-    # セクション見出しは濃い黄+太字、その下のタスク行は淡い黄。
+    # セクション見出し(【処理中】など)だけ黄色+太字。タスク行は白のまま。
     # 「本日行う/前回行った」の色分けは廃止(A列のチェックボックスで判別する)。
     section_rows.each_with_index do |(row_idx, _color_key), i|
       requests << format_rows(sheet_id, row_idx, row_idx + 1, COLORS[:header_bg], true)
@@ -229,7 +229,7 @@ class GoogleSheetsExporter
       next_start = (i + 1 < section_rows.size) ? section_rows[i + 1][0] : rows.size
       next unless next_start > row_idx + 1
 
-      requests << format_rows(sheet_id, row_idx + 1, next_start, COLORS[:task_row], false)
+      requests << format_rows(sheet_id, row_idx + 1, next_start, COLORS[:white], false)
       # A列にチェックボックスを出す(値は task_row が true/false で入れている)
       requests << {
         repeat_cell: {
