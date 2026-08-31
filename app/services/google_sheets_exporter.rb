@@ -96,7 +96,7 @@ class GoogleSheetsExporter
     rows = []
 
     # 「本日行う」は A列のチェックボックスで見えるので、色の凡例行は置かない
-    rows << [ "", "本日行う → A列のチェックを入れる（チェックしたまま取込むとアプリにも反映されます）" ]
+    rows << [ "", "本日やるタスクの A列にチェックを入れて「インポート」すると、アプリの「本日行う」に反映されます（書き出し直後は全て未チェック）" ]
     rows << []
 
     # ヘッダ
@@ -128,7 +128,7 @@ class GoogleSheetsExporter
   def write_completed_sheet(sheet_name, tasks)
     rows = []
 
-    rows << [ "", "本日行う → A列のチェックを入れる（チェックしたまま取込むとアプリにも反映されます）" ]
+    rows << [ "", "本日やるタスクの A列にチェックを入れて「インポート」すると、アプリの「本日行う」に反映されます（書き出し直後は全て未チェック）" ]
     rows << []
 
     rows << [ "本日行う", "タスク名", "予定開始", "予定終了", "実績開始", "実績終了", "進捗率", "担当", "備考", "id" ]
@@ -150,7 +150,10 @@ class GoogleSheetsExporter
     title_cell = t.url.present? ? %(=HYPERLINK("#{t.url.to_s.gsub('"', '""')}","#{title.gsub('"', '""')}")) : title
 
     [
-      t.do_today ? true : false,                  # A: 本日行う（チェックボックス）
+      # A: 本日行う（チェックボックス）。書き出しは常に未チェックで出し、
+      #    シート上でその日にやる分だけチェックしてもらう運用にする。
+      #    (アプリ側の do_today を持ち込むと、前回の分が最初から付いた状態になる)
+      false,
       title_cell,                                 # B: タスク名
       t.start_date&.to_s || t.created_on&.to_s,  # C: 予定開始
       t.end_date&.to_s || t.due_date&.to_s,      # D: 予定終了
