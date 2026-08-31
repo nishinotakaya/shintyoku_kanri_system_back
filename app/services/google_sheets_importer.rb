@@ -117,9 +117,15 @@ class GoogleSheetsImporter
       task.url = url if url.present?
       # 案件ごとのシートから取り込んだので、そのワークスペースに置く（未所属の新規タスクのみ）
       task.progress_workspace_id ||= @workspace_id if @workspace_id
-      # A列のチェックボックス → 「本日行う」。シート上でチェックを外した場合も反映したいので、
-      # 列がある限り true/false を毎回そのまま入れる（外しても消えない、を避ける）。
-      task.do_today = parse_checkbox(row[today_col]) if today_col
+      # A列のチェックボックス → 「本日行う」と「前回行った」の両方。
+      # シートでチェックした＝今日やる（本日行う）であり、やった記録でもある（前回行った）。
+      # チェックを外した場合も反映したいので、列がある限り true/false を毎回そのまま入れる
+      # （外しても消えない、を避ける）。
+      if today_col
+        checked = parse_checkbox(row[today_col])
+        task.do_today = checked
+        task.did_previous = checked
+      end
 
       if progress
         task.progress_value = progress

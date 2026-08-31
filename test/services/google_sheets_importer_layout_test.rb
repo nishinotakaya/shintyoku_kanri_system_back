@@ -68,22 +68,26 @@ class GoogleSheetsImporterLayoutTest < Minitest::Test
     assert_nil today_col, "旧形式にチェックボックス列は無い"
   end
 
-  # 3. チェックが入っていれば do_today が true になる
-  def test_imports_checked_box_as_do_today
+  # 3. チェックが入っていれば「本日行う」と「前回行った」の両方が true になる
+  def test_imports_checked_box_into_both_flags
     imported = @importer.send(:parse_and_import, exported_rows(check: "TRUE", id: ""), [])
 
     assert_equal 1, imported.size
     assert imported.first.do_today, "A列にチェックがあれば本日行う"
+    assert imported.first.did_previous, "A列にチェックがあれば前回行った"
   end
 
-  # 4. チェックを外したら false に戻る（外しても消えない、を避ける）
-  def test_unchecked_box_clears_do_today
-    task = @user.backlog_tasks.create!(issue_key: "SAP-1234", summary: "既存", do_today: true,
+  # 4. チェックを外したら両方 false に戻る（外しても消えない、を避ける）
+  def test_unchecked_box_clears_both_flags
+    task = @user.backlog_tasks.create!(issue_key: "SAP-1234", summary: "既存",
+                                        do_today: true, did_previous: true,
                                         status_id: 2, created_on: Date.new(2026, 8, 1))
 
     @importer.send(:parse_and_import, exported_rows(check: "FALSE", id: task.id.to_s), [])
 
-    refute task.reload.do_today, "シートでチェックを外したら false に戻す"
+    task.reload
+    refute task.do_today, "シートでチェックを外したら本日行うは false"
+    refute task.did_previous, "シートでチェックを外したら前回行ったも false"
   end
 
   # 5. J列の id で既存タスクを更新する（A列ではなく）
