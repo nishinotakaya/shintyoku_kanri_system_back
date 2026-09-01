@@ -110,7 +110,7 @@ module Api
           :title, :party_a_name, :party_a_address, :party_a_representative,
           :party_b_name, :party_b_address, :party_b_representative,
           :contract_date, :start_on, :end_on, :special_terms,
-          articles: [:heading, :body, :page_break_before]
+          articles: [ :heading, :body, :page_break_before ]
         ).to_h.symbolize_keys
       end
 
