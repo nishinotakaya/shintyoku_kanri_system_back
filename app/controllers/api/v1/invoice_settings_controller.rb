@@ -61,7 +61,9 @@ module Api
           bank_info: s.bank_info, payment_due_type: s.payment_due_type, default_items: s.default_items,
           # 報酬形態(運送のみ画面に出す): hourly = 時給 / daily = 日給 + 超過時給
           pay_type: s.effective_pay_type, daily_rate: s.daily_rate,
-          standard_hours: s.standard_hours&.to_f, overtime_unit_price: s.overtime_unit_price
+          standard_hours: s.standard_hours&.to_f, overtime_unit_price: s.overtime_unit_price,
+          # 超過時給が未入力のときに使われる既定(日給 ÷ 所定時間 × 1.25)。画面のプレースホルダに出す
+          default_overtime_unit_price: s.default_overtime_unit_price
         }
       end
     end

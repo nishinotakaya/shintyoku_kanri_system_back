@@ -214,7 +214,7 @@ class InvoicePdfRenderer
     rows = [ { label: label, qty: days, unit: "日", unit_price: daily_rate, amount: days * daily_rate } ]
 
     overtime = overtime_hours_in(period)
-    overtime_price = @setting.overtime_unit_price.to_i
+    overtime_price = @setting.effective_overtime_unit_price
     if overtime.positive?
       rows << { label: "時間外(#{@setting.standard_hours_per_day.to_i}時間超過分)",
                 qty: format_qty(overtime), unit: "時間", unit_price: overtime_price,

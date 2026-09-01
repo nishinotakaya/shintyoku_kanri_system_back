@@ -65,6 +65,21 @@ class TransportInvoiceTest < ActiveSupport::TestCase
 
   # 申請を作った時点で稼働時間が 0 だった等で total_override に 0 が入っていても、
   # 明細だけ 20,000 円で 小計・合計が 0 になる、という食い違いを起こさない
+  # 日給で超過時給が未入力なら、日給 ÷ 所定時間 × 1.25 を使う(0 円で残業が無料になってはいけない)。
+  # 日給 17,000 × 3日 = 51,000 ＋ 超過 (10h−8h) × 3日 = 6h × 2,656 = 15,936 → 66,936(税抜)
+  def test_daily_pay_falls_back_to_default_overtime_unit_price
+    @user.invoice_setting_for("transport").update!(pay_type: "daily", daily_rate: 17_000, overtime_unit_price: nil)
+
+    calc = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport").calculation
+    daily_row, overtime_row = calc[:items]
+
+    assert_equal 3, daily_row[:qty]
+    assert_equal 17_000, daily_row[:unit_price]
+    assert_equal 2_656, overtime_row[:unit_price]
+    assert_equal 15_936, overtime_row[:amount]
+    assert_equal 66_936, calc[:subtotal]
+  end
+
   def test_zero_total_override_is_treated_as_unset
     data = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport",
                                   total_override: 0).calculation

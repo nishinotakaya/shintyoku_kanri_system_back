@@ -18,6 +18,32 @@ class InvoiceSettingTest < Minitest::Test
     refute_includes InvoiceSetting::DEFAULTS[:bank_info].to_s, "東京ベイ"
   end
 
+  # 超過時給(残業)の既定 = 日給 ÷ 所定時間 × 1.25(労基法の時間外割増)。
+  # 日給 17,000 / 8h → 基礎時給 2,125 × 1.25 = 2,656.25 → 2,656 円
+  def test_default_overtime_unit_price_is_daily_rate_per_hour_with_25_percent_premium
+    setting = InvoiceSetting.new(category: "transport", pay_type: "daily", daily_rate: 17_000)
+    assert_equal 2_656, setting.default_overtime_unit_price
+
+    setting.standard_hours = 10
+    assert_equal 2_125, setting.default_overtime_unit_price
+  end
+
+  def test_default_overtime_unit_price_is_nil_without_daily_rate
+    assert_nil InvoiceSetting.new(category: "transport", pay_type: "daily").default_overtime_unit_price
+  end
+
+  # 入力があればそれを使い、未入力(nil/0)なら既定値に落ちる。0 円で残業が無料になってはいけない
+  def test_effective_overtime_unit_price_prefers_explicit_value_then_default
+    setting = InvoiceSetting.new(category: "transport", pay_type: "daily", daily_rate: 17_000)
+    assert_equal 2_656, setting.effective_overtime_unit_price
+
+    setting.overtime_unit_price = 0
+    assert_equal 2_656, setting.effective_overtime_unit_price
+
+    setting.overtime_unit_price = 3_000
+    assert_equal 3_000, setting.effective_overtime_unit_price
+  end
+
   # 発行者の身元情報(インボイス番号/氏名/住所/連絡先)も他人(西野)の既定を継承しない
   def test_identity_defaults_are_blank
     %i[registration_no issuer_name postal_code address tel email].each do |key|

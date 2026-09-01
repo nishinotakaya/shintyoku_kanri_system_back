@@ -88,6 +88,21 @@ class InvoiceSetting < ApplicationRecord
     standard_hours.to_f.positive? ? standard_hours.to_f : DEFAULT_STANDARD_HOURS
   end
 
+  # 時間外の割増率。労基法の時間外割増(25%)に合わせる
+  OVERTIME_PREMIUM_RATE = 1.25
+
+  # 超過時給の既定 = 日給 ÷ 所定時間 × 1.25(例: 日給 17,000 / 8h → 基礎時給 2,125 × 1.25 = 2,656)。
+  # 日給が無ければ nil
+  def default_overtime_unit_price
+    return nil unless daily_rate.to_i.positive?
+    (daily_rate.to_i / standard_hours_per_day * OVERTIME_PREMIUM_RATE).round
+  end
+
+  # 請求計算に使う超過時給。入力があればそれ、未入力(または 0)なら既定値
+  def effective_overtime_unit_price
+    overtime_unit_price.to_i.positive? ? overtime_unit_price.to_i : default_overtime_unit_price.to_i
+  end
+
   # 画面・ファイル名で使うカテゴリの表示名。帳票名やフォルダ名の先頭に付く。
   CATEGORY_LABELS = {
     "wings" => "Wings",
