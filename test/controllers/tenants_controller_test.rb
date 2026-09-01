@@ -50,11 +50,10 @@ class TenantsControllerTest < ActionDispatch::IntegrationTest
     assert_empty JSON.parse(response.body)["tenants"]
   end
 
-  # カレンダーの行ラベルは代表の会社名になる(保存済みの person 名は変えない)
-  def test_calendar_person_label_uses_tenant_name
-    # 代表は自分の行が会社名になり、配下メンバーの行はメンバー名のまま
-    assert_equal({ "運送" => @tenant.name, "配下" => "配下" }, @owner.reload.calendar_person_labels)
-    # メンバーは自分の名前のまま(代表を務める会社が無い)
-    assert_equal({ "配下" => "配下" }, @member.reload.calendar_person_labels)
+  # カレンダーの見出しに出す会社名。代表・メンバーのどちらでも自分の会社が出る
+  def test_tenant_name
+    assert_equal @tenant.name, @owner.reload.tenant_name
+    assert_equal @tenant.name, @member.reload.tenant_name
+    assert_nil @outsider.reload.tenant_name
   end
 end

@@ -198,18 +198,11 @@ class User < ApplicationRecord
     visible_calendar_persons.select { |person| can_edit_calendar_person?(person) }
   end
 
-  # カレンダーの行ラベル(人物名 => 表示名)。テナント(会社)の代表は会社名で出す。
-  # 例: 「西野 雄太郎」行 => 「HAUKUR運送」 / 「加藤」行 => 「プロアカ」。
-  # 保存済みの team_schedules.person はそのまま(表示だけ差し替える)。
-  def calendar_person_labels
-    visible_calendar_persons.to_h { |person| [ person, self.class.calendar_person_label(person) ] }
-  end
-
-  # 人物行の持ち主が代表を務めるテナント名。無ければ人物名のまま。
-  def self.calendar_person_label(person_name)
-    owner = where("display_name LIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(person_name.to_s)}%")
-              .find { |candidate| candidate.own_calendar_person == person_name }
-    owner&.owned_tenants&.first&.name.presence || person_name
+  # 所属する会社(テナント)名。カレンダーの見出しに出す。
+  # 人物行そのものは本人の名前のまま(「西野 雄太郎」)で、会社名は上の見出しに置く。
+  # 代表を務める会社を優先し、無ければメンバーとして所属する会社。
+  def tenant_name
+    (owned_tenants.first || tenants.first)&.name
   end
 
   def sees_whole_team_calendar?
