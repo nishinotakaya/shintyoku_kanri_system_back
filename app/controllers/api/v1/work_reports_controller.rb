@@ -66,10 +66,7 @@ module Api
         cat = params[:category].presence || current_user.visible_work_categories.first
         report = current_user.work_reports.find_or_initialize_by(work_date: Date.current, category: cat)
         report.clock_out = Time.current
-        if report.clock_in && report.clock_out
-          worked_min = ((report.clock_out - report.clock_in) / 60).to_i - report.break_minutes.to_i
-          report.hours = (worked_min / 60.0).round(2) if worked_min.positive?
-        end
+        # 稼働時間は WorkReport の before_save が開始・終了から算出する(打刻・手入力で共通)
         report.save!
         render json: serialize(report)
       end
