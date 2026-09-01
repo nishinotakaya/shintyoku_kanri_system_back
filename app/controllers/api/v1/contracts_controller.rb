@@ -22,7 +22,8 @@ module Api
       def create
         attrs = contract_params
         attrs[:title] = attrs[:title].presence || "業務委託契約書"
-        attrs[:articles] = attrs[:articles].presence || Contract::DEFAULT_ARTICLES
+        # template 未指定なら従来どおり標準の15条。transport を指定すると運送業務委託契約書(29条)になる。
+        attrs[:articles] = attrs[:articles].presence || Contract.articles_for_template(params[:template])
         apply_default_party_a!(attrs) if attrs[:party_a_name].blank?
 
         contract = current_user.contracts.create!(attrs)
@@ -109,7 +110,7 @@ module Api
           :title, :party_a_name, :party_a_address, :party_a_representative,
           :party_b_name, :party_b_address, :party_b_representative,
           :contract_date, :start_on, :end_on, :special_terms,
-          articles: %i[heading body]
+          articles: [:heading, :body, :page_break_before]
         ).to_h.symbolize_keys
       end
 
@@ -156,10 +157,15 @@ module Api
         json
       end
 
+      # 画面に返す条文。page_break_before は「この条文の前で改ページする」フラグ(紙の原本の再現用)。
       def normalized_articles(articles)
         Array(articles).map do |article|
           indifferent = article.is_a?(Hash) ? article.with_indifferent_access : {}
-          { heading: indifferent[:heading].to_s, body: indifferent[:body].to_s }
+          {
+            heading: indifferent[:heading].to_s,
+            body: indifferent[:body].to_s,
+            page_break_before: ActiveModel::Type::Boolean.new.cast(indifferent[:page_break_before]) || false
+          }
         end
       end
     end

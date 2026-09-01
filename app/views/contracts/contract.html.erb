@@ -25,6 +25,8 @@
   }
   .preamble { margin: 0 0 8px; font-size: 10.5px; }
   .article { margin: 0 0 5px; page-break-inside: avoid; break-inside: avoid-page; }
+  /* 紙の原本の改ページ位置を再現する(運送業務委託契約書など複数ページの様式で使う) */
+  .article.page-break-before { page-break-before: always; break-before: page; }
   .article .heading { font-weight: 700; font-size: 11px; margin-bottom: 2px; }
   .article .body { white-space: pre-wrap; font-size: 10.5px; }
   .special-terms { margin: 8px 0; border: 1px solid #888; padding: 5px 10px; }
@@ -59,7 +61,7 @@
   </div>
 
   <% data[:articles].each do |article| %>
-  <div class="article">
+  <div class="article<%= " page-break-before" if article[:page_break_before] %>">
     <div class="heading"><%= article[:heading] %></div>
     <div class="body"><%= article[:body] %></div>
   </div>

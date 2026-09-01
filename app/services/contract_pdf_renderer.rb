@@ -68,7 +68,12 @@ class ContractPdfRenderer
   def normalized_articles
     Array(@contract.articles).map do |article|
       indifferent = article.is_a?(Hash) ? article.with_indifferent_access : {}
-      { heading: indifferent[:heading].to_s, body: indifferent[:body].to_s }
+      {
+        heading: indifferent[:heading].to_s,
+        body: indifferent[:body].to_s,
+        # 紙の原本と同じ位置で改ページさせるためのフラグ。テンプレート側で page-break クラスに変換する。
+        page_break_before: ActiveModel::Type::Boolean.new.cast(indifferent[:page_break_before]) || false
+      }
     end
   end
 

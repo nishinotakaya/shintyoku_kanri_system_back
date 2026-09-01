@@ -78,8 +78,25 @@ class Api::V1::ContractsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "業務委託契約書", body["title"]
     assert_equal @owner.display_name, body["party_a"]["name"]
     assert_equal 15, body["articles"].size
-    expected_articles = Contract::DefaultArticles::LIST.map { |article| { "heading" => article[:heading], "body" => article[:body] } }
+    # page_break_before は改ページ位置(紙の原本の再現用)。標準テンプレートは全条文 false。
+    expected_articles = Contract::DefaultArticles::LIST.map do |article|
+      { "heading" => article[:heading], "body" => article[:body], "page_break_before" => false }
+    end
     assert_equal expected_articles, body["articles"]
+  end
+
+  def test_create_with_transport_template_uses_haukur_articles_with_page_breaks
+    post "/api/v1/contracts", params: { template: "transport", contract: {} },
+         headers: auth_headers(@owner), as: :json
+
+    assert_response :created
+    body = response.parsed_body
+    assert_equal 29, body["articles"].size
+    assert_equal "第1条（目的）", body["articles"].first["heading"]
+    # 紙の原本は6ページ。1ページ目以外の先頭(第7/14/20/24/27条)で改ページする。
+    page_break_headings = body["articles"].select { |article| article["page_break_before"] }.map { |article| article["heading"] }
+    assert_equal ["第7条（運送事業委託の開始）", "第14条（規律）", "第20条（通信機保持義務）",
+                  "第24条（直接または間接取引の禁止）", "第27条（損害賠償）"], page_break_headings
   end
 
   def test_create_default_party_a_inherits_previous_contract

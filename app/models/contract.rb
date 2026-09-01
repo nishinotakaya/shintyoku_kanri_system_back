@@ -6,6 +6,19 @@ class Contract < ApplicationRecord
   # app/models/contract/default_articles.rb (Zeitwerk規約で Contract::DefaultArticles) から取り込む。
   DEFAULT_ARTICLES = DefaultArticles::LIST
 
+  # HAUKUR運送の紙の原本どおりの条文(全29条・6ページ)。改ページ位置は page_break_before で持つ。
+  TRANSPORT_ARTICLES = TransportArticles::LIST
+
+  # 契約書作成時に選べる条文テンプレート。キーはフロントから渡ってくる template パラメータ。
+  ARTICLE_TEMPLATES = {
+    "standard" => DEFAULT_ARTICLES,
+    "transport" => TRANSPORT_ARTICLES
+  }.freeze
+
+  def self.articles_for_template(template_key)
+    ARTICLE_TEMPLATES.fetch(template_key.to_s, DEFAULT_ARTICLES)
+  end
+
   STATUSES = %w[draft sent signed void].freeze
 
   # 本文とみなす属性。signed/void になった後は変更できない(freeze_body_when_signed_or_void)。
