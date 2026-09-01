@@ -191,8 +191,8 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
       <tr>
         <th style="width: 50%;">品番・品名</th>
         <th style="width: 14%;">数量</th>
-        <th style="width: 16%;">単価</th>
-        <th style="width: 20%;">金額</th>
+        <th style="width: 16%;">単価<%= data[:tax_included] ? "(税込)" : "" %></th>
+        <th style="width: 20%;">金額<%= data[:tax_included] ? "(税込)" : "" %></th>
       </tr>
     </thead>
     <tbody>
@@ -211,19 +211,19 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
     <tfoot>
       <tr>
         <td class="spacer" colspan="2"></td>
-        <td class="lbl">小計</td>
+        <td class="lbl">小計<%= data[:tax_included] ? "(税抜)" : "" %></td>
         <td class="val"><%= fmt_yen(data[:subtotal]) %></td>
       </tr>
       <% if data[:tax_rate].to_i > 0 %>
       <tr>
         <td class="spacer" colspan="2"></td>
-        <td class="lbl">消費税 (<%= data[:tax_rate] %>%)</td>
+        <td class="lbl"><%= data[:tax_included] ? "内消費税" : "消費税" %> (<%= data[:tax_rate] %>%)</td>
         <td class="val"><%= fmt_yen(data[:tax]) %></td>
       </tr>
       <% end %>
       <tr>
         <td class="spacer" colspan="2"></td>
-        <td class="lbl">合計</td>
+        <td class="lbl">合計<%= data[:tax_included] ? "(税込)" : "" %></td>
         <td class="val"><%= fmt_yen(data[:total]) %></td>
       </tr>
     </tfoot>

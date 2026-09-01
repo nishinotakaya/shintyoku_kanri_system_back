@@ -60,9 +60,20 @@ class InvoicePdfRenderer
     items = build_items(hours)
 
     rate = labop_mode? ? 10 : @setting.tax_rate.to_i
-    subtotal = items.sum { |i| i[:amount] }
-    tax = (subtotal * rate / 100.0).round
-    total = subtotal + tax
+    # 税込(内税)設定: 明細の単価・金額が税込。合計=明細合計、税抜小計は ÷(1+税率) を四捨五入、消費税=差額。
+    # (total_override の逆算と同じ式にして、1枚の請求書内で端数処理を揃える)
+    # 税込/税抜は「発行者」の設定に従う: 自己発行=本人、代理発行(支払通知書・ラボップ宛)=発行者。
+    # 雄太郎(税込)が外注ドライバーへ出す支払通知書も税込になり、西野(税抜)のラボップ宛統合請求書は従来どおり。
+    tax_included = (labop_mode? ? @issuer_setting : @setting).tax_included?
+    if tax_included
+      total = items.sum { |i| i[:amount] }
+      subtotal = (total / (1.0 + rate / 100.0)).round
+      tax = total - subtotal
+    else
+      subtotal = items.sum { |i| i[:amount] }
+      tax = (subtotal * rate / 100.0).round
+      total = subtotal + tax
+    end
 
     # @total_override は「税込合計」として最優先（admin がラボップモーダルで明示した値）
     if @total_override
@@ -104,6 +115,7 @@ class InvoicePdfRenderer
       subtotal: subtotal,
       tax_rate: labop_mode? ? 10 : @setting.tax_rate,
       tax: tax,
+      tax_included: tax_included,
       total: total,
       issue_date: issue_date,
       due_date: due_date,

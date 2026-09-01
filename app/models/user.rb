@@ -311,7 +311,18 @@ class User < ApplicationRecord
         attrs[field] = value if value.present?
       end
     end
+    # テナントのメンバー(外注ドライバー等)は、代表の同カテゴリ設定から 税込/税抜 を引き継ぐ。
+    # 代表(雄太郎)が税込で回している商流なら、外注側の請求書も最初から税込で揃う。
+    owner_setting = tenant_owner_invoice_setting(category)
+    attrs[:tax_included] = owner_setting.tax_included if owner_setting
     invoice_settings.build(attrs)
+  end
+
+  # メンバーとして所属するテナントの代表が持つ、同カテゴリの請求書設定(無ければ nil)。代表本人は対象外。
+  def tenant_owner_invoice_setting(category)
+    owner = tenants.first&.owner_user
+    return nil if owner.nil? || owner == self
+    owner.invoice_settings.find_by(category: category)
   end
 
   serialize :custom_off_days, coder: JSON, type: Array

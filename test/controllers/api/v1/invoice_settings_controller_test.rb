@@ -66,6 +66,19 @@ class Api::V1::InvoiceSettingsControllerTest < ActionDispatch::IntegrationTest
     assert_empty @transport_user.invoice_settings.where(category: "wings")
   end
 
+  # 税込/税抜の切替は保存・返却される。既定は税抜(false)
+  def test_tax_included_round_trips_and_defaults_to_false
+    get "/api/v1/invoice_setting", headers: auth_headers(@transport_user)
+    assert_equal false, JSON.parse(response.body)["tax_included"]
+
+    patch "/api/v1/invoice_setting",
+          params: { invoice_setting: { category: "transport", tax_included: true }, category: "transport" },
+          headers: auth_headers(@transport_user), as: :json
+    assert_response :success
+    assert_equal true, JSON.parse(response.body)["tax_included"]
+    assert @transport_user.invoice_settings.find_by!(category: "transport").tax_included?
+  end
+
   def test_update_to_an_invisible_category_is_rejected_and_creates_nothing
     patch "/api/v1/invoice_setting",
           params: { invoice_setting: { category: "wings", pay_type: "daily", daily_rate: 17_000 }, category: "transport" },

@@ -80,6 +80,70 @@ class TransportInvoiceTest < ActiveSupport::TestCase
     assert_equal 66_936, calc[:subtotal]
   end
 
+  # 税込(内税)設定: 明細の金額が税込。合計=明細合計、税抜小計=合計÷1.1(四捨五入)、消費税=差額。
+  # 時給 2,000(税込) × 30h = 60,000(税込) → 小計 54,545 / 内消費税 5,455 / 合計 60,000
+  def test_tax_included_setting_treats_item_amounts_as_tax_inclusive
+    @user.invoice_setting_for("transport").update!(tax_included: true)
+
+    calc = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport").calculation
+
+    assert calc[:tax_included]
+    assert_equal 60_000, calc[:total]
+    assert_equal 54_545, calc[:subtotal]
+    assert_equal 5_455, calc[:tax]
+
+    html = render_invoice_html
+    assert_includes html, "内 消 費 税", "税込のときは消費税を内税として出す"
+    assert_includes html, "単価(税込)"
+    assert_includes html, "合　計（税込）"
+  end
+
+  # 代理発行(支払通知書)の税込/税抜は発行者の設定に従う。
+  # 雄太郎(税込)が外注ドライバー(設定は既定=税抜)へ出す支払通知書は税込で計算される
+  def test_payment_notice_follows_the_issuer_tax_setting
+    owner = User.create!(email: "transport_owner_#{SecureRandom.hex(4)}@example.com", password: "password123",
+                         display_name: "西野 雄太郎", closing_day: 31, work_categories: [ "transport" ])
+    owner.invoice_setting_for("transport").tap { |s| s.tax_included = true; s.save! }
+
+    calc = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport",
+                                  issuer_user_override: owner, title_override: "支払通知書").calculation
+
+    assert calc[:tax_included]
+    assert_equal 60_000, calc[:total]
+    assert_equal 5_455, calc[:tax]
+  ensure
+    owner&.destroy
+  end
+
+  # テナントのメンバー(外注ドライバー)は、代表の税込/税抜を既定として引き継ぐ
+  def test_tenant_member_inherits_tax_included_from_the_owner
+    owner = User.create!(email: "transport_owner_#{SecureRandom.hex(4)}@example.com", password: "password123",
+                         display_name: "西野 雄太郎", closing_day: 31, work_categories: [ "transport" ])
+    owner.invoice_setting_for("transport").tap { |s| s.tax_included = true; s.save! }
+    tenant = Tenant.create!(name: "HAUKUR運送 #{SecureRandom.hex(3)}", code: "haukur-#{SecureRandom.hex(3)}", owner_user: owner)
+    driver = User.create!(email: "transport_driver_#{SecureRandom.hex(4)}@example.com", password: "password123",
+                          display_name: "外注 一郎", closing_day: 31, work_categories: [ "transport" ])
+    TenantMembership.create!(tenant: tenant, user: driver)
+
+    assert driver.invoice_setting_for("transport").tax_included?, "メンバーは代表の税込を引き継ぐ"
+    refute owner.invoice_setting_for("wings").tax_included?, "代表本人・別カテゴリには影響しない"
+  ensure
+    tenant&.destroy
+    driver&.destroy
+    owner&.destroy
+  end
+
+  # 既定(税抜)では従来どおり明細合計に消費税を加算する(西野・川村の請求書は変わらない)
+  def test_tax_excluded_is_the_default_and_adds_tax_on_top
+    calc = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport").calculation
+
+    refute calc[:tax_included]
+    assert_equal 60_000, calc[:subtotal]
+    assert_equal 6_000, calc[:tax]
+    assert_equal 66_000, calc[:total]
+    refute_includes render_invoice_html, "内 消 費 税"
+  end
+
   def test_zero_total_override_is_treated_as_unset
     data = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport",
                                   total_override: 0).calculation

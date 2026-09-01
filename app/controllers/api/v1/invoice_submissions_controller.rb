@@ -56,7 +56,7 @@ module Api
         auto_total = nil unless auto_total.to_i.positive?
         record.assign_attributes(
           note: params[:note].to_s.presence,
-          total_override: manual_items.present? ? manual_total_tax_inc(manual_items, category) : auto_total,
+          total_override: manual_items.present? ? manual_total_tax_inc(manual_items, target_user, category) : auto_total,
           status: "draft",
           reviewer_id: nil,
           reviewed_at: nil,
@@ -348,9 +348,11 @@ module Api
         items.reject { |it| it["label"].blank? && it["amount"].zero? }.presence
       end
 
-      # 手入力明細から税込合計を出す（税率はカテゴリ既定: wings/living=10% / resystems等=0%）。
-      def manual_total_tax_inc(items, category)
+      # 手入力明細から税込合計を出す。税込(内税)設定のユーザーは明細合計がそのまま税込合計。
+      # それ以外は税率はカテゴリ既定: wings/living=10% / resystems等=0%。
+      def manual_total_tax_inc(items, user, category)
         subtotal = items.sum { |it| it["amount"].to_i }
+        return subtotal if user.invoice_setting_for(category).tax_included?
         tax_rate = InvoiceSetting.defaults_for(category)[:tax_rate].to_i
         (subtotal + (subtotal * tax_rate / 100.0).round).to_i
       end

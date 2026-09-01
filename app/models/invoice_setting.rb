@@ -69,6 +69,9 @@ class InvoiceSetting < ApplicationRecord
     default_items: []
   ).freeze
 
+  # 税込/税抜(tax_included)。false=税抜(既定。明細合計に消費税を加算) / true=税込(明細の単価・金額が税込で、
+  # 合計=明細合計、消費税は内税として ÷(1+税率) で逆算)。西野・川村は税抜、運送(雄太郎)は税込。
+  #
   # 報酬形態。運送(transport)だけが選べる。
   #   hourly = 稼働時間 × 時給(unit_price)
   #   daily  = 稼働日数 × 日給(daily_rate) + 所定時間(standard_hours)超過分 × 超過時給(overtime_unit_price)

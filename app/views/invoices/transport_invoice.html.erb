@@ -18,7 +18,9 @@ _issue_date = data[:issue_date]
 # 数量列の見出しは明細の単位から決める(時給=時間数 / 日給=日数 / 日給+残業=数量)
 _units = _item_rows.map { |item| item[:unit].to_s }.uniq
 _qty_header = _units == [ "日" ] ? "日数" : (_units == [ "時間" ] ? "時間数" : "数量")
-_show_unit = _units.size > 1 %>
+_show_unit = _units.size > 1
+# 税込(内税)設定なら 単価・合計は税込額。見出しに(税込)を付け、消費税は「内消費税」として出す
+_tax_included = data[:tax_included] ? true : false %>
 <!doctype html>
 <html lang="ja">
 <head>
@@ -131,8 +133,8 @@ _show_unit = _units.size > 1 %>
         <th class="col-name">氏　名</th>
         <th class="col-detail">内　容</th>
         <th class="col-days"><%= _qty_header %></th>
-        <th class="col-price">単価</th>
-        <th class="col-total">合　計</th>
+        <th class="col-price">単価<%= _tax_included ? "(税込)" : "" %></th>
+        <th class="col-total">合　計<%= _tax_included ? "(税込)" : "" %></th>
       </tr>
     </thead>
     <tbody>
@@ -149,15 +151,15 @@ _show_unit = _units.size > 1 %>
         <tr><td></td><td></td><td></td><td></td><td></td></tr>
       <% end %>
       <tr>
-        <td class="sum-label" colspan="4">小　計</td>
+        <td class="sum-label" colspan="4">小　計<%= _tax_included ? "（税抜）" : "" %></td>
         <td class="num"><%= fmt_yen(data[:subtotal]) %></td>
       </tr>
       <tr>
-        <td class="sum-label" colspan="4">消 費 税　（<%= data[:tax_rate].to_i %>%）</td>
+        <td class="sum-label" colspan="4"><%= _tax_included ? "内 消 費 税" : "消 費 税" %>　（<%= data[:tax_rate].to_i %>%）</td>
         <td class="num"><%= fmt_yen(data[:tax]) %></td>
       </tr>
       <tr>
-        <td class="sum-label" colspan="4">合　計</td>
+        <td class="sum-label" colspan="4">合　計<%= _tax_included ? "（税込）" : "" %></td>
         <td class="num"><%= fmt_yen(data[:total]) %></td>
       </tr>
     </tbody>
