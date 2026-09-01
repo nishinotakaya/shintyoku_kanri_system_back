@@ -5,10 +5,12 @@ module Api
         render json: payload
       end
 
-      # 管理者のみ: カレンダーで「他ユーザーとして閲覧」する選択肢を返す
+      # 勤怠/カレンダーの「他ユーザーとして閲覧」セレクト用。admin は全員、サブ管理者(テナント代表・管理割当あり)は
+      # 管理対象+自分。それ以外は空(セレクトを出さない)。
       def pickable_users
-        return render(json: []) unless current_user.admin?
-        render json: User.order(:id).map { |u| { id: u.id, display_name: u.display_name, email: u.email, admin: u.admin? } }
+        return render(json: []) unless current_user.admin? || current_user.sub_admin?
+        users = User.where(id: current_user.manageable_user_ids).order(:id)
+        render json: users.map { |u| { id: u.id, display_name: u.display_name, email: u.email, admin: u.admin? } }
       end
 
       def update

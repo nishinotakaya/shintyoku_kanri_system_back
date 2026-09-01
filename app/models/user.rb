@@ -254,18 +254,24 @@ class User < ApplicationRecord
     Tenant.where(id: owned_tenants.pluck(:id) + tenants.pluck(:id))
   end
 
-  # 誰かを管理しているサブ管理者か (admin は別枠)。
+  # 誰かを管理しているサブ管理者か (admin は別枠)。管理割当(managees)があるか、テナント(会社)の代表。
+  # 例: 加藤(プロアカ代表・岩切を管理) / 西野 雄太郎(HAUKUR運送代表。外注ドライバーをメンバーとして持つ)
   def sub_admin?
-    !admin? && manager_assignments.exists?
+    !admin? && (manager_assignments.exists? || owned_tenants.exists?)
   end
 
   # このユーザーが閲覧・編集できる対象ユーザーの id 一覧。
   # - admin (西野): 全ユーザー
-  # - サブ管理者 (加藤): 割り当てられた managee + 自分
+  # - サブ管理者 (加藤・雄太郎): 割り当てられた managee + 自分が代表のテナントのメンバー + 自分
   # - 一般ユーザー: 自分のみ
   def manageable_user_ids
     return ::User.ids if admin?
-    (managees.pluck(:id) + [ id ]).uniq
+    (managees.pluck(:id) + owned_tenant_member_ids + [ id ]).uniq
+  end
+
+  # 自分が代表のテナントに所属するメンバー(外注ドライバー等)の id
+  def owned_tenant_member_ids
+    TenantMembership.where(tenant_id: owned_tenants.select(:id)).pluck(:user_id)
   end
 
   def can_manage_user?(target_user_id)

@@ -43,12 +43,13 @@ module Api
         render json: { error: "#{label} を扱う権限がありません" }, status: :forbidden
       end
 
-      # 管理者は params[:as_user_id] で他ユーザーとして閲覧可能。
-      # それ以外は常に current_user。
+      # params[:as_user_id] で他ユーザーとして閲覧できる範囲は manageable_user_ids に一本化する:
+      # 管理者=全員 / サブ管理者(テナント代表・管理割当あり。例: 雄太郎→外注ドライバー)=管理対象だけ。
+      # 範囲外・未指定は常に current_user。
       def viewing_user
         return @viewing_user if defined?(@viewing_user)
         @viewing_user =
-          if current_user.admin? && params[:as_user_id].present?
+          if params[:as_user_id].present? && current_user.can_manage_user?(params[:as_user_id])
             User.find_by(id: params[:as_user_id]) || current_user
           else
             current_user

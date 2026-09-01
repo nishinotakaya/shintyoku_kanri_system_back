@@ -56,8 +56,9 @@ module Api
 
       private
 
+      # 閲覧対象の切替範囲は BaseController#viewing_user と同じ(管理者=全員 / サブ管理者=管理対象)
       def target_user
-        (current_user.admin? && params[:as_user_id].present?) ? (User.find_by(id: params[:as_user_id]) || current_user) : current_user
+        viewing_user
       end
 
       # 当該日・カテゴリの勤怠の乗車区間/交通費を空にする
