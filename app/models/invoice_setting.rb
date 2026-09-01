@@ -69,6 +69,25 @@ class InvoiceSetting < ApplicationRecord
     default_items: []
   ).freeze
 
+  # 報酬形態。運送(transport)だけが選べる。
+  #   hourly = 稼働時間 × 時給(unit_price)
+  #   daily  = 稼働日数 × 日給(daily_rate) + 所定時間(standard_hours)超過分 × 超過時給(overtime_unit_price)
+  PAY_TYPES = %w[hourly daily].freeze
+  DEFAULT_STANDARD_HOURS = 8.0
+
+  def effective_pay_type
+    PAY_TYPES.include?(pay_type.to_s) ? pay_type.to_s : "hourly"
+  end
+
+  def daily_pay?
+    effective_pay_type == "daily"
+  end
+
+  # 1日の所定時間。未設定なら 8 時間
+  def standard_hours_per_day
+    standard_hours.to_f.positive? ? standard_hours.to_f : DEFAULT_STANDARD_HOURS
+  end
+
   # 画面・ファイル名で使うカテゴリの表示名。帳票名やフォルダ名の先頭に付く。
   CATEGORY_LABELS = {
     "wings" => "Wings",

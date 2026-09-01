@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_01_054130) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_01_071448) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -392,6 +392,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_01_054130) do
     t.string "payment_due_type"
     t.string "honorific"
     t.integer "merged_unit_price"
+    t.string "pay_type"
+    t.integer "daily_rate"
+    t.decimal "standard_hours", precision: 4, scale: 2
+    t.integer "overtime_unit_price"
     t.index ["user_id"], name: "index_invoice_settings_on_user_id"
   end
 

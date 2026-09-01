@@ -14,7 +14,11 @@ _expense_blank_rows = [ 3 - _expenses.size, 0 ].max
 _person_name = user.display_name.to_s
 # 口座は設定の bank_info(自由入力)を 金融機関 / 口座番号 / 口座名義 の3行に割り当てる
 _bank_lines = bank_info_text.to_s.split(/\r?\n/).map(&:strip).reject(&:empty?)
-_issue_date = data[:issue_date] %>
+_issue_date = data[:issue_date]
+# 数量列の見出しは明細の単位から決める(時給=時間数 / 日給=日数 / 日給+残業=数量)
+_units = _item_rows.map { |item| item[:unit].to_s }.uniq
+_qty_header = _units == [ "日" ] ? "日数" : (_units == [ "時間" ] ? "時間数" : "数量")
+_show_unit = _units.size > 1 %>
 <!doctype html>
 <html lang="ja">
 <head>
@@ -126,7 +130,7 @@ _issue_date = data[:issue_date] %>
       <tr>
         <th class="col-name">氏　名</th>
         <th class="col-detail">内　容</th>
-        <th class="col-days">時間数</th>
+        <th class="col-days"><%= _qty_header %></th>
         <th class="col-price">単価</th>
         <th class="col-total">合　計</th>
       </tr>
@@ -136,7 +140,7 @@ _issue_date = data[:issue_date] %>
         <tr>
           <td><%= _person_name %></td>
           <td><%= item[:label] %></td>
-          <td class="num"><%= item[:qty].to_f == item[:qty].to_i ? item[:qty].to_i : item[:qty].to_f %></td>
+          <td class="num"><%= item[:qty].to_f == item[:qty].to_i ? item[:qty].to_i : item[:qty].to_f %><%= _show_unit ? item[:unit] : "" %></td>
           <td class="num"><%= item[:unit_price].to_i.positive? ? fmt_yen(item[:unit_price].to_i) : "" %></td>
           <td class="num"><%= item[:amount].to_i.positive? ? fmt_yen(item[:amount].to_i) : "" %></td>
         </tr>

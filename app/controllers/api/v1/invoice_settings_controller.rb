@@ -31,6 +31,7 @@ module Api
       def setting_params
         params.require(:invoice_setting).permit(
           :client_name, :honorific, :subject, :item_label, :unit_price, :merged_unit_price, :tax_rate, :payment_due_days,
+          :pay_type, :daily_rate, :standard_hours, :overtime_unit_price,
           :issuer_name, :registration_no, :postal_code, :address, :tel, :email, :bank_info, :payment_due_type,
           default_items: [ :label, :qty, :unit, :price ]
         )
@@ -43,7 +44,10 @@ module Api
           unit_price: s.unit_price, merged_unit_price: s.merged_unit_price, tax_rate: s.tax_rate, payment_due_days: s.payment_due_days,
           issuer_name: s.issuer_name, registration_no: s.registration_no,
           postal_code: s.postal_code, address: s.address, tel: s.tel, email: s.email,
-          bank_info: s.bank_info, payment_due_type: s.payment_due_type, default_items: s.default_items
+          bank_info: s.bank_info, payment_due_type: s.payment_due_type, default_items: s.default_items,
+          # 報酬形態(運送のみ画面に出す): hourly = 時給 / daily = 日給 + 超過時給
+          pay_type: s.effective_pay_type, daily_rate: s.daily_rate,
+          standard_hours: s.standard_hours&.to_f, overtime_unit_price: s.overtime_unit_price
         }
       end
     end

@@ -200,11 +200,55 @@ class InvoicePdfRenderer
     transport? ? TRANSPORT_TEMPLATE : TEMPLATE
   end
 
-  # 稼働日数 = 開始・終了時間がそろっている日(紙の稼働報告書の「月度稼働日数」と同じ数え方)
-  def worked_days_in(period)
+  # 運送の明細。
+  #   時給(hourly): 稼働時間 × 時給 の1行
+  #   日給(daily) : 稼働日数 × 日給 の1行 + 所定時間を超えた分 × 超過時給 の1行
+  # 単価が未設定でも数量が見えるよう、本体の行は必ず作る。
+  def transport_items(hours)
+    label = @setting.item_label.presence || "運送業務"
+    return [ hourly_transport_row(label, hours) ] unless @setting.daily_pay?
+
+    period = @user.period_for(@year, @month)
+    days = worked_days_in(period)
+    daily_rate = @setting.daily_rate.to_i
+    rows = [ { label: label, qty: days, unit: "日", unit_price: daily_rate, amount: days * daily_rate } ]
+
+    overtime = overtime_hours_in(period)
+    overtime_price = @setting.overtime_unit_price.to_i
+    if overtime.positive?
+      rows << { label: "時間外(#{@setting.standard_hours_per_day.to_i}時間超過分)",
+                qty: format_qty(overtime), unit: "時間", unit_price: overtime_price,
+                amount: (overtime * overtime_price).round }
+    end
+    rows
+  end
+
+  def hourly_transport_row(label, hours)
+    unit_price = @setting.unit_price.to_i
+    { label: label, qty: format_qty(hours), unit: "時間",
+      unit_price: unit_price, amount: (hours * unit_price).round }
+  end
+
+  # 10.0 → 10 / 9.5 → 9.5 (帳票に「10.0時間」と出さない)
+  def format_qty(value)
+    value.to_f == value.to_i ? value.to_i : value.to_f.round(2)
+  end
+
+  # 所定時間を超えた分の合計。1日ごとに超過を出して足す(月合計から引かない)
+  def overtime_hours_in(period)
+    standard = @setting.standard_hours_per_day
+    transport_reports_in(period).sum { |report| [ report.hours.to_f - standard, 0 ].max }.round(2)
+  end
+
+  def transport_reports_in(period)
     scope = @user.work_reports.in_range(period)
     scope = scope.by_category(@category) if @category.present?
-    scope.count { |report| report.clock_in.present? && report.clock_out.present? }
+    scope
+  end
+
+  # 稼働日数 = 開始・終了時間がそろっている日(紙の稼働報告書の「月度稼働日数」と同じ数え方)
+  def worked_days_in(period)
+    transport_reports_in(period).count { |report| report.clock_in.present? && report.clock_out.present? }
   end
 
   # 立替金(会社負担ぶん)。紙の請求書は明細表の下に立替金の表を持つ
@@ -238,18 +282,8 @@ class InvoicePdfRenderer
       end
     end
 
-    # 運送: 「稼働時間 × 時給」の1行。単価未設定でも時間が出るよう行は必ず作る
-    if transport?
-      unit_price = @setting.unit_price.to_i
-      qty = hours == hours.to_i ? hours.to_i : hours.round(2)
-      return [ {
-        label: @setting.item_label.presence || "運送業務",
-        qty: qty,
-        unit: "時間",
-        unit_price: unit_price,
-        amount: (hours * unit_price).round
-      } ]
-    end
+    # 運送: 設定した報酬形態で組み立てる(時給 or 日給+残業)
+    return transport_items(hours) if transport?
 
     # labop モード + items_override なし + merged_users なし → calculation 側で total_override から逆算
     return [] if labop_mode? && @merged_users.empty?
