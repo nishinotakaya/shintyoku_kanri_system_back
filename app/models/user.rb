@@ -249,15 +249,21 @@ class User < ApplicationRecord
   validates :closing_day, inclusion: { in: 1..31 }
 
   # 締日ベースの対象期間(例: 25日締めの2026年9月度 = 2026-08-26..2026-09-25)。
-  # 締日が月末日を超える月は月末日に丸める(31日締め=末日締め)。
-  # 開始日は「締日の翌日の1ヶ月前」で求める。to.prev_month + 1 だと、末日締めで
-  # 前月の方が日数が多いとき(9月度なら 8/31)に1日ずれる。
+  # 締日が月末日を超える月は月末日に丸める(31日締め = 末日締め)。
+  # 開始日は「前月度の締日の翌日」。to.prev_month + 1 で求めると、月末日に丸めた
+  # 月で1日ずれる(末日締めの9月度が 8/31 始まりになる・30日締めの3月度が 2/28 と重なる)。
   def period_for(year, month)
+    to = closing_date_of(year, month)
+    previous_month = Date.new(year, month, 1).prev_month
+    from = closing_date_of(previous_month.year, previous_month.month).next_day
+    from..to
+  end
+
+  # その月の締日。締日が月末日より後ろなら月末日に丸める。
+  def closing_date_of(year, month)
     effective_closing_day = closing_day || 25
     last_day_of_month = Date.new(year, month, -1).day
-    to = Date.new(year, month, [ effective_closing_day, last_day_of_month ].min)
-    from = to.next_day.prev_month
-    from..to
+    Date.new(year, month, [ effective_closing_day, last_day_of_month ].min)
   end
 
   # 他ユーザーのデータをコピーして初期化したいメールアドレスのマップ

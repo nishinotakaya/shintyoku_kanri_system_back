@@ -31,7 +31,9 @@ class UserPeriodTest < ActiveSupport::TestCase
   def test_period_for_clamps_closing_day_to_last_day_of_month
     user = User.new(closing_day: 30)
 
-    assert_equal Date.new(2026, 2, 1)..Date.new(2026, 2, 28), user.period_for(2026, 2)
-    assert_equal Date.new(2026, 2, 28)..Date.new(2026, 3, 30), user.period_for(2026, 3)
+    # 1月度は 1/30 で終わるので 2月度は 1/31 から。2月度は月末日に丸めて 2/28 で終わる。
+    assert_equal Date.new(2026, 1, 31)..Date.new(2026, 2, 28), user.period_for(2026, 2)
+    # その2月度が 2/28 で終わっているので、3月度は 3/1 から始まる(2/28 を二重に数えない)。
+    assert_equal Date.new(2026, 3, 1)..Date.new(2026, 3, 30), user.period_for(2026, 3)
   end
 end
