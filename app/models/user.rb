@@ -154,16 +154,20 @@ class User < ApplicationRecord
   # 先に登録されたユーザーがその人物行の持ち主。後から入ったユーザーはフルネームを人物名にして、
   # 他人の予定行に相乗りしないようにする。
   def own_calendar_person
+    # /me は 1 リクエスト中に visible/own/editable を続けて呼ぶので、都度クエリを撃たないよう覚えておく
+    return @own_calendar_person if defined?(@own_calendar_person)
+
     name = display_name.to_s
     candidate = TeamSchedule.selectable_persons.find { |person| name.include?(person) }
-    return name.split(/[[:space:]]+/).first.to_s if candidate.blank?
+    return @own_calendar_person = name.split(/[[:space:]]+/).first.to_s if candidate.blank?
 
-    earliest_rival_id = User.where("display_name LIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(candidate)}%")
-                           .where.not(id: id)
-                           .minimum(:id)
-    return candidate if earliest_rival_id.nil? || (id.present? && id < earliest_rival_id)
-
-    name
+    earliest_rival_id = same_person_name_users(candidate).minimum(:id)
+    @own_calendar_person =
+      if earliest_rival_id.nil? || (id.present? && id < earliest_rival_id)
+        candidate
+      else
+        name
+      end
   end
 
   # 人物行(team_schedules.person)を編集できるか。
@@ -178,12 +182,34 @@ class User < ApplicationRecord
     return true if person_name == own
     return false unless person_name.include?(own) || own.include?(person_name)
 
-    User.where.not(id: id).none? { |other| other.own_calendar_person == person_name }
+    # その人物名を自分の行として持っている別ユーザーがいれば他人の行。
+    # 候補は同じ名前を含むユーザーだけなので、全ユーザーは走査しない。
+    same_person_name_users(person_name).none? { |other| other.own_calendar_person == person_name }
+  end
+
+  # person_name を人物名として名乗りうる自分以外のユーザー
+  def same_person_name_users(person_name)
+    User.where("display_name LIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(person_name)}%")
+        .where.not(id: id)
   end
 
   # 見える人物行のうち、自分で操作できるもの(フロントの編集可否もこれに従う)
   def editable_calendar_persons
     visible_calendar_persons.select { |person| can_edit_calendar_person?(person) }
+  end
+
+  # カレンダーの行ラベル(人物名 => 表示名)。テナント(会社)の代表は会社名で出す。
+  # 例: 「西野 雄太郎」行 => 「HAUKUR運送」 / 「加藤」行 => 「プロアカ」。
+  # 保存済みの team_schedules.person はそのまま(表示だけ差し替える)。
+  def calendar_person_labels
+    visible_calendar_persons.to_h { |person| [ person, self.class.calendar_person_label(person) ] }
+  end
+
+  # 人物行の持ち主が代表を務めるテナント名。無ければ人物名のまま。
+  def self.calendar_person_label(person_name)
+    owner = where("display_name LIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(person_name.to_s)}%")
+              .find { |candidate| candidate.own_calendar_person == person_name }
+    owner&.owned_tenants&.first&.name.presence || person_name
   end
 
   def sees_whole_team_calendar?

@@ -5,8 +5,9 @@ module Api
         year, month = parse_month_param
         year_month = format("%04d%02d", year, month)
         records = TeamSchedule.where(year_month: year_month).order(:date, :person)
-        # 見えない人物行はそもそも返さない(フロントの表示制御だけに頼ると他人の予定が端末まで届く)
-        records = records.where(person: current_user.visible_calendar_persons) unless current_user.admin?
+        # 見えない人物行はそもそも返さない(フロントの表示制御だけに頼ると他人の予定が端末まで届く)。
+        # 自分が作れる表記ゆれの行(「川村」さんの「川村卓也」行)も、作った本人からは見えるようにする。
+        records = records.select { |record| visible_person?(record.person.to_s) } unless current_user.admin?
         render json: records.map { |record|
           {
             id: record.id,
@@ -103,6 +104,18 @@ module Api
       end
 
       private
+
+      # 自分に見せてよい人物行か。見える人物(visible_calendar_persons)そのものと、
+      # 自分が編集できる表記ゆれの人物名を含める(編集できるのに見えない、を作らない)。
+      def visible_person?(person_name)
+        return true if visible_calendar_persons.include?(person_name)
+
+        current_user.can_edit_calendar_person?(person_name)
+      end
+
+      def visible_calendar_persons
+        @visible_calendar_persons ||= current_user.visible_calendar_persons
+      end
 
       # 他人の予定の作成・変更は admin のみ。一般ユーザーは自分の人物行だけ編集できる。
       # 判定は User#can_edit_calendar_person? に一本化する(苗字の部分一致だと

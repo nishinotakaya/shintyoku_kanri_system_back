@@ -93,4 +93,19 @@ class TeamSchedulesAuthorizationTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes JSON.parse(response.body).map { |record| record["person"] }, "西野"
   end
+
+  # 自分で作れる表記ゆれの行(「川村」さんの「川村卓也」)が、作った本人から見えなくならないこと
+  def test_index_includes_own_notation_variant_row
+    TeamSchedule.create!(date: Date.new(2026, 8, 6), person: "川村卓也",
+                         status: "リモート", year_month: "202608")
+
+    get "/api/v1/team_schedules", params: { month: "2026-08" },
+        headers: auth_headers(@member)
+
+    # 川村さんは既定メンバー全員が見える運用なので「西野」も含む。ここで見たいのは
+    # 表記ゆれの自分の行が落ちないこと。
+    persons = JSON.parse(response.body).map { |record| record["person"] }
+    assert_response :success
+    assert_includes persons, "川村卓也"
+  end
 end

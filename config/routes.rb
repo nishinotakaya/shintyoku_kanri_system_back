@@ -120,6 +120,9 @@ Rails.application.routes.draw do
       end
 
 
+      # 自分が関わる会社(テナント)。代表は設定画面から会社名を変更できる
+      resources :tenants, only: [ :index, :update ]
+
       get    "team_schedules",        to: "team_schedules#index"
       post   "team_schedules",        to: "team_schedules#create"
       post   "team_schedules/import", to: "team_schedules#import"

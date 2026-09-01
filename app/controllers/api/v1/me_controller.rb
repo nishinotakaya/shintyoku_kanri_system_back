@@ -85,6 +85,7 @@ module Api
           # 自分の人物行と、そのうち操作できる行。編集可否の判定はサーバに一本化する
           own_calendar_person: current_user.own_calendar_person,
           editable_calendar_persons: current_user.editable_calendar_persons,
+          calendar_person_labels: current_user.calendar_person_labels,
           writable_data_sources: UserDataSourcePermission::SOURCE_TYPES.select { |source| current_user.can_write_data_source?(source) },
           sub_admin: current_user.sub_admin?
         }
