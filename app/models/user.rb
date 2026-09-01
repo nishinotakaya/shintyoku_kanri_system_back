@@ -248,11 +248,15 @@ class User < ApplicationRecord
 
   validates :closing_day, inclusion: { in: 1..31 }
 
+  # 締日ベースの対象期間(例: 25日締めの2026年9月度 = 2026-08-26..2026-09-25)。
+  # 締日が月末日を超える月は月末日に丸める(31日締め=末日締め)。
+  # 開始日は「締日の翌日の1ヶ月前」で求める。to.prev_month + 1 だと、末日締めで
+  # 前月の方が日数が多いとき(9月度なら 8/31)に1日ずれる。
   def period_for(year, month)
-    cd = closing_day || 25
-    to_day = [ cd, Date.new(year, month, -1).day ].min
-    to = Date.new(year, month, to_day)
-    from = to.prev_month + 1
+    effective_closing_day = closing_day || 25
+    last_day_of_month = Date.new(year, month, -1).day
+    to = Date.new(year, month, [ effective_closing_day, last_day_of_month ].min)
+    from = to.next_day.prev_month
     from..to
   end
 
