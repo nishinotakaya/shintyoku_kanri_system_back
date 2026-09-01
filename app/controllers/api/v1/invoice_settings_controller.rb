@@ -4,12 +4,12 @@ module Api
       # as_user_id を付ければ admin は対象ユーザーの設定を取得できる(viewing_user)。
       # 非adminや as_user_id 無しは自分自身(= viewing_user は current_user)。
       def show
-        cat = params[:category].presence || "wings"
+        cat = resolve_category(params[:category]) or return
         render json: serialize(viewing_user.invoice_setting_for(cat)).merge(seal_image: viewing_user.seal_image)
       end
 
       def update
-        cat = params.dig(:invoice_setting, :category).presence || params[:category].presence || "wings"
+        cat = resolve_category(params.dig(:invoice_setting, :category).presence || params[:category]) or return
         s = viewing_user.invoice_settings.find_or_initialize_by(category: cat)
         s.assign_attributes(InvoiceSetting.defaults_for(cat)) if s.new_record?
         s.assign_attributes(setting_params)
@@ -27,6 +27,20 @@ module Api
       end
 
       private
+
+      # 読み書きするカテゴリ。未指定なら、そのユーザーが見える先頭のカテゴリ(運送専用ユーザーなら transport)。
+      # 以前は無条件に wings を既定にしていたため、運送専用ユーザーの画面に Tama の設定(ラボップ宛・
+      # シェアラウンジ利用料)が読み込まれ、保存も wings 側に落ちて「設定を変えても計算が変わらない」状態になっていた。
+      # work_categories を設定しているユーザーは、見えないカテゴリの設定を作らせない(422)。
+      def resolve_category(raw)
+        visible = viewing_user.visible_work_categories
+        category = raw.presence || visible.first
+        return category if viewing_user.work_categories.blank? || visible.include?(category)
+
+        render json: { error: "#{InvoiceSetting.category_label(category)} はこのユーザーには表示されないカテゴリです" },
+               status: :unprocessable_entity
+        nil
+      end
 
       def setting_params
         params.require(:invoice_setting).permit(
