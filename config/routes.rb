@@ -18,6 +18,7 @@ Rails.application.routes.draw do
       # admin: ユーザー一覧 + 新規作成 + 招待メール + 権限/管理割当の更新
       namespace :admin do
         resources :users, only: [ :index, :create, :update ]
+        resources :tenants, only: [ :index, :create, :update, :destroy ]
       end
 
       # スキルシート (機能フラグ can_use?(:skill_sheet) で利用可)
@@ -134,6 +135,10 @@ Rails.application.routes.draw do
           post :transcribe
           post :import_progress
           post :append_task
+        end
+        member do
+          patch  :approve
+          delete :approve, action: :unapprove
         end
       end
 

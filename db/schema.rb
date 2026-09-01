@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_01_000003) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_01_000005) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -735,6 +735,26 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_01_000003) do
     t.index ["year_month"], name: "index_team_schedules_on_year_month"
   end
 
+  create_table "tenant_memberships", force: :cascade do |t|
+    t.integer "tenant_id", null: false
+    t.integer "user_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["tenant_id", "user_id"], name: "index_tenant_memberships_on_tenant_id_and_user_id", unique: true
+    t.index ["user_id"], name: "index_tenant_memberships_on_user_id"
+  end
+
+  create_table "tenants", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "code", null: false
+    t.integer "owner_user_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["code"], name: "index_tenants_on_code", unique: true
+    t.index ["name"], name: "index_tenants_on_name", unique: true
+    t.index ["owner_user_id"], name: "index_tenants_on_owner_user_id"
+  end
+
   create_table "todos", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "title"
@@ -856,6 +876,15 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_01_000003) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "category"
+    t.decimal "distance_km", precision: 8, scale: 1
+    t.integer "delivery_count"
+    t.integer "meter_start"
+    t.integer "meter_end"
+    t.text "note"
+    t.boolean "weekly_payment", default: false, null: false
+    t.datetime "approved_at"
+    t.integer "approved_by_id"
+    t.index ["approved_by_id"], name: "index_work_reports_on_approved_by_id"
     t.index ["user_id", "work_date", "category"], name: "index_work_reports_on_user_id_and_work_date_and_category", unique: true
     t.index ["user_id"], name: "index_work_reports_on_user_id"
   end
@@ -881,9 +910,13 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_01_000003) do
   add_foreign_key "scanned_invoices", "users"
   add_foreign_key "skill_sheet_evaluations", "skill_sheets"
   add_foreign_key "skill_sheet_review_items", "skill_sheets"
+  add_foreign_key "tenant_memberships", "tenants"
+  add_foreign_key "tenant_memberships", "users"
+  add_foreign_key "tenants", "users", column: "owner_user_id"
   add_foreign_key "todos", "users"
   add_foreign_key "user_data_source_permissions", "users"
   add_foreign_key "user_data_source_permissions", "users", column: "credential_owner_id"
   add_foreign_key "users", "users", column: "linked_user_id"
   add_foreign_key "work_reports", "users"
+  add_foreign_key "work_reports", "users", column: "approved_by_id"
 end

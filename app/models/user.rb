@@ -34,6 +34,9 @@ class User < ApplicationRecord
   has_many :interview_videos, dependent: :destroy
   has_many :heygen_assets, dependent: :destroy
   has_many :contracts, dependent: :destroy
+  has_many :tenant_memberships, dependent: :destroy
+  has_many :tenants, through: :tenant_memberships
+  has_many :owned_tenants, class_name: "Tenant", foreign_key: :owner_user_id, dependent: :nullify
 
   # サブ管理者の管理割当: manager → managee。
   # 例: 加藤(manager) が 岩切(managee) を管理する。川村は割り当てない＝管理対象外。
@@ -178,6 +181,11 @@ class User < ApplicationRecord
       borrowed.api_key = owner_setting.api_key
       borrowed.board_id = owner_setting.board_id
     end
+  end
+
+  # 代表(owned_tenants)もメンバー(tenants)も含めて所属する全テナント。
+  def belonging_tenants
+    Tenant.where(id: owned_tenants.pluck(:id) + tenants.pluck(:id))
   end
 
   # 誰かを管理しているサブ管理者か (admin は別枠)。

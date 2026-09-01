@@ -2,6 +2,7 @@ module Api
   module V1
     class WorkReportsController < BaseController
       before_action :set_report, only: [ :update, :destroy ]
+      before_action :set_report_for_approval, only: [ :approve, :unapprove ]
 
       def index
         year, month = parse_month
@@ -39,6 +40,18 @@ module Api
       def destroy
         @report.destroy!
         head :no_content
+      end
+
+      # PATCH /api/v1/work_reports/:id/approve
+      def approve
+        @report.approve!(actor: current_user)
+        render json: serialize(@report)
+      end
+
+      # DELETE /api/v1/work_reports/:id/approve
+      def unapprove
+        @report.unapprove!
+        render json: serialize(@report)
       end
 
       def clock_in
@@ -225,6 +238,15 @@ module Api
         @report = viewing_user.work_reports.find(params[:id])
       end
 
+      # 検印は「所有者本人」または admin だけが押せる。viewing_user 経由(admin専用の as_user_id 切替)には
+      # 乗らず、リクエストしたユーザー自身が所有者かどうかを直接見て 403 を返す。
+      def set_report_for_approval
+        @report = WorkReport.find(params[:id])
+        return if @report.user_id == current_user.id || admin_user?(current_user)
+
+        render json: { error: "検印を押す権限がありません" }, status: :forbidden
+      end
+
       # 乗車区間・交通費 → 立替金に自動同期（report の所属ユーザーで連動）
       def sync_expense_from_report(report)
         cat = report.category || "wings"
@@ -257,8 +279,11 @@ module Api
       end
 
       def report_params
+        # approved_by_id はここでは受け付けない(検印は approve!/unapprove! 経由でのみ更新する)
         params.permit(:work_date, :content, :hours, :clock_in, :clock_out,
-                      :break_minutes, :transit_section, :transit_fee, :category)
+                      :break_minutes, :transit_section, :transit_fee, :category,
+                      :distance_km, :delivery_count, :meter_start, :meter_end,
+                      :note, :weekly_payment)
       end
 
       def serialize(r)
@@ -268,7 +293,12 @@ module Api
           clock_out: r.clock_out&.strftime("%H:%M"),
           break_minutes: r.break_minutes,
           transit_section: r.transit_section, transit_fee: r.transit_fee,
-          category: r.category
+          category: r.category,
+          distance_km: r.distance_km&.to_f, delivery_count: r.delivery_count,
+          meter_start: r.meter_start, meter_end: r.meter_end,
+          note: r.note, weekly_payment: r.weekly_payment,
+          approved: r.approved?, approved_at: r.approved_at&.iso8601,
+          approved_by: r.approved_by && { id: r.approved_by.id, display_name: r.approved_by.display_name }
         }
       end
     end
