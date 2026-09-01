@@ -50,7 +50,10 @@ module Api
         # 手入力の明細（業務報告に依存しないシンプル作成）。あれば最優先で使い、合計も明細から算出。
         manual_items = normalize_items_override(params[:items_override])
         # 自動算出した税込合計を total_override に入れる (admin の一覧表示で「未設定」にならないように)
+        # 0 は保存しない: 「0円の請求」ではなく「まだ金額が出ていない」なので、
+        # 後から勤怠が入ったときに金額 0 で固定されてしまう
         auto_total = compute_total_tax_inc(target_user, year, month, category, kind)
+        auto_total = nil unless auto_total.to_i.positive?
         record.assign_attributes(
           note: params[:note].to_s.presence,
           total_override: manual_items.present? ? manual_total_tax_inc(manual_items, category) : auto_total,

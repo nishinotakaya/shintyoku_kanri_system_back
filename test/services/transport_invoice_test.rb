@@ -63,6 +63,25 @@ class TransportInvoiceTest < ActiveSupport::TestCase
     assert_equal 20_900, data[:total]
   end
 
+  # 申請を作った時点で稼働時間が 0 だった等で total_override に 0 が入っていても、
+  # 明細だけ 20,000 円で 小計・合計が 0 になる、という食い違いを起こさない
+  def test_zero_total_override_is_treated_as_unset
+    data = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport",
+                                  total_override: 0).calculation
+
+    assert_equal 60_000, data[:subtotal]
+    assert_equal 66_000, data[:total]
+  end
+
+  # 明示された税込合計(0以外)は従来どおり最優先
+  def test_positive_total_override_still_wins
+    data = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport",
+                                  total_override: 33_000).calculation
+
+    assert_equal 33_000, data[:total]
+    assert_equal 30_000, data[:subtotal]
+  end
+
   def test_html_follows_the_paper_form
     html = render_invoice_html
 

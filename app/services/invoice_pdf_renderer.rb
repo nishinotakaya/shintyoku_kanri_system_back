@@ -29,7 +29,9 @@ class InvoicePdfRenderer
     # 宛先の敬称。請求先マスタを選んだ請求書は「御中/様」もそこで決まる
     @honorific_override = honorific_override.to_s.presence
     @issuer_user = issuer_user_override || user
-    @total_override = total_override.to_i if total_override.present?
+    # 0 は「金額未設定」。0 を上書きとして扱うと、明細に 20,000 円と出ているのに
+    # 小計・合計だけ 0 になる(申請を作った時点で稼働時間が 0 だった等)。
+    @total_override = total_override.to_i if total_override.present? && total_override.to_i.positive?
     @item_label_override = item_label_override.to_s.presence
     @subject_override = subject_override.to_s.presence
     @items_override = items_override if items_override.is_a?(Array) && items_override.any?
