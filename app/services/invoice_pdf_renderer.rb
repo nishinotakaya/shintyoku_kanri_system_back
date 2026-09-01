@@ -6,6 +6,9 @@ require "erb"
 # Playwright Chromium で PDF に変換する。
 class InvoicePdfRenderer
   TEMPLATE = Rails.root.join("app/views/invoices/invoice.html.erb")
+  # 運送(transport)は取引先の紙の請求書に合わせた専用テンプレート(日数×単価 + 立替金 + 口座欄)。
+  # 他カテゴリの請求書は従来のテンプレートのまま。
+  TRANSPORT_TEMPLATE = Rails.root.join("app/views/invoices/transport_invoice.html.erb")
   SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
 
   def initialize(user, year:, month:, category: nil, application_date: nil,
@@ -91,6 +94,8 @@ class InvoicePdfRenderer
     {
       period: { from: period.first, to: period.last },
       hours: hours,
+      # 運送は時間ではなく「稼働日数 × 日額」で請求する
+      worked_days: worked_days_in(period),
       items: items,
       subtotal: subtotal,
       tax_rate: labop_mode? ? 10 : @setting.tax_rate,
@@ -156,7 +161,10 @@ class InvoicePdfRenderer
     bank_info_text = @bank_info_override || setting.bank_info  # 振込先: 請求書単体の上書き優先、無ければ設定値(ERBで使用)
     e_sign = @e_sign  # 電子サイン(支払通知書のみ描画。ERBで使用)
 
-    html_body = ERB.new(File.read(TEMPLATE)).result(binding)
+    # 運送の立替金(高速代・駐車場代など)。専用テンプレートが同じ紙面に表を出す
+    advanced_expenses = transport? ? transport_expenses : []
+
+    html_body = ERB.new(File.read(template_path)).result(binding)
 
     out_dir = Rails.root.join("tmp/exports")
     FileUtils.mkdir_p(out_dir)
@@ -173,6 +181,30 @@ class InvoicePdfRenderer
   end
 
   private
+
+  def transport?
+    @category.to_s == "transport"
+  end
+
+  def template_path
+    transport? ? TRANSPORT_TEMPLATE : TEMPLATE
+  end
+
+  # 稼働日数 = 開始・終了時間がそろっている日(紙の稼働報告書の「月度稼働日数」と同じ数え方)
+  def worked_days_in(period)
+    scope = @user.work_reports.in_range(period)
+    scope = scope.by_category(@category) if @category.present?
+    scope.count { |report| report.clock_in.present? && report.clock_out.present? }
+  end
+
+  # 立替金(会社負担ぶん)。紙の請求書は明細表の下に立替金の表を持つ
+  def transport_expenses
+    period = @user.period_for(@year, @month)
+    @user.expenses
+         .where(expense_date: period, category: @category)
+         .where(company_burden: true)
+         .order(:expense_date)
+  end
 
   # 明細(items)構築。すべて **税抜単価** で返す。
   # - labop モード + items_override 指定時: その明細をそのまま使う
@@ -194,6 +226,20 @@ class InvoicePdfRenderer
           amount: (h[:amount] || h["amount"]).to_i
         }
       end
+    end
+
+    # 運送: 時給ではなく「稼働日数 × 日額」の1行。単価未設定でも日数が出るよう行は必ず作る
+    if transport?
+      period = @user.period_for(@year, @month)
+      days = worked_days_in(period)
+      unit_price = @setting.unit_price.to_i
+      return [ {
+        label: @setting.item_label.presence || "運送業務",
+        qty: days,
+        unit: "日",
+        unit_price: unit_price,
+        amount: days * unit_price
+      } ]
     end
 
     # labop モード + items_override なし + merged_users なし → calculation 側で total_override から逆算
