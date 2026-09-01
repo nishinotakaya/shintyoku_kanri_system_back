@@ -236,17 +236,16 @@ class InvoicePdfRenderer
       end
     end
 
-    # 運送: 時給ではなく「稼働日数 × 日額」の1行。単価未設定でも日数が出るよう行は必ず作る
+    # 運送: 「稼働時間 × 時給」の1行。単価未設定でも時間が出るよう行は必ず作る
     if transport?
-      period = @user.period_for(@year, @month)
-      days = worked_days_in(period)
       unit_price = @setting.unit_price.to_i
+      qty = hours == hours.to_i ? hours.to_i : hours.round(2)
       return [ {
         label: @setting.item_label.presence || "運送業務",
-        qty: days,
-        unit: "日",
+        qty: qty,
+        unit: "時間",
         unit_price: unit_price,
-        amount: days * unit_price
+        amount: (hours * unit_price).round
       } ]
     end
 

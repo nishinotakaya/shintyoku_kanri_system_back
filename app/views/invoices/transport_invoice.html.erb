@@ -126,7 +126,7 @@ _issue_date = data[:issue_date] %>
       <tr>
         <th class="col-name">氏　名</th>
         <th class="col-detail">内　容</th>
-        <th class="col-days">日数</th>
+        <th class="col-days">時間数</th>
         <th class="col-price">単価</th>
         <th class="col-total">合　計</th>
       </tr>
@@ -136,7 +136,7 @@ _issue_date = data[:issue_date] %>
         <tr>
           <td><%= _person_name %></td>
           <td><%= item[:label] %></td>
-          <td class="num"><%= item[:qty].to_i %></td>
+          <td class="num"><%= item[:qty].to_f == item[:qty].to_i ? item[:qty].to_i : item[:qty].to_f %></td>
           <td class="num"><%= item[:unit_price].to_i.positive? ? fmt_yen(item[:unit_price].to_i) : "" %></td>
           <td class="num"><%= item[:amount].to_i.positive? ? fmt_yen(item[:amount].to_i) : "" %></td>
         </tr>
