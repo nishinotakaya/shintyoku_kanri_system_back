@@ -5,6 +5,8 @@ module Api
         year, month = parse_month_param
         year_month = format("%04d%02d", year, month)
         records = TeamSchedule.where(year_month: year_month).order(:date, :person)
+        # 見えない人物行はそもそも返さない(フロントの表示制御だけに頼ると他人の予定が端末まで届く)
+        records = records.where(person: current_user.visible_calendar_persons) unless current_user.admin?
         render json: records.map { |record|
           {
             id: record.id,
@@ -102,14 +104,11 @@ module Api
 
       private
 
-      # 他人の予定の作成・変更は admin のみ。一般ユーザーは自分の苗字に一致する行だけ編集できる。
-      # フロント(CalendarPage の canEditPerson)と同じ規則をサーバ側でも強制する(直接APIを叩く迂回の防止)。
-      # 「川村」ヘッダ×「川村 卓也」・「川村卓也」ヘッダ×「川村」の両方向の表記ゆれを許容する
+      # 他人の予定の作成・変更は admin のみ。一般ユーザーは自分の人物行だけ編集できる。
+      # 判定は User#can_edit_calendar_person? に一本化する(苗字の部分一致だと
+      # 西野 雄太郎さんが西野 鷹也さんの行を編集できてしまうため)。
       def person_editable_by_current_user?(person_name)
-        return true if current_user.admin?
-        surname = current_user.display_name.to_s.split(/[\s　]/).first.to_s
-        return false if surname.blank? || person_name.blank?
-        person_name.include?(surname) || surname.include?(person_name)
+        current_user.can_edit_calendar_person?(person_name)
       end
 
       def render_person_forbidden

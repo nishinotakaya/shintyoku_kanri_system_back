@@ -124,25 +124,70 @@ class User < ApplicationRecord
   end
 
   # カレンダーに予定行を出す人物名。管理者が /users で設定でき、未設定なら次の既定になる。
+  # - テナント(会社)に紐づくユーザー: 自分 + 自分が代表のテナントに紐づくメンバーだけ
   # - 西野さん・川村さん: 既定メンバー全員(お互いの予定を見る従来どおりの運用)
   # - それ以外: 自分の予定だけ
   def visible_calendar_persons
     configured = calendar_persons.to_a.map(&:to_s).reject(&:empty?)
     return configured if configured.present?
+    return tenant_calendar_persons if belongs_to_any_tenant?
     return TeamSchedule::DEFAULT_PERSONS if sees_whole_team_calendar?
 
     [ own_calendar_person ].reject(&:empty?)
   end
 
-  # team_schedules の person 名(苗字)に相当する自分の名前
+  # テナント(会社)単位のカレンダー。代表は自分と配下メンバー、メンバーは自分だけを見る。
+  # 配下メンバーが未登録なら自分1人だけ(HAUKUR運送の現状)。
+  def tenant_calendar_persons
+    member_ids = TenantMembership.where(tenant_id: owned_tenants.select(:id)).pluck(:user_id)
+    members = User.where(id: member_ids).where.not(id: id).order(:id)
+    ([ self ] + members.to_a).map(&:own_calendar_person).reject(&:empty?).uniq
+  end
+
+  # 代表・メンバーのいずれかでテナントに紐づいているか
+  def belongs_to_any_tenant?
+    owned_tenants.exists? || tenant_memberships.exists?
+  end
+
+  # team_schedules の person 名(苗字)に相当する自分の名前。
+  # 同じ人物名を名乗れるユーザーが複数いる場合(「西野」= 西野 鷹也さん / 西野 雄太郎さん)、
+  # 先に登録されたユーザーがその人物行の持ち主。後から入ったユーザーはフルネームを人物名にして、
+  # 他人の予定行に相乗りしないようにする。
   def own_calendar_person
     name = display_name.to_s
-    TeamSchedule.selectable_persons.find { |person| name.include?(person) } ||
-      name.split(/[[:space:]]+/).first.to_s
+    candidate = TeamSchedule.selectable_persons.find { |person| name.include?(person) }
+    return name.split(/[[:space:]]+/).first.to_s if candidate.blank?
+
+    earliest_rival_id = User.where("display_name LIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(candidate)}%")
+                           .where.not(id: id)
+                           .minimum(:id)
+    return candidate if earliest_rival_id.nil? || (id.present? && id < earliest_rival_id)
+
+    name
+  end
+
+  # 人物行(team_schedules.person)を編集できるか。
+  # 「川村」行×「川村 卓也」のような表記ゆれは許容するが、その人物名を自分のものとして
+  # 持っている別ユーザー(同姓の先輩。例:「西野」= 西野 鷹也さん)の行には触れさせない。
+  def can_edit_calendar_person?(person_name)
+    return true if admin?
+
+    person_name = person_name.to_s
+    own = own_calendar_person
+    return false if person_name.blank? || own.blank?
+    return true if person_name == own
+    return false unless person_name.include?(own) || own.include?(person_name)
+
+    User.where.not(id: id).none? { |other| other.own_calendar_person == person_name }
+  end
+
+  # 見える人物行のうち、自分で操作できるもの(フロントの編集可否もこれに従う)
+  def editable_calendar_persons
+    visible_calendar_persons.select { |person| can_edit_calendar_person?(person) }
   end
 
   def sees_whole_team_calendar?
-    TeamSchedule::FULL_CALENDAR_PERSONS.any? { |person| display_name.to_s.include?(person) }
+    TeamSchedule::FULL_CALENDAR_PERSONS.include?(own_calendar_person)
   end
 
   # このユーザーに見せる勤怠カテゴリ。未設定(nil)なら従来どおり全カテゴリを見せる。

@@ -1,7 +1,8 @@
 require "test_helper"
 
-# team_schedules の create/update は「admin か自分の苗字に一致する行」のみ。
+# team_schedules の create/update は「admin か自分の人物行」のみ。
 # フロントの canEditPerson と同じ規則をサーバ側でも強制していることの回帰テスト。
+# index も見える人物行だけを返す(他人の予定を端末まで届けない)。
 class TeamSchedulesAuthorizationTest < ActionDispatch::IntegrationTest
   def setup
     # display_name に「西野」を含むと User#admin? が true になる(名前判定)
@@ -9,13 +10,16 @@ class TeamSchedulesAuthorizationTest < ActionDispatch::IntegrationTest
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @member = User.create!(email: "member_#{SecureRandom.hex(4)}@example.com",
                            password: "password123", display_name: "川村 卓也", closing_day: 25)
+    # 同姓(西野)だが別人。admin でもなく、西野の人物行の持ち主でもない
+    @same_surname = User.create!(email: "yutaro_#{SecureRandom.hex(4)}@example.com",
+                                 password: "password123", display_name: "西野 雄太郎", closing_day: 31)
     @nishino_schedule = TeamSchedule.create!(date: Date.new(2026, 8, 3), person: "西野",
                                              status: "リモート", year_month: "202608")
   end
 
   def teardown
     TeamSchedule.where(year_month: "202608").delete_all
-    [ @admin, @member ].compact.each(&:destroy)
+    [ @admin, @member, @same_surname ].compact.each(&:destroy)
   end
 
   def auth_headers(user)
@@ -54,5 +58,39 @@ class TeamSchedulesAuthorizationTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "休み", @nishino_schedule.reload.status
+  end
+
+  # 苗字の部分一致で判定していた頃は、西野 雄太郎さんが西野 鷹也さんの行を編集できてしまっていた
+  def test_same_surname_user_cannot_update_others_schedule
+    patch "/api/v1/team_schedules/#{@nishino_schedule.id}", params: { status: "出社" },
+          headers: auth_headers(@same_surname), as: :json
+
+    assert_response :forbidden
+    assert_equal "リモート", @nishino_schedule.reload.status
+  end
+
+  def test_same_surname_user_can_create_own_full_name_schedule
+    post "/api/v1/team_schedules", params: { date: "2026-08-05", person: "西野 雄太郎", status: "リモート" },
+         headers: auth_headers(@same_surname), as: :json
+
+    assert_response :success
+    assert TeamSchedule.exists?(date: Date.new(2026, 8, 5), person: "西野 雄太郎")
+  end
+
+  # 自分に見えない人物行は index に出さない(フロントの表示制御だけに頼らない)
+  def test_index_returns_only_visible_persons
+    get "/api/v1/team_schedules", params: { month: "2026-08" },
+        headers: auth_headers(@same_surname)
+
+    assert_response :success
+    assert_empty JSON.parse(response.body).map { |record| record["person"] }
+  end
+
+  def test_index_returns_everything_for_admin
+    get "/api/v1/team_schedules", params: { month: "2026-08" },
+        headers: auth_headers(@admin)
+
+    assert_response :success
+    assert_includes JSON.parse(response.body).map { |record| record["person"] }, "西野"
   end
 end
