@@ -240,6 +240,8 @@ Rails.application.routes.draw do
       get   "invoice_setting", to: "invoice_settings#show"
       patch "invoice_setting", to: "invoice_settings#update"
       get   "invoice_preview", to: "invoice_settings#preview"
+      # 請求先(宛先)マスタ: 複数の取引先を登録して請求書ごとに選ぶ
+      resources :invoice_clients, only: [ :index, :create, :update, :destroy ]
 
       get   "purchase_order_settings",     to: "purchase_order_settings#index"
       patch "purchase_order_settings/reorder", to: "purchase_order_settings#reorder"

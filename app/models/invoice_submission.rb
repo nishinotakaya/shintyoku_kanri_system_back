@@ -4,6 +4,8 @@ class InvoiceSubmission < ApplicationRecord
   KINDS = %w[invoice expense work_report].freeze
 
   belongs_to :user
+  # 請求先(宛先)。選んだマスタ。宛先そのものは client_name_override にスナップショットする
+  belongs_to :invoice_client, optional: true
   belongs_to :reviewer, class_name: "User", optional: true
   belongs_to :received_purchase_order, optional: true
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_01_000005) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_01_054130) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -350,6 +350,26 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_01_000005) do
     t.index ["user_id"], name: "index_interview_videos_on_user_id"
   end
 
+  create_table "invoice_clients", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "name", null: false
+    t.string "honorific", default: "御中"
+    t.string "subject"
+    t.string "postal_code"
+    t.string "address"
+    t.string "tel"
+    t.string "fax"
+    t.string "contact_name"
+    t.text "note"
+    t.boolean "is_default", default: false, null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "archived_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "archived_at"], name: "index_invoice_clients_on_user_id_and_archived_at"
+    t.index ["user_id"], name: "index_invoice_clients_on_user_id"
+  end
+
   create_table "invoice_settings", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "client_name"
@@ -403,6 +423,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_01_000005) do
     t.string "registration_no_override"
     t.string "bank_info_override"
     t.boolean "auto_synced", default: false, null: false
+    t.integer "invoice_client_id"
+    t.string "client_name_override"
+    t.string "client_honorific_override"
+    t.index ["invoice_client_id"], name: "index_invoice_submissions_on_invoice_client_id"
     t.index ["kind"], name: "index_invoice_submissions_on_kind"
     t.index ["paid_at"], name: "index_invoice_submissions_on_paid_at"
     t.index ["received_purchase_order_id"], name: "index_invoice_submissions_on_received_purchase_order_id"
@@ -900,7 +924,9 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_01_000005) do
   add_foreign_key "generated_thumbnails", "interview_mindmaps"
   add_foreign_key "generated_thumbnails", "users"
   add_foreign_key "github_settings", "users"
+  add_foreign_key "invoice_clients", "users"
   add_foreign_key "invoice_settings", "users"
+  add_foreign_key "invoice_submissions", "invoice_clients"
   add_foreign_key "invoice_submissions", "users"
   add_foreign_key "progress_workspaces", "users"
   add_foreign_key "purchase_order_histories", "users"

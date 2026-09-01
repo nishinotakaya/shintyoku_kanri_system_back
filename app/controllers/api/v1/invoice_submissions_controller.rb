@@ -67,6 +67,12 @@ module Api
         record.application_date_override = parse_date_param(params[:application_date_override]) if params.key?(:application_date_override)
         record.due_date_override = parse_date_param(params[:due_date_override]) if params.key?(:due_date_override)
         record.bank_info_override = params[:bank_info_override].to_s.presence if params.key?(:bank_info_override)
+        # 請求先: 明示指定があればそれ、無ければ登録済みマスタの既定を宛先に入れておく
+        if params.key?(:invoice_client_id)
+          record.assign_attributes(client_attrs_from(target_user, params[:invoice_client_id]))
+        elsif record.client_name_override.blank?
+          record.assign_attributes(client_attrs_from_default(target_user))
+        end
         record.save!
 
         render json: serialize(record).merge(resubmitted: is_resubmit)
@@ -129,6 +135,19 @@ module Api
         end
         if params.key?(:bank_info_override)
           attrs[:bank_info_override] = params[:bank_info_override].to_s.presence
+        end
+        # 請求先(宛先): マスタを選ぶと、その時点の宛名・敬称をこの請求書にスナップショットする。
+        # 後からマスタを直しても、選び直さない限りこの請求書の宛先は変わらない。
+        if params.key?(:invoice_client_id)
+          attrs.merge!(client_attrs_from(record.user, params[:invoice_client_id]))
+        end
+        # マスタを使わず宛名を直接書きたいケース(単発の取引先)
+        if params.key?(:client_name_override)
+          attrs[:client_name_override] = params[:client_name_override].to_s.presence
+          attrs[:invoice_client_id] = nil if attrs[:client_name_override].blank?
+        end
+        if params.key?(:client_honorific_override)
+          attrs[:client_honorific_override] = params[:client_honorific_override].to_s.presence
         end
         if params.key?(:items_override)
           # 受け取り想定: items_override = [{ label, qty, unit, unit_price, amount }, ...] の配列
@@ -474,8 +493,19 @@ module Api
           item_label_override: submission.item_label_override,
           registration_no_override: submission.registration_no_override,
           due_date_override: submission.due_date_override,
-          bank_info_override: submission.bank_info_override
-        }
+          bank_info_override: submission.bank_info_override,
+          # 請求先(宛先)。焼き付けが無ければマスタの既定にフォールバックする
+          client_name_override: client_name_for(submission),
+          honorific_override: honorific_for(submission)
+        }.compact
+      end
+
+      def client_name_for(submission)
+        submission.client_name_override.presence || submission.user&.default_invoice_client&.name
+      end
+
+      def honorific_for(submission)
+        submission.client_honorific_override.presence || submission.user&.default_invoice_client&.display_honorific
       end
 
       def notify_admin_by_email(record, kind_label, cat_label, approve_url)
@@ -552,6 +582,26 @@ module Api
         Rails.logger.warn("[InvoiceSubmissions] mail notify failed: #{e.class}: #{e.message}")
       end
 
+      # 選んだ請求先マスタ(自分のものだけ)から、この請求書に焼き付ける宛先を作る。
+      # 空を渡された場合は宛先の指定を外す(= 請求書設定の client_name にフォールバック)。
+      def client_attrs_from(owner, client_id)
+        return { invoice_client_id: nil, client_name_override: nil, client_honorific_override: nil } if client_id.blank?
+
+        client = owner&.invoice_clients&.find_by(id: client_id)
+        return {} if client.nil?
+
+        { invoice_client_id: client.id, client_name_override: client.name,
+          client_honorific_override: client.display_honorific }
+      end
+
+      def client_attrs_from_default(owner)
+        client = owner&.default_invoice_client
+        return {} if client.nil?
+
+        { invoice_client_id: client.id, client_name_override: client.name,
+          client_honorific_override: client.display_honorific }
+      end
+
       def serialize(record)
         defaults = approved_defaults_for(record)
         # 申請者の請求書設定は 1 回だけ引く（default_* 5項目で毎回引くと一覧APIが N×5 クエリになる）
@@ -582,6 +632,10 @@ module Api
           default_registration_no: applicant_setting&.registration_no,
           bank_info_override: record.bank_info_override,
           default_bank_info: applicant_setting&.bank_info,
+          invoice_client_id: record.invoice_client_id,
+          client_name_override: record.client_name_override,
+          client_honorific_override: record.client_honorific_override,
+          default_client_name: applicant_setting&.client_name,
           default_address: applicant_setting&.address,
           default_tel: applicant_setting&.tel,
           default_postal_code: applicant_setting&.postal_code,

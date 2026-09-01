@@ -12,7 +12,7 @@ class InvoicePdfRenderer
   SCRIPT   = Rails.root.join("lib/exporters/html_to_pdf.mjs")
 
   def initialize(user, year:, month:, category: nil, application_date: nil,
-                 client_name_override: nil, issuer_user_override: nil,
+                 client_name_override: nil, honorific_override: nil, issuer_user_override: nil,
                  total_override: nil, item_label_override: nil, subject_override: nil,
                  items_override: nil, note: nil, merged_users: nil, title_override: nil,
                  due_date_override: nil, registration_no_override: nil, bank_info_override: nil,
@@ -26,6 +26,8 @@ class InvoicePdfRenderer
     @registration_no_override = registration_no_override.to_s.presence # インボイス番号の請求書単体上書き
     @bank_info_override = bank_info_override.to_s.presence # 振込先の請求書単体上書き（nil なら設定の bank_info）
     @client_name_override = client_name_override.presence
+    # 宛先の敬称。請求先マスタを選んだ請求書は「御中/様」もそこで決まる
+    @honorific_override = honorific_override.to_s.presence
     @issuer_user = issuer_user_override || user
     @total_override = total_override.to_i if total_override.present?
     @item_label_override = item_label_override.to_s.presence
@@ -113,6 +115,24 @@ class InvoicePdfRenderer
   end
 
   def call
+    html_body = build_html
+
+    out_dir = Rails.root.join("tmp/exports")
+    FileUtils.mkdir_p(out_dir)
+    html_path = out_dir.join("invoice_#{@user.id}_#{@year}_#{@month}_#{SecureRandom.hex(4)}.html").to_s
+    pdf_path  = html_path.sub(/\.html$/, ".pdf")
+    File.write(html_path, html_body)
+
+    _out, err, status = Open3.capture3("node", SCRIPT.to_s, html_path, pdf_path)
+    raise "html_to_pdf failed: #{err}" unless status.success?
+
+    pdf_path
+  ensure
+    File.delete(html_path) if defined?(html_path) && html_path && File.exist?(html_path)
+  end
+
+  # PDF になる前の HTML。宛先や明細の描画結果をテストから確かめられるよう分けてある。
+  def build_html
     data = calculation
     setting = @setting
     user = @user
@@ -125,7 +145,8 @@ class InvoicePdfRenderer
     labop_name = I18n.t("companies.labop.name")
     if @client_name_override.present?
       client_name = @client_name_override
-      honorific = (client_name == labop_name) ? "御中" : "様"
+      # 敬称の指定があればそれに従う(請求先マスタ)。無ければ従来どおりラボップだけ御中
+      honorific = @honorific_override || ((client_name == labop_name) ? "御中" : "様")
     elsif !labop_mode?
       # カテゴリ別の宛先設定 (resystems=株式会社ReReシステムズ / techleaders 等) があれば最優先。
       # 設定が空のときだけユーザー既定の宛先 (admin=株式会社ラボップ) にフォールバックする。
@@ -164,20 +185,7 @@ class InvoicePdfRenderer
     # 運送の立替金(高速代・駐車場代など)。専用テンプレートが同じ紙面に表を出す
     advanced_expenses = transport? ? transport_expenses : []
 
-    html_body = ERB.new(File.read(template_path)).result(binding)
-
-    out_dir = Rails.root.join("tmp/exports")
-    FileUtils.mkdir_p(out_dir)
-    html_path = out_dir.join("invoice_#{user.id}_#{@year}_#{@month}_#{SecureRandom.hex(4)}.html").to_s
-    pdf_path  = html_path.sub(/\.html$/, ".pdf")
-    File.write(html_path, html_body)
-
-    out, err, status = Open3.capture3("node", SCRIPT.to_s, html_path, pdf_path)
-    raise "html_to_pdf failed: #{err}" unless status.success?
-
-    pdf_path
-  ensure
-    File.delete(html_path) if defined?(html_path) && html_path && File.exist?(html_path)
+    ERB.new(File.read(template_path)).result(binding)
   end
 
   private

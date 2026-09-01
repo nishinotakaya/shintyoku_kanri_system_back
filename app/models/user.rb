@@ -10,6 +10,8 @@ class User < ApplicationRecord
   has_many :fixed_assets, dependent: :destroy
   has_many :bank_transactions, dependent: :destroy
   has_many :invoice_settings, dependent: :destroy
+  # 請求先(宛先)マスタ。複数の取引先に請求書を出すユーザー(運送など)が登録する
+  has_many :invoice_clients, dependent: :destroy
   has_one  :backlog_setting, dependent: :destroy
   has_one  :github_setting, dependent: :destroy
   has_many :backlog_tasks, dependent: :destroy
@@ -284,6 +286,12 @@ class User < ApplicationRecord
 
   def invoice_recipient_honorific
     admin? ? "御中" : "様"
+  end
+
+  # 登録済みの請求先マスタの既定。請求書に宛先が明示されていない時のフォールバックに使う。
+  # マスタを登録していないユーザー(従来どおりの人)は nil になり、挙動は変わらない。
+  def default_invoice_client
+    invoice_clients.active.ordered.find_by(is_default: true)
   end
 
   def invoice_setting_for(category = "wings")

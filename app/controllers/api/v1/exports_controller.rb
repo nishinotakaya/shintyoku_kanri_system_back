@@ -57,11 +57,15 @@ module Api
         po_no_for_note = submission&.purchase_order_no_override.presence || submission&.received_purchase_order&.order_no
         po_line = po_no_for_note.present? ? "注文番号: #{po_no_for_note}" : nil
         composed_note = [ po_line, submission&.note ].compact.reject(&:blank?).join("\n").presence
+        # 宛先: ラボップ宛(admin が部下の分を発行)が最優先。それ以外は請求書に焼き付けた宛先 →
+        # 登録済み請求先マスタの既定 → 請求書設定の client_name(レンダラ側)の順にフォールバックする。
+        client_override, honorific_override = resolve_client_override(client_override, submission, target_user)
         path = InvoicePdfRenderer.new(
           target_user,
           year: year, month: month, category: cat,
           application_date: application_date,
           client_name_override: client_override,
+          honorific_override: honorific_override,
           issuer_user_override: issuer_override,
           total_override: submission&.total_override,
           item_label_override: submission&.item_label_override,
@@ -426,6 +430,20 @@ module Api
         label = CATEGORY_LABELS[category.to_s] || default_label
         surname = user.display_name.to_s.split(/[\s　]/).first
         [ label, surname, body ].map { |part| part.to_s.strip }.reject(&:blank?).join("_")
+      end
+
+      # 宛先の決定。戻り値: [client_name, honorific]
+      # labop 等で既に宛先が確定しているときは何もしない(そのまま返す)。
+      def resolve_client_override(client_override, submission, target_user)
+        return [ client_override, nil ] if client_override.present?
+
+        snapshot = submission&.client_name_override.presence
+        return [ snapshot, submission&.client_honorific_override.presence ] if snapshot
+
+        default_client = target_user&.default_invoice_client
+        return [ nil, nil ] if default_client.nil?
+
+        [ default_client.name, default_client.display_honorific ]
       end
 
       # 承認済の InvoiceSubmission を指定して admin (西野) が DL する場合、
