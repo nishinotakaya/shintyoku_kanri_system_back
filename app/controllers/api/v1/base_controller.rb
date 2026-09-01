@@ -10,7 +10,27 @@ module Api
       def current_user
         raw = super
         return raw unless raw
+        # なりすまし中は linked 解決を挟まない。挟むと wing西野(linked 先が admin 西野)に
+        # なりすました瞬間に admin 西野へ戻されてしまい、本人の見え方を確認できない。
+        return raw if impersonator
         @resolved_current_user ||= (raw.respond_to?(:linked_user) && raw.linked_user) || raw
+      end
+
+      # なりすまし中なら「なりすまし元の管理者」、通常ログインなら nil。
+      # 出所は署名済み JWT のクレームなので、クライアント側からは偽装できない。
+      def impersonator
+        return @impersonator if defined?(@impersonator)
+        @impersonator = User.find_by(id: jwt_claims["impersonator_id"])
+      end
+
+      # 現在のリクエストが提示している JWT のクレーム。デコードできなければ空ハッシュ。
+      def jwt_claims
+        @jwt_claims ||= begin
+          header = request.headers["Authorization"].to_s
+          header.start_with?("Bearer ") ? Warden::JWTAuth::TokenDecoder.new.call(header.delete_prefix("Bearer ")) : {}
+        rescue StandardError
+          {}
+        end
       end
 
       private

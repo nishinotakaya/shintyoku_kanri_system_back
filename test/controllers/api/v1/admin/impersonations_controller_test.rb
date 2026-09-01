@@ -66,4 +66,92 @@ class Api::V1::Admin::ImpersonationsControllerTest < ActionDispatch::Integration
 
     assert_response :unauthorized
   end
+
+  # --- ここから: 「詰まない」ための挙動 ---
+
+  # なりすましトークンには戻り先が埋まっているので、/me がそれを返す。
+  # フロントはこれを見てバナーを出すため、localStorage が消えても管理者に戻れる。
+  def test_me_exposes_impersonator_so_the_banner_survives_cleared_storage
+    get "/api/v1/me", headers: impersonation_headers_for(@target)
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal @admin.id, body.dig("impersonator", "id")
+    assert_equal @admin.display_name, body.dig("impersonator", "display_name")
+  end
+
+  # 通常ログインでは impersonator は入らない(バナーを誤表示しない)
+  def test_me_has_no_impersonator_on_normal_login
+    get "/api/v1/me", headers: auth_headers(@target)
+
+    assert_response :success
+    assert_nil JSON.parse(response.body)["impersonator"]
+  end
+
+  # なりすましトークンだけを根拠に管理者へ戻れる = 帰り道がサーバ側にある
+  def test_delete_returns_admin_token_without_any_client_state
+    delete "/api/v1/admin/impersonations", headers: impersonation_headers_for(@target)
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal @admin.id, body.dig("user", "id")
+
+    get "/api/v1/me", headers: { "Authorization" => "Bearer #{body['token']}" }
+
+    assert_response :success
+    assert_equal @admin.id, JSON.parse(response.body)["id"]
+  end
+
+  def test_delete_is_rejected_when_not_impersonating
+    delete "/api/v1/admin/impersonations", headers: auth_headers(@admin)
+
+    assert_response :unprocessable_entity
+  end
+
+  # 管理者に戻らずに別ユーザーへ直接乗り換えられる(管理者権限はトークンが保持している)
+  def test_can_switch_to_another_user_while_impersonating
+    post "/api/v1/admin/impersonations", params: { user_id: @non_admin.id },
+         headers: impersonation_headers_for(@target), as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal @non_admin.id, body.dig("user", "id")
+    assert_equal @admin.display_name, body.dig("admin", "display_name")
+
+    # 乗り換え後も戻り先は元の管理者のまま
+    get "/api/v1/me", headers: { "Authorization" => "Bearer #{body['token']}" }
+
+    assert_equal @admin.id, JSON.parse(response.body).dig("impersonator", "id")
+  end
+
+  # 非管理者のトークンで乗り換えようとしても通らない(なりすまし中でも権限判定は発行元の管理者)
+  def test_non_admin_cannot_switch_even_with_an_impersonation_token
+    non_admin_token = @target.issue_jwt(impersonated_by: @non_admin)
+
+    post "/api/v1/admin/impersonations", params: { user_id: @admin.id },
+         headers: { "Authorization" => "Bearer #{non_admin_token}" }, as: :json
+
+    assert_response :forbidden
+  end
+
+  # linked_user_id を持つアカウント(wing西野 → admin西野)になりすましても、
+  # BaseController の linked 解決に横取りされず本人のままでいられる
+  def test_impersonating_a_linked_account_stays_on_that_account
+    @linked = User.create!(email: "imp_linked_#{SecureRandom.hex(4)}@example.com",
+                           password: "password123", display_name: "wing 太郎",
+                           closing_day: 25, linked_user: @admin)
+
+    get "/api/v1/me", headers: impersonation_headers_for(@linked)
+
+    assert_response :success
+    assert_equal @linked.id, JSON.parse(response.body)["id"]
+  ensure
+    @linked&.destroy
+  end
+
+  private
+
+  def impersonation_headers_for(user, impersonated_by: nil)
+    { "Authorization" => "Bearer #{user.issue_jwt(impersonated_by: impersonated_by || @admin)}" }
+  end
 end

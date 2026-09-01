@@ -60,6 +60,24 @@ class User < ApplicationRecord
   # → BaseController#current_user が linked_user に解決し、両アカウントから同一データを編集可能。
   belongs_to :linked_user, class_name: "User", optional: true
 
+  # このユーザーとしてログインできる JWT を発行する。
+  # impersonated_by を渡したときだけ「戻り先の管理者」をトークンに埋め込む。
+  # 状態をトークン側に持たせることで、ブラウザの localStorage が消えても管理者に戻れる。
+  #
+  # 戻り先は ivar で渡し、writer は公開しない。公開すると permit の追加ミス一つで
+  # 「自分のサインアップ時に管理者を戻り先として仕込む」権限昇格が成立してしまう。
+  def issue_jwt(impersonated_by: nil)
+    @impersonated_by_id = impersonated_by&.id
+    Warden::JWTAuth::UserEncoder.new.call(self, :user, nil).first
+  ensure
+    @impersonated_by_id = nil
+  end
+
+  # devise-jwt がトークン生成時に呼ぶ。ここで返した Hash がそのまま JWT のクレームになる。
+  def jwt_payload
+    @impersonated_by_id ? { "impersonator_id" => @impersonated_by_id } : {}
+  end
+
   def application_date_for(year, month)
     # 設定が無い場合は対象月の末日をデフォルトとする
     monthly_settings.find_by(year: year, month: month)&.application_date || Date.new(year.to_i, month.to_i, -1)

@@ -90,7 +90,9 @@ module Api
           # カレンダー見出しに出す会社(テナント)名。HAUKUR運送 / プロアカ
           tenant_name: current_user.tenant_name,
           writable_data_sources: UserDataSourcePermission::SOURCE_TYPES.select { |source| current_user.can_write_data_source?(source) },
-          sub_admin: current_user.sub_admin?
+          sub_admin: current_user.sub_admin?,
+          # なりすまし中なら戻り先の管理者。フロントはこれでバナーを出すので localStorage に依存しない
+          impersonator: impersonator && { id: impersonator.id, display_name: impersonator.display_name }
         }
       end
     end

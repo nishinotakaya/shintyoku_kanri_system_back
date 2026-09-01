@@ -20,7 +20,9 @@ Rails.application.routes.draw do
         resources :users, only: [ :index, :create, :update ]
         resources :tenants, only: [ :index, :create, :update, :destroy ]
         # なりすましログイン: 管理者が他ユーザーの JWT を発行してもらう
-        post "impersonations", to: "impersonations#create"
+        get    "impersonations", to: "impersonations#index"
+        post   "impersonations", to: "impersonations#create"
+        delete "impersonations", to: "impersonations#destroy"
       end
 
       # スキルシート (機能フラグ can_use?(:skill_sheet) で利用可)
