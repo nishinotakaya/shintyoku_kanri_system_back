@@ -491,6 +491,8 @@ module Api
           progress: t.progress,
           created_on: t.created_on, completed_on: t.completed_on,
           start_date: t.start_date, end_date: t.end_date, due_date: t.due_date,
+          # 前回同期からの変更前の値。入っていればカードに「修正前 → 修正後」を出す
+          start_date_prev: t.start_date_prev, end_date_prev: t.end_date_prev,
           memo: t.memo, position: t.position,
           deploy_date: t.deploy_date, deploy_note: t.deploy_note,
           source: t.source, assignee_name: t.assignee_name, assignee_id: t.assignee_id,

@@ -33,9 +33,15 @@ class BacklogSyncService
         task.status_id = issue.dig("status", "id")
         task.status_name = issue.dig("status", "name")
         task.created_on = parse_date(issue["created"])
-        task.due_date = parse_date(issue["dueDate"])
-        task.start_date = parse_date(issue["startDate"])
-        task.end_date = parse_date(issue["dueDate"])
+        # Backlog 側で開始日/期限日が動いたら、動く前の値を *_prev に退避して
+        # カンバンで「修正前 → 修正後」を出せるようにする(Notion と同じ方式)。
+        new_start = parse_date(issue["startDate"])
+        new_end   = parse_date(issue["dueDate"])
+        task.start_date_prev = task.start_date if task.persisted? && task.start_date != new_start
+        task.end_date_prev   = task.end_date   if task.persisted? && task.end_date != new_end
+        task.due_date = new_end
+        task.start_date = new_start
+        task.end_date = new_end
         task.assignee_name = issue.dig("assignee", "name")
         task.assignee_id = issue.dig("assignee", "id")
         task.url = "#{@setting.backlog_url.chomp('/')}/view/#{issue['issueKey']}"
