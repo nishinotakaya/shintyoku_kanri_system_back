@@ -5,6 +5,9 @@ require "test_helper"
 # 送信後は *_prev(変更差分)がクリアされる。実際の LINE 送信はスタブし、テストから外部送信しない。
 class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
   def setup
+    # シート同期(Google Sheets)はテストから外部送信しない
+    @original_sheet_sync = LineReportSheetSync.method(:sync)
+    LineReportSheetSync.define_singleton_method(:sync) { |operator:, month:| { sheet: "stub", rows: 0 } }
     suffix = SecureRandom.hex(4)
     @admin = User.create!(email: "notion_admin_#{suffix}@example.com", password: "password123",
                           display_name: "西野 鷹也", closing_day: 25)
@@ -18,6 +21,7 @@ class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
   end
 
   def teardown
+    LineReportSheetSync.define_singleton_method(:sync, @original_sheet_sync)
     @task&.destroy
     [ @admin, @plain_user ].compact.each(&:destroy)
   end

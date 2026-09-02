@@ -15,6 +15,7 @@ class User < ApplicationRecord
   has_one  :backlog_setting, dependent: :destroy
   has_one  :github_setting, dependent: :destroy
   has_many :backlog_tasks, dependent: :destroy
+  has_many :line_report_entries, dependent: :destroy
   has_many :progress_workspaces, dependent: :destroy
   has_many :user_data_source_permissions, dependent: :destroy
   # 自分のキーを貸している相手の権限。退職などで消えたら貸与を解除する(相手の権限行ごとは消さない)

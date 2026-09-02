@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_02_024759) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_02_060000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -497,6 +497,22 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_02_024759) do
     t.index ["jti"], name: "index_jwt_denylists_on_jti"
   end
 
+  create_table "line_report_entries", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.date "reported_on", null: false
+    t.string "task_title", null: false
+    t.string "start_date_text"
+    t.string "end_date_text"
+    t.string "progress_text"
+    t.string "status_text"
+    t.text "note"
+    t.string "url"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "reported_on", "task_title"], name: "idx_line_report_entries_on_user_date_task", unique: true
+    t.index ["user_id"], name: "index_line_report_entries_on_user_id"
+  end
+
   create_table "manager_assignments", force: :cascade do |t|
     t.integer "manager_id", null: false
     t.integer "managee_id", null: false
@@ -935,6 +951,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_02_024759) do
   add_foreign_key "invoice_settings", "users"
   add_foreign_key "invoice_submissions", "invoice_clients"
   add_foreign_key "invoice_submissions", "users"
+  add_foreign_key "line_report_entries", "users"
   add_foreign_key "progress_workspaces", "users"
   add_foreign_key "purchase_order_histories", "users"
   add_foreign_key "purchase_order_histories", "users", column: "recipient_user_id"

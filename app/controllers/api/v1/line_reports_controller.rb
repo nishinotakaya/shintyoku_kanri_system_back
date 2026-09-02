@@ -14,7 +14,8 @@ module Api
         if params[:notion_issue_keys].present? && current_user.can_view_data_source?("notion")
           NotionTask.for_kanban_issue_keys(params[:notion_issue_keys]).each(&:clear_reported_diffs!)
         end
-        render json: { sent: true }
+        archive = LineReportArchiver.record(user: current_user, message: text)
+        render json: { sent: true }.merge(archive)
       end
     end
   end

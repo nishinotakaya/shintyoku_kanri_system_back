@@ -41,7 +41,8 @@ module Api
           return render(json: { error: "LINE送信に失敗しました。LINE設定(チャネルトークン)を確認してください" }, status: :bad_gateway)
         end
         tasks.each(&:clear_reported_diffs!)
-        render json: { sent: true, task_count: tasks.size }
+        archive = LineReportArchiver.record(user: current_user, message: text)
+        render json: { sent: true, task_count: tasks.size }.merge(archive)
       end
 
       # PATCH /api/v1/notion_tasks/:id  { memo }

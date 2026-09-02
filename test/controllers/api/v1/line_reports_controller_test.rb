@@ -5,6 +5,9 @@ require "test_helper"
 # 実際の LINE 送信はスタブし、テストから外部送信しない。
 class Api::V1::LineReportsControllerTest < ActionDispatch::IntegrationTest
   def setup
+    # シート同期(Google Sheets)はテストから外部送信しない
+    @original_sheet_sync = LineReportSheetSync.method(:sync)
+    LineReportSheetSync.define_singleton_method(:sync) { |operator:, month:| { sheet: "stub", rows: 0 } }
     suffix = SecureRandom.hex(4)
     @admin = User.create!(email: "line_admin_#{suffix}@example.com", password: "password123",
                           display_name: "西野 鷹也", closing_day: 25)
@@ -17,6 +20,7 @@ class Api::V1::LineReportsControllerTest < ActionDispatch::IntegrationTest
   end
 
   def teardown
+    LineReportSheetSync.define_singleton_method(:sync, @original_sheet_sync)
     @task&.destroy
     [ @admin, @plain_user ].compact.each(&:destroy)
   end
@@ -45,6 +49,20 @@ class Api::V1::LineReportsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal [ "📋 進捗報告\n\nタスク: SAP-1 テスト" ], sent_texts
+  end
+
+  def test_records_line_report_entries_for_the_sheet
+    with_line_notifier_stub do
+      post "/api/v1/line_reports", params: { message: "タスク: シート連携\n進捗率: 40%" },
+           headers: auth_headers(@admin), as: :json
+    end
+
+    assert_response :success
+    assert_equal true, response.parsed_body["sheet_synced"]
+    entry = LineReportEntry.find_by(user_id: @admin.id, reported_on: Time.zone.today, task_title: "シート連携")
+    assert_equal "40%", entry&.progress_text
+  ensure
+    LineReportEntry.where(user_id: @admin.id).delete_all
   end
 
   def test_blank_message_is_rejected
