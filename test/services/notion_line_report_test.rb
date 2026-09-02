@@ -50,7 +50,7 @@ class NotionLineReportTest < ActiveSupport::TestCase
     message = NotionLineReport.new([ task ]).message
 
     assert_includes message, "ステータス: 進行中 → 完了"
-    assert_includes message, "備考: 先行手配済み"
+    assert_includes message, "備考(遅れた理由など): 先行手配済み"
     refute_includes NotionLineReport.new([ build_task(notion_block_id: SecureRandom.uuid) ]).message, "ステータス:"
   end
 

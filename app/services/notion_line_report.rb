@@ -26,7 +26,7 @@ class NotionLineReport
     lines << "終了日: #{date_line(task.end_date_prev, task.end_date)}"
     lines << "進捗率: #{rate_line(task.progress_rate_prev, task.progress_rate)}"
     lines << "ステータス: #{text_line(task.status_prev, task.status)}" if task.status.present?
-    lines << "備考: #{task.note}" if task.note.present?
+    lines << "備考(遅れた理由など): #{task.note}" if task.note.present?
     lines << "リンク"
     lines << task.url
     lines.join("\n")
