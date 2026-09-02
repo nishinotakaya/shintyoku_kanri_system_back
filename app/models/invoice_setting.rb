@@ -2,6 +2,8 @@ class InvoiceSetting < ApplicationRecord
   belongs_to :user
 
   serialize :default_items, coder: JSON, type: Array
+  # 統合請求書(ラボップ宛)だけに載せる固定明細。未設定なら default_items を流用する。
+  serialize :merged_default_items, coder: JSON, type: Array
 
   # 既定値（個人情報は ENV から注入。Public リポジトリに具体値を残さない）
   DEFAULTS = {
@@ -156,5 +158,16 @@ class InvoiceSetting < ApplicationRecord
       return own if own.positive?
     end
     default_unit_price_for(category)
+  end
+
+  # 統合請求書に載せる固定明細(シェアラウンジ控除など)。
+  #   ① 本人設定の merged_default_items(請求側専用)
+  #   ② 無ければ default_items(支払側と請求側が同じ人。admin=西野がこれ)
+  # default_items をそのまま請求側に流用すると、本人への支払額からも控除されてしまうため、
+  # 「請求側だけ控除する人(川村さん)」は ① に入れる。
+  def self.billing_default_items_for(user, category)
+    setting = user.invoice_settings.find_by(category: category.to_s)
+    return [] if setting.nil?
+    Array(setting.merged_default_items).presence || Array(setting.default_items)
   end
 end

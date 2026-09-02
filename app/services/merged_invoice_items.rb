@@ -48,8 +48,9 @@ module MergedInvoiceItems
       label: "#{prefix}#{setting.item_label}(#{format('%.1f', hours)}hまで)",
       qty: quantity, unit: "時間", unit_price: rate, amount: (hours * rate).round
     } ]
-    # シェアラウンジ利用料などの固定行(控除含む)は統合請求にもそのまま載せる
-    Array(setting.default_items).each do |it|
+    # シェアラウンジ利用料などの固定行(控除含む)。請求側専用の設定があればそちらを使う
+    # (支払側の default_items を流用すると、本人への支払額まで控除されてしまう人がいる)。
+    InvoiceSetting.billing_default_items_for(submission.user, submission.category).each do |it|
       qty = (it["qty"] || it[:qty] || 1).to_f
       price = (it["price"] || it[:price] || 0).to_i
       label = (it["label"] || it[:label]).to_s
@@ -173,5 +174,14 @@ module MergedInvoiceItems
         "unit_price" => unit_price, "amount" => amount }
     end
     items.reject { |it| it["label"].blank? && it["amount"].zero? }.presence
+  end
+
+  # 品名が空なのに金額がある行。客先に「品名空欄で -30,000円」という明細が出てしまうので、
+  # 発行前に弾く。金額 0 の空行は入力途中なので normalize が黙って捨てる。
+  def nameless_charge_row(items)
+    Array(items).find do |it|
+      h = it.respond_to?(:to_h) ? it.to_h : it
+      (h["label"] || h[:label]).to_s.strip.empty? && (h["amount"] || h[:amount]).to_i != 0
+    end
   end
 end

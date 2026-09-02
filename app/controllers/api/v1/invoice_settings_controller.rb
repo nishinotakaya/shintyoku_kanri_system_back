@@ -56,6 +56,7 @@ module Api
           category: s.category,
           client_name: s.client_name, honorific: s.honorific, subject: s.subject, item_label: s.item_label,
           unit_price: s.unit_price, merged_unit_price: s.merged_unit_price, tax_rate: s.tax_rate, payment_due_days: s.payment_due_days,
+          merged_default_items: s.merged_default_items,
           tax_included: s.tax_included,
           issuer_name: s.issuer_name, registration_no: s.registration_no,
           postal_code: s.postal_code, address: s.address, tel: s.tel, email: s.email,

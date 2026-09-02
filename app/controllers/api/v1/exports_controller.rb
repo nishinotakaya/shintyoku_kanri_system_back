@@ -154,6 +154,11 @@ module Api
         # 統合PDFの編集明細(items_override パラメータ)が来たら、それを使う。
         # = 元申請(invoice_submissions)を一切書き換えずに統合PDFだけ更新する。
         edited_items = MergedInvoiceItems.normalize(params[:items_override])
+        # 品名が空のまま金額だけある行は、客先に空欄の明細として出てしまう。発行前に止める。
+        if (nameless = MergedInvoiceItems.nameless_charge_row(edited_items))
+          return render(json: { error: "品名が空の明細があります(金額 #{nameless['amount']}円)。品名を入力してから発行してください。" },
+                        status: :unprocessable_entity)
+        end
         merged_items = edited_items || MergedInvoiceItems.build(ordered_subs)
         # 手編集した明細のときは編集結果どおりに再計算させる（固定すると編集が金額に反映されない）。
         merged_total = edited_items ? nil : MergedInvoiceItems.confirmed_total(ordered_subs)
