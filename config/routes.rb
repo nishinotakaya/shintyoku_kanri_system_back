@@ -340,6 +340,8 @@ Rails.application.routes.draw do
       post  "work_reports/apply_transit",  to: "work_reports#apply_transit"
 
       # Notion (WBS タスク) 連携
+      # 進捗のLINE報告(汎用)。文面をそのまま西野さんのLINEへ送る
+      post "line_reports", to: "line_reports#create"
       resources :notion_tasks, only: [ :index, :update ] do
         collection do
           post :sync
