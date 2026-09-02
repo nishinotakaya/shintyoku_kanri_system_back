@@ -16,7 +16,7 @@ module Api
         # GET /api/v1/admin/users
         def index
           users = User.where(id: current_user.manageable_user_ids).order(:id).includes(:managees)
-          candidates = current_user.admin? ? TeamSchedule.selectable_persons : []
+          candidates = current_user.admin? ? calendar_person_candidates : []
           render json: { users: users.map { |u| serialize(u) }, calendar_person_candidates: candidates }
         end
 
@@ -118,6 +118,15 @@ module Api
         end
 
         private
+
+        # 「カレンダーで見える人」のチェック候補。取込データ由来の人物名(TeamSchedule.selectable_persons)に
+        # 加えて、テナント(会社)に紐づくユーザーの人物行(例: 「西野 雄太郎」「運送外注」)も選べるようにする。
+        # 候補に無い人物はチェックを外すこともできないため、カレンダーに出うる行はすべてここに載せる。
+        def calendar_person_candidates
+          tenant_user_ids = (Tenant.pluck(:owner_user_id).compact + TenantMembership.pluck(:user_id)).uniq
+          tenant_persons = User.where(id: tenant_user_ids).map(&:own_calendar_person).reject(&:empty?)
+          (TeamSchedule.selectable_persons + tenant_persons).uniq
+        end
 
         def inherit_supervisor_defaults(user)
           user.feature_flags = current_user.feature_flags.to_h

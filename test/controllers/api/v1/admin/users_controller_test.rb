@@ -48,6 +48,10 @@ class Api::V1::Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     ids = response.parsed_body["users"].map { |u| u["id"] }
     assert_includes ids, @stranger.id
     assert_includes ids, @driver.id
+    # カレンダー候補にはテナント(会社)に紐づく人物行も出る(候補に無いとチェックを外せない)
+    candidates = response.parsed_body["calendar_person_candidates"]
+    assert_includes candidates, "西野 雄太郎"
+    assert_includes candidates, "運送外注"
   end
 
   def test_plain_user_is_forbidden
