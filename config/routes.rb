@@ -343,6 +343,8 @@ Rails.application.routes.draw do
       resources :notion_tasks, only: [ :index, :update ] do
         collection do
           post :sync
+          post :line_report_preview
+          post :line_report
         end
       end
 

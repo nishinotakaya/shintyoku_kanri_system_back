@@ -3,6 +3,8 @@ require "json"
 require "uri"
 
 class NotionClient
+  # WBS コレクションが載っている Notion ページ (ブラウザで開く URL 用)
+  PAGE_ID            = "21e123f2-61d2-802b-93ba-e6e0f9406682"
   COLLECTION_ID      = "21e123f2-61d2-80ca-a490-000b02914dd5"
   COLLECTION_VIEW_ID = "21e123f2-61d2-80b2-9c52-000c51b8b437"
   SPACE_ID           = "1578478a-5efe-4c45-831c-e8a0bd820fd6"

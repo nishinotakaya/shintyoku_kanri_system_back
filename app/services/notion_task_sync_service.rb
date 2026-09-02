@@ -33,6 +33,7 @@ class NotionTaskSyncService
         task.status_id = status[:id]
         task.status_name = status[:name]
         task.progress_workspace_id = living_workspace_id
+        task.url = notion_task.url
         task.save!
         synced += 1
       end
