@@ -86,15 +86,10 @@ module Api
           end
 
           # admin かどうかは User#admin?(氏名・メール一致)で決まり、users テーブルに admin 列は無い。
-          # 旧コードは admin: を渡していて常に 422(unknown attribute 'admin')になっていた。
-          user = User.new(
-            email: email,
-            display_name: params[:display_name].to_s.strip.presence || email.split("@").first,
-            password: Devise.friendly_token[0, 24]  # ランダム (本人は Google ログインで入る)
+          # 作成・引き継ぎ・紐づけは契約書署名後の自動登録と共通(UserProvisioning)。
+          user = UserProvisioning.create_member!(
+            email: email, display_name: params[:display_name], creator: current_user
           )
-          inherit_supervisor_defaults(user) unless current_user.admin?
-          user.save!
-          attach_to_supervisor(user) unless current_user.admin?
 
           send_invite = params[:send_invite].nil? || ActiveModel::Type::Boolean.new.cast(params[:send_invite])
           invite_sent = false
@@ -145,17 +140,6 @@ module Api
           (TeamSchedule.selectable_persons + tenant_persons).uniq
         end
 
-        def inherit_supervisor_defaults(user)
-          user.feature_flags = current_user.feature_flags.to_h
-          user.work_categories = current_user.work_categories
-          user.closing_day = current_user.closing_day
-        end
-
-        def attach_to_supervisor(user)
-          current_user.manager_assignments.find_or_create_by!(managee_id: user.id)
-          current_user.owned_tenants.first&.tenant_memberships&.find_or_create_by!(user_id: user.id)
-        end
-
         # params: data_source_permission { source_type, can_view, can_sync, can_write, credential_owner_id }
         # 1ソースずつ更新する。can_view が false になったらそのソースは丸ごと不可に倒す
         # (閲覧できないのに同期・書き込みだけ通る状態を作らない)。
@@ -203,34 +187,7 @@ module Api
         end
 
         def send_invitation_email(invitee)
-          sign_in_url = ENV["FRONTEND_URL"].presence || "https://react-frontend-beige.vercel.app"
-          subject = "【勤怠アプリ】#{current_user.display_name}さんから招待が届きました"
-          body = <<~BODY
-            #{invitee.display_name} 様
-
-            #{current_user.display_name}さんが勤怠アプリにあなたを招待しました。
-
-            下記URLにアクセスし、Googleアカウント（このメールアドレス: #{invitee.email}）でログインしてください。
-            #{sign_in_url}/sign_in
-
-            ※ Googleログインのメールアドレスが上記と一致すれば、自動で本アプリのアカウントに紐づきます。
-            ※ ログイン後、メニュー右上の ⚙ 設定 → アカウント から表示名や請求書情報を編集できます。
-
-            ご不明点があれば #{current_user.email} までご連絡ください。
-
-            ---
-            勤怠アプリ
-          BODY
-
-          # サブ管理者(例: 雄太郎)は Google 未連携のことがあるので、トークンを持つ
-          # ユーザー(無ければ Google 連携済み admin)のアカウントから送る。文面上の差出人は操作者のまま。
-          sender = GoogleAuth.credential_user(current_user)
-          GmailSender.new(user: sender).send_mail(
-            to: invitee.email,
-            subject: subject,
-            body: body,
-            from_name: current_user.display_name
-          )
+          UserProvisioning.send_invite!(invitee: invitee, inviter: current_user)
         end
       end
     end

@@ -51,6 +51,7 @@ module Api
             ip: request.remote_ip,
             user_agent: request.user_agent
           )
+          register_party_b_as_user
           render json: { status: "signed", signed_at: @contract.signed_at.iso8601 }
         rescue Contract::NotSignable
           render json: { error: "この契約書は署名できません（期限切れ・既に署名済み・無効）" }, status: :conflict
@@ -59,6 +60,22 @@ module Api
         end
 
         private
+
+        # 契約を交わした乙をユーザー一覧に自動登録し、登録URL(招待メール)を送る。
+        # 既に同じメールのユーザーがいれば何もしない。失敗しても署名処理は成功のまま(ログのみ)。
+        def register_party_b_as_user
+          email = @contract.party_b_email.to_s.strip.downcase
+          return if email.blank? || User.exists?(email: email)
+
+          invitee = UserProvisioning.create_member!(
+            email: email, display_name: @contract.party_b_name, creator: @contract.user
+          )
+          UserProvisioning.send_invite!(invitee: invitee, inviter: @contract.user)
+          @contract.record_event("party_b_registered", actor: "system", detail: { user_id: invitee.id, email: email })
+        rescue StandardError => e
+          Rails.logger.error("[public/contracts#sign] 乙の自動登録に失敗: #{e.class}: #{e.message}")
+        end
+
 
         def set_no_index_headers
           response.headers["Cache-Control"] = "no-store"

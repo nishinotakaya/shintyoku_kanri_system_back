@@ -175,7 +175,7 @@ module Api
         contracts = scope
         from_date = parse_iso_date(params[:contract_date_from])
         to_date = parse_iso_date(params[:contract_date_to])
-        contracts = contracts.where(contract_date: from_date.. ) if from_date
+        contracts = contracts.where(contract_date: from_date..) if from_date
         contracts = contracts.where(contract_date: ..to_date) if to_date
         contracts = contracts.where(status: params[:status]) if params[:status].present?
         contracts
