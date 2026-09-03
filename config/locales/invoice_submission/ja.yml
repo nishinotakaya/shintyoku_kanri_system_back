@@ -5,6 +5,9 @@ ja:
       living: "リビング"
       techleaders: "テックリーダーズ"
       resystems: "REシステムズ"
+      video: "動画編集"
+      proaka: "プロアカ"
+      transport: "運送"
     kinds:
       invoice: "請求書"
       expense: "立替金"

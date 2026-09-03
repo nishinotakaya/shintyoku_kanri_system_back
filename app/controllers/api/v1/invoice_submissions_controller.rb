@@ -2,11 +2,11 @@ module Api
   module V1
     class InvoiceSubmissionsController < BaseController
       include FreeeReportable
-      # admin: 全ユーザーの申請を表示。それ以外: 自分の申請のみ。
+      # admin: 全ユーザーの申請を表示。サブ管理者(テナント代表): 管理対象ユーザーの申請。それ以外: 自分の申請のみ。
       # 既定では status=pending を返す。?status=all で全件、?status=approved で承認済のみ。
       # ?kind=invoice|expense でフィルタ可。
       def index
-        scope = current_user.admin? ? InvoiceSubmission.all : InvoiceSubmission.where(user_id: current_user.id)
+        scope = current_user.admin? ? InvoiceSubmission.all : InvoiceSubmission.where(user_id: current_user.manageable_user_ids)
         case params[:status].to_s
         when "all"
           # no filter
@@ -32,9 +32,9 @@ module Api
         month = params[:month].to_i
         category = params[:category].to_s.presence || "wings"
         po_id = params[:received_purchase_order_id].presence
-        # admin (西野) のみ target_user_id で他ユーザー宛申請を作成可能。それ以外は自分自身に限定。
+        # admin と サブ管理者は target_user_id で管理対象ユーザー宛の申請を作成可能。それ以外は自分自身に限定。
         target_user =
-          if current_user.admin? && params[:target_user_id].present?
+          if params[:target_user_id].present? && current_user.can_manage_user?(params[:target_user_id])
             User.find(params[:target_user_id])
           else
             current_user
@@ -83,18 +83,19 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
-      # 編集は admin または本人(owner)が可能。
-      # ただしステータス変更(承認/却下)は admin のみ。内容(備考/金額/明細/日付/インボイス番号等)は本人も編集可。
+      # 編集は admin・管理対象を持つサブ管理者・本人(owner)が可能。
+      # ステータス変更(承認/却下)は admin または管理対象ユーザーに対するサブ管理者のみ。
       def update
         record = InvoiceSubmission.find(params[:id])
         is_owner = record.user_id == current_user.id
-        unless current_user.admin? || is_owner
+        unless is_owner || current_user.can_manage_user?(record.user_id)
           return render(json: { error: "編集権限がありません" }, status: :forbidden)
         end
         attrs = {}
 
         if params.key?(:status)
-          return render(json: { error: "承認権限がありません(ステータス変更は管理者のみ)" }, status: :forbidden) unless current_user.admin?
+          can_review = current_user.admin? || (current_user.sub_admin? && current_user.can_manage_user?(record.user_id))
+          return render(json: { error: "承認権限がありません(ステータス変更は管理者のみ)" }, status: :forbidden) unless can_review
           new_status = params[:status].to_s
           return render(json: { error: "不正なステータス" }, status: :unprocessable_entity) unless InvoiceSubmission::STATUSES.include?(new_status)
           attrs[:status] = new_status
@@ -254,7 +255,7 @@ module Api
         return render(json: { error: "submissions が空です" }, status: :unprocessable_entity) if combos.empty?
 
         target_user = current_user
-        auto_approve = current_user.admin? && target_user.id == current_user.id
+        auto_approve = current_user.admin? || current_user.sub_admin?
         created_or_updated = []
         errors = []
 
@@ -290,10 +291,10 @@ module Api
         render json: { error: e.message, details: errors }, status: :unprocessable_entity
       end
 
-      # 削除: admin or 自分の申請のみ
+      # 削除: admin / 管理対象へのサブ管理者 / 自分の申請のみ
       def destroy
         record = InvoiceSubmission.find(params[:id])
-        unless current_user.admin? || record.user_id == current_user.id
+        unless record.user_id == current_user.id || current_user.can_manage_user?(record.user_id)
           return render(json: { error: "権限がありません" }, status: :forbidden)
         end
         record.destroy!
@@ -311,14 +312,15 @@ module Api
         (Time.iso8601(s) rescue Date.parse(s)) rescue nil
       end
 
-      # 申請を実行できるか: 本人 or admin
+      # 申請を実行できるか: 本人 / admin / 管理対象へのサブ管理者
       def can_submit?(record)
-        current_user.admin? || record.user_id == current_user.id
+        record.user_id == current_user.id || current_user.can_manage_user?(record.user_id)
       end
 
-      # 下書き等を申請状態へ。admin が自分宛なら自動承認、それ以外は pending + 西野へ通知。
+      # 下書き等を申請状態へ。admin・サブ管理者(自分がテナント代表=承認者)が自分宛なら自動承認、
+      # それ以外は pending + 西野へ通知。
       def do_submit(record)
-        auto_approve = current_user.admin? && record.user_id == current_user.id
+        auto_approve = (current_user.admin? || current_user.sub_admin?) && record.user_id == current_user.id
         record.update!(
           status: auto_approve ? "approved" : "pending",
           reviewer_id: auto_approve ? current_user.id : nil,
@@ -608,7 +610,7 @@ module Api
       end
 
       def serialize(record)
-        defaults = approved_defaults_for(record)
+        defaults = defaults_for(record)
         # 申請者の請求書設定は 1 回だけ引く（default_* 5項目で毎回引くと一覧APIが N×5 クエリになる）
         applicant_setting = record.user&.invoice_setting_for(record.category)
         {
@@ -650,6 +652,8 @@ module Api
           default_item_label: defaults[:item_label],
           default_subject: defaults[:subject],
           default_items: defaults[:items],
+          default_transport_expenses: defaults[:transport_expenses],
+          default_transport_expense_total: defaults[:transport_expense_total],
           default_application_date: defaults[:application_date],
           received_purchase_order_id: record.received_purchase_order_id,
           received_purchase_order_no: record.received_purchase_order&.order_no,
@@ -662,10 +666,11 @@ module Api
         }
       end
 
-      # approved の時のみ、ラボップモーダル初期表示用に
-      # ラボップ宛 PDF と同じ「{氏名} 開発業務 1行 (qty=時間 / 単価=3,750)」の明細を返す
-      def approved_defaults_for(record)
-        return {} unless record.approved?
+      # PDF と同じ既定値（合計・明細）を返す。
+      # - approved: issuer=reviewer(承認者) → ラボップ宛 PDF と同じ 1 行明細 + 内税逆算
+      # - draft/pending: issuer=本人 → 自己発行 PDF と同じ計算（編集モーダルの「金額が空」対策）
+      # transport は請求書 PDF が立替金(経費・会社負担)の表も持つので、その行と合計も返す。
+      def defaults_for(record)
         if record.kind == "expense"
           # 立替金は対象月の expense.amount 合計（会社負担=true、amount>0 のみ）を default_total として返す
           period = record.user.period_for(record.year, record.month)
@@ -674,11 +679,12 @@ module Api
         end
         return {} unless record.kind == "invoice"
         # issuer_user_override に reviewer (=admin) を渡すと labop_mode? が true になり、
-        # 1 行明細の自動生成 + 内税 10% 逆算が走る → PDF と同じ初期値になる
+        # 1 行明細の自動生成 + 内税 10% 逆算が走る → 承認済は代理発行 PDF と同じ初期値になる
+        issuer = record.approved? ? (record.reviewer || record.user) : record.user
         calc = InvoicePdfRenderer.new(
           record.user,
           year: record.year, month: record.month, category: record.category,
-          issuer_user_override: record.reviewer || record.user
+          issuer_user_override: issuer
         ).calculation
         full_name = record.user.display_name.to_s.strip
         item_label = full_name.empty? ? "開発業務" : "#{full_name} 開発業務"
@@ -689,9 +695,25 @@ module Api
           items: calc[:items],
           application_date: calc[:application_date]&.iso8601,
           due_date: calc[:due_date]&.iso8601
-        }
+        }.merge(transport_expense_defaults_for(record))
       rescue
         {}
+      end
+
+      # 運送の請求書 PDF は明細表の下に立替金(経費・会社負担)の表を出す。
+      # 編集モーダルにも同じ内容を出せるよう、InvoicePdfRenderer#transport_expenses と同じ条件で行を返す。
+      def transport_expense_defaults_for(record)
+        return {} unless record.category.to_s == "transport"
+        period = record.user.period_for(record.year, record.month)
+        rows = record.user.expenses
+                     .where(expense_date: period, category: record.category, company_burden: true)
+                     .order(:expense_date)
+                     .map do |expense|
+          { date: expense.expense_date&.iso8601,
+            label: [ expense.purpose, expense.payee_or_line ].map(&:presence).compact.join(" / "),
+            amount: expense.amount.to_i }
+        end
+        { transport_expenses: rows, transport_expense_total: rows.sum { |row| row[:amount] } }
       end
     end
   end

@@ -9,13 +9,13 @@ module Api
       # POST /api/v1/emails/labop_draft
       # 複数の承認済 invoice + expense をまとめて送付するメールの件名/本文 下書き
       def labop_draft
-        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        return render(json: { error: "権限がありません" }, status: :forbidden) unless can_bulk_mail?
         invoice_ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
         expense_ids = Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
         issued_pdf_ids = Array(params[:issued_invoice_pdf_ids]).map(&:to_i).reject(&:zero?)
-        invoices = InvoiceSubmission.where(id: invoice_ids).where(kind: "invoice").approved.includes(:user, :received_purchase_order)
-        expenses = InvoiceSubmission.where(id: expense_ids).where(kind: "expense").approved.includes(:user)
-        issued_pdfs = IssuedInvoicePdf.where(id: issued_pdf_ids)
+        invoices = manageable_submissions.where(id: invoice_ids).where(kind: "invoice").approved.includes(:user, :received_purchase_order)
+        expenses = manageable_submissions.where(id: expense_ids).where(kind: "expense").approved.includes(:user)
+        issued_pdfs = manageable_issued_pdfs.where(id: issued_pdf_ids)
         invoice_total = invoices.sum { |i| i.total_override || invoice_calc_total(i) }
         expense_total = expenses.sum { |e| expense_calc_total(e) }
         issued_invoice_total = issued_pdfs.where(kind: "invoice").sum(:total_amount).to_i
@@ -25,7 +25,7 @@ module Api
         first_month = invoices.first&.month || expenses.first&.month || issued_pdfs.first&.month
         first_cat = invoices.first&.category || expenses.first&.category || issued_pdfs.first&.category
         ctx = {
-          recipient_name: params[:recipient_name].presence || "#{I18n.t("companies.labop.name")} #{I18n.t("companies.labop.honorific_default")}",
+          recipient_name: params[:recipient_name].presence || default_bulk_mail_recipient(invoices.first || expenses.first),
           year: first_year,
           month: first_month,
           category_label: CATEGORY_LABELS[first_cat.to_s] || first_cat.to_s,
@@ -39,7 +39,7 @@ module Api
           expense_count: expenses.size + issued_pdfs.where(kind: "expense").count,
           breakdown_items: breakdown_items
         }
-        render json: EmailDrafter.draft(kind: :labop_invoice, context: ctx)
+        render json: EmailDrafter.draft(kind: :labop_invoice, context: ctx).merge(recipient_name: ctx[:recipient_name])
       end
 
       def invoice_calc_total(invoice)
@@ -60,18 +60,18 @@ module Api
       # 各 invoice → ラボップ宛 PDF / 各 expense → PDF + Excel
       # 宛先は params[:to] をそのまま使用 (Frontend が選んだ送り先を尊重)。
       def labop_send
-        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        return render(json: { error: "権限がありません" }, status: :forbidden) unless can_bulk_mail?
         # 添付タイプ別に id 配列を受ける（旧 invoice_submission_ids/expense_submission_ids も後方互換で受理）
         invoice_pdf_ids = Array(params[:invoice_pdf_submission_ids].presence || params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
         wr_xlsx_ids = Array(params[:work_report_xlsx_submission_ids].presence || params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
         expense_pdf_ids = Array(params[:expense_pdf_submission_ids].presence || params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
         expense_xlsx_ids = Array(params[:expense_xlsx_submission_ids].presence || params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
-        invoices_for_pdf = InvoiceSubmission.where(id: invoice_pdf_ids).where(kind: "invoice").approved
-        invoices_for_wr = InvoiceSubmission.where(id: wr_xlsx_ids).where(kind: "invoice").approved
-        expense_pdfs = InvoiceSubmission.where(id: expense_pdf_ids).where(kind: "expense").approved
+        invoices_for_pdf = manageable_submissions.where(id: invoice_pdf_ids).where(kind: "invoice").approved
+        invoices_for_wr = manageable_submissions.where(id: wr_xlsx_ids).where(kind: "invoice").approved
+        expense_pdfs = manageable_submissions.where(id: expense_pdf_ids).where(kind: "expense").approved
         # 保存済 統合 PDF (IssuedInvoicePdf): バイナリをそのまま添付
         issued_pdf_ids = Array(params[:issued_invoice_pdf_ids]).map(&:to_i).reject(&:zero?)
-        issued_pdfs = IssuedInvoicePdf.where(id: issued_pdf_ids)
+        issued_pdfs = manageable_issued_pdfs.where(id: issued_pdf_ids)
         # 統合(保存済) 立替金 PDF が選ばれていたら、その元になった expense submission も
         # Excel 対象に自動で展開する（運用上 PDF とセットで per-user Excel が必要なため）。
         issued_pdfs.where(kind: "expense").each do |ip|
@@ -86,7 +86,7 @@ module Api
           expense_xlsx_ids += Array(src).map(&:to_i)
         end
         expense_xlsx_ids = expense_xlsx_ids.uniq.reject(&:zero?)
-        expense_xlsxs = InvoiceSubmission.where(id: expense_xlsx_ids).where(kind: "expense").approved
+        expense_xlsxs = manageable_submissions.where(id: expense_xlsx_ids).where(kind: "expense").approved
         if invoices_for_pdf.empty? && invoices_for_wr.empty? && expense_pdfs.empty? && expense_xlsxs.empty? && issued_pdfs.empty?
           return render(json: { error: "送付対象が空です" }, status: :unprocessable_entity)
         end
@@ -115,7 +115,7 @@ module Api
               primary.user,
               year: primary.year, month: primary.month, category: primary.category,
               application_date: group.map(&:application_date_override).compact.first,
-              client_name_override: I18n.t("companies.labop.name"),
+              client_name_override: bulk_mail_client_override(primary),
               issuer_user_override: current_user,
               total_override: combined_total,
               item_label_override: primary.item_label_override,
@@ -138,7 +138,7 @@ module Api
                 invoice.user,
                 year: invoice.year, month: invoice.month, category: invoice.category,
                 application_date: invoice.application_date_override,
-                client_name_override: I18n.t("companies.labop.name"),
+                client_name_override: bulk_mail_client_override(invoice),
                 issuer_user_override: current_user,
                 total_override: invoice.total_override,
                 item_label_override: invoice.item_label_override,
@@ -172,7 +172,7 @@ module Api
           exp_pdf = ExpensePdfRenderer.new(
             primary, year: y, month: m, category: c,
             application_date: subs.map(&:application_date_override).compact.first,
-            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
+            client_name_override: bulk_mail_client_override(subs.first), issuer_user_override: current_user,
             merged_users: others, mode: :positive
           ).call
           surnames = users.map { |u| u.display_name.to_s.split(/[\s　]/).first }.compact.reject(&:empty?).uniq.join("_")
@@ -189,7 +189,7 @@ module Api
           exp_pdf = ExpensePdfRenderer.new(
             s.user, year: s.year, month: s.month, category: s.category,
             application_date: s.application_date_override,
-            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
+            client_name_override: bulk_mail_client_override(s), issuer_user_override: current_user,
             mode: :negative
           ).call
           surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
@@ -211,7 +211,7 @@ module Api
           exp_xlsx = ExpenseExporter.new(
             user, year: s.year, month: s.month, category: s.category,
             application_date: s.application_date_override,
-            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
+            client_name_override: bulk_mail_client_override(s), issuer_user_override: current_user,
             mode: :positive
           ).call
           surname = user.display_name.to_s.split(/[\s　]/).first.to_s
@@ -228,7 +228,7 @@ module Api
           exp_xlsx = ExpenseExporter.new(
             s.user, year: s.year, month: s.month, category: s.category,
             application_date: s.application_date_override,
-            client_name_override: I18n.t("companies.labop.name"), issuer_user_override: current_user,
+            client_name_override: bulk_mail_client_override(s), issuer_user_override: current_user,
             mode: :negative
           ).call
           surname = s.user.display_name.to_s.split(/[\s　]/).first.to_s
@@ -250,8 +250,10 @@ module Api
           attachments << { filename: f.original_filename, content_type: f.content_type, body: f.read }
         end
 
-        to_value = params[:to].to_s.presence || "k-osumi@rabop.jp"
-        msg_id = GmailSender.new(user: current_user).send_mail(
+        to_value = params[:to].to_s.presence || (current_user.admin? ? "k-osumi@rabop.jp" : nil)
+        return render(json: { error: "宛先が空です" }, status: :unprocessable_entity) if to_value.blank?
+        # Google 未連携ユーザー(雄太郎等)は連携済み管理者のトークンで送る（差出人表示は本人名のまま）
+        msg_id = GmailSender.new(user: GoogleAuth.credential_user(current_user)).send_mail(
           to: to_value,
           subject: params[:subject].to_s,
           body: params[:body].to_s,
@@ -276,7 +278,7 @@ module Api
         include_expense = include_expense_raw && available_expense_total > 0
         expense_total = include_expense ? available_expense_total : 0
         ctx = {
-          recipient_name: params[:recipient_name].presence || "御中",
+          recipient_name: params[:recipient_name].presence || default_self_mail_recipient,
           year: year, month: month,
           category_label: CATEGORY_LABELS[cat] || cat,
           total: invoice_total,
@@ -286,7 +288,7 @@ module Api
           sender_name: current_user.display_name
         }
         drafted = EmailDrafter.draft(kind: :self_invoice, context: ctx)
-        render json: drafted.merge(available_expense_total: available_expense_total)
+        render json: drafted.merge(available_expense_total: available_expense_total, recipient_name: ctx[:recipient_name])
       end
 
       # POST /api/v1/emails/self_invoice_send
@@ -315,7 +317,10 @@ module Api
         surname = current_user.display_name.to_s.split(/[\s　]/).first
         cat_label = CATEGORY_LABELS[cat] || cat
         attachments = []
-        labop_name = I18n.t("companies.labop.name")
+        # 添付PDFの宛名: admin は従来どおりラボップ。それ以外は既定請求先(invoice_clients)があればそれ、
+        # 無ければ従来どおりラボップ（川村さん等の既存運用を変えない）。
+        labop_name = current_user.admin? ? I18n.t("companies.labop.name")
+                                         : (current_user.default_invoice_client&.name || I18n.t("companies.labop.name"))
 
         if include_invoice_pdf
           invoice_pdf = InvoicePdfRenderer.new(current_user, year: year, month: month, category: cat,
@@ -347,7 +352,8 @@ module Api
           attachments << { filename: f.original_filename, content_type: f.content_type, body: f.read }
         end
 
-        msg_id = GmailSender.new(user: current_user).send_mail(
+        # Google 未連携ユーザー(雄太郎等)は連携済み管理者のトークンで送る（差出人表示は本人名のまま）
+        msg_id = GmailSender.new(user: GoogleAuth.credential_user(current_user)).send_mail(
           to: params[:to], subject: params[:subject].to_s, body: params[:body].to_s,
           attachments: attachments, from_name: current_user.display_name
         )
@@ -355,6 +361,47 @@ module Api
       rescue => e
         Rails.logger.error("[self_invoice_send] #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
         render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # 一括メール送付(旧ラボップ送付)を実行できるのは admin と サブ管理者(テナント代表)のみ
+      def can_bulk_mail?
+        current_user.admin? || current_user.sub_admin?
+      end
+
+      # サブ管理者は管理対象ユーザーの申請だけ添付できる（admin は全件）
+      def manageable_submissions
+        return InvoiceSubmission.all if current_user.admin?
+        InvoiceSubmission.where(user_id: current_user.manageable_user_ids)
+      end
+
+      # 保存済 統合 PDF: admin は全件、それ以外は自分が発行したものだけ
+      def manageable_issued_pdfs
+        return IssuedInvoicePdf.all if current_user.admin?
+        IssuedInvoicePdf.where(user_id: current_user.id)
+      end
+
+      # 添付PDFの宛名。admin は従来どおりラボップ固定。
+      # サブ管理者は 申請スナップショット → 申請者の既定請求先(invoice_clients) → nil(設定の client_name) の順。
+      def bulk_mail_client_override(submission)
+        return I18n.t("companies.labop.name") if current_user.admin?
+
+        submission&.client_name_override.presence ||
+          submission&.user&.default_invoice_client&.name
+      end
+
+      # 一括メールの宛名(本文冒頭)。admin はラボップ、サブ管理者は既定請求先から導く。
+      def default_bulk_mail_recipient(first_submission)
+        if current_user.admin?
+          return "#{I18n.t("companies.labop.name")} #{I18n.t("companies.labop.honorific_default")}"
+        end
+        client = current_user.default_invoice_client || first_submission&.user&.default_invoice_client
+        client ? "#{client.name} #{client.display_honorific}" : "御中"
+      end
+
+      # 自分の請求書メールの宛名(本文冒頭)。既定請求先があれば「名前 御中」、無ければ従来の「御中」。
+      def default_self_mail_recipient
+        client = current_user.default_invoice_client
+        client ? "#{client.name} #{client.display_honorific}" : "御中"
       end
 
       def invoice_calc_total_for(user, year, month, cat)

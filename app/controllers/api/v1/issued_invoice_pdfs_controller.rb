@@ -25,8 +25,11 @@ module Api
       end
 
       def update
-        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
         rec = IssuedInvoicePdf.find(params[:id])
+        # admin または 発行者本人(サブ管理者が自分で保存した統合PDF)のみ
+        unless current_user.admin? || rec.user_id == current_user.id
+          return render(json: { error: "権限がありません" }, status: :forbidden)
+        end
         attrs = {}
         attrs[:purchase_order_no] = params[:purchase_order_no].to_s.presence if params.key?(:purchase_order_no)
         attrs[:filename] = params[:filename].to_s if params.key?(:filename) && params[:filename].to_s.present?
@@ -38,8 +41,10 @@ module Api
       end
 
       def destroy
-        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
         rec = IssuedInvoicePdf.find(params[:id])
+        unless current_user.admin? || rec.user_id == current_user.id
+          return render(json: { error: "権限がありません" }, status: :forbidden)
+        end
         # 削除前にも旧版を退避しておく（誤削除しても revert 元として残す安全網）。
         IssuedInvoicePdfVersion.archive!(rec, reason: "destroy") rescue nil
         rec.destroy!

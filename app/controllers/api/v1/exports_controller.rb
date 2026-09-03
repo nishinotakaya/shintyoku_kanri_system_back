@@ -123,16 +123,17 @@ module Api
         send_file path, type: "application/pdf", filename: filename, disposition: "attachment"
       end
 
-      # 集約版: 複数の InvoiceSubmission をマージして 1 PDF を返す（admin のみ）
+      # 集約版: 複数の InvoiceSubmission をマージして 1 PDF を返す（admin / サブ管理者=管理対象のみ）
       # POST /exports/merged_invoice.pdf  with invoice_submission_ids[]
       def merged_invoice
-        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        return render(json: { error: "権限がありません" }, status: :forbidden) unless can_merge?
         ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
         subs = InvoiceSubmission.where(id: ids).where(kind: "invoice").approved.includes(:user, :received_purchase_order)
         return render(json: { error: "対象なし" }, status: :unprocessable_entity) if subs.empty?
+        return render(json: { error: "管理対象外の申請が含まれています" }, status: :forbidden) unless subs_manageable?(subs)
 
-        # primary user は admin (西野) を優先
-        users_sorted = User.admin_first(subs.map(&:user))
+        # primary user は 発行者(admin=西野 / サブ管理者=本人) を優先
+        users_sorted = merge_users_sorted(subs)
         primary_user = users_sorted.first
         primary = subs.find { |s| s.user_id == primary_user.id } || subs.first
         others = users_sorted.drop(1)
@@ -171,7 +172,7 @@ module Api
           primary_user,
           year: primary.year, month: primary.month, category: primary.category,
           application_date: merged_application_date,
-          client_name_override: I18n.t("companies.labop.name"),
+          client_name_override: merge_client_override(primary),
           issuer_user_override: current_user,
           item_label_override: primary.item_label_override,
           subject_override: primary.subject_override,
@@ -367,13 +368,14 @@ module Api
 
       # 集約 expense (PDF or Excel) 共通処理
       def merged_expense_internal(format:)
-        return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
+        return render(json: { error: "権限がありません" }, status: :forbidden) unless can_merge?
         ids = Array(params[:expense_submission_ids]).map(&:to_i).reject(&:zero?)
         subs = InvoiceSubmission.where(id: ids).where(kind: "expense").approved.includes(:user)
         return render(json: { error: "対象なし" }, status: :unprocessable_entity) if subs.empty?
+        return render(json: { error: "管理対象外の申請が含まれています" }, status: :forbidden) unless subs_manageable?(subs)
 
-        # primary user は admin (西野) を優先 → ファイル名・PDF 先頭が西野ベースになる
-        users = User.admin_first(subs.map(&:user))
+        # primary user は 発行者(admin=西野 / サブ管理者=本人) を優先 → ファイル名・PDF 先頭が発行者ベースになる
+        users = merge_users_sorted(subs)
         primary_user = users.first
         primary = subs.find { |s| s.user_id == primary_user.id } || subs.first
         others = users.drop(1)
@@ -382,7 +384,7 @@ module Api
         path = renderer_class.new(
           primary_user, year: primary.year, month: primary.month, category: primary.category,
           application_date: merged_application_date,
-          client_name_override: I18n.t("companies.labop.name"),
+          client_name_override: merge_client_override(primary),
           issuer_user_override: current_user,
           merged_users: others, mode: :positive
         ).call
@@ -435,6 +437,37 @@ module Api
         label = CATEGORY_LABELS[category.to_s] || default_label
         surname = user.display_name.to_s.split(/[\s　]/).first
         [ label, surname, body ].map { |part| part.to_s.strip }.reject(&:blank?).join("_")
+      end
+
+      # 統合(マージ)を実行できるのは admin と サブ管理者(テナント代表)のみ
+      def can_merge?
+        current_user.admin? || current_user.sub_admin?
+      end
+
+      # サブ管理者は管理対象ユーザーの申請しか統合できない（admin は無条件）
+      def subs_manageable?(subs)
+        return true if current_user.admin?
+        manageable = current_user.manageable_user_ids
+        subs.all? { |submission| manageable.include?(submission.user_id) }
+      end
+
+      # 統合 PDF の先頭(差出人・印鑑)ユーザー並び。admin は従来どおり admin 優先、
+      # サブ管理者は本人を先頭に（並び任せだと外注ドライバー名義の統合請求書になる）。
+      def merge_users_sorted(subs)
+        if current_user.admin?
+          User.admin_first(subs.map(&:user))
+        else
+          subs.map(&:user).uniq.sort_by { |user| user.id == current_user.id ? 0 : 1 }
+        end
+      end
+
+      # 統合 PDF の宛名。admin は従来どおりラボップ固定。
+      # サブ管理者は 申請スナップショット → 申請者の既定請求先(invoice_clients) → nil(設定の client_name) の順。
+      def merge_client_override(primary_submission)
+        return I18n.t("companies.labop.name") if current_user.admin?
+
+        primary_submission.client_name_override.presence ||
+          primary_submission.user&.default_invoice_client&.name
       end
 
       # 宛先の決定。戻り値: [client_name, honorific]
