@@ -10,6 +10,7 @@ class LocalFileSaver
     "living" => "Living",
     "techleaders" => "テックリーダーズ",
     "resystems" => "REシステムズ",
+    "proaka" => "プロアカ",
     "video" => "動画編集",
     "transport" => "運送"
   }.freeze

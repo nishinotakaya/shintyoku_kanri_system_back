@@ -2,7 +2,7 @@ class WorkReport < ApplicationRecord
   belongs_to :user
   belongs_to :approved_by, class_name: "User", optional: true
 
-  CATEGORIES = %w[wings living techleaders resystems transport].freeze
+  CATEGORIES = %w[wings living techleaders resystems proaka transport].freeze
 
   # 運送業(category=transport)向けの日報項目。approved_by_id はユーザーに直接触らせず approve!/unapprove! 経由でのみ更新する。
   TRANSPORT_ATTRIBUTES = %i[distance_km delivery_count meter_start meter_end note weekly_payment approved_at].freeze

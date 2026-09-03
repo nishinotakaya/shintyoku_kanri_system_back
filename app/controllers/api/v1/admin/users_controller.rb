@@ -62,8 +62,18 @@ module Api
           # サブ管理者は自分に見えるカテゴリの範囲内でしか配れない(運送代表が Tama/リビングを開放できない)。
           if params.key?(:work_categories)
             categories = Array(params.permit(work_categories: [])[:work_categories]).map(&:to_s).reject(&:empty?)
-            unless current_user.admin? || (categories - current_user.visible_work_categories).empty?
-              return render(json: { error: "自分に表示されないカテゴリは設定できません" }, status: :forbidden)
+            unless current_user.admin?
+              # サブ管理者のカテゴリは管理者が決める(自分で外して全カテゴリに戻すのを防ぐ)
+              if user.id == current_user.id
+                return render(json: { error: "自分の勤怠カテゴリは管理者のみ変更できます" }, status: :forbidden)
+              end
+              # 全解除は「全カテゴリにフォールバック」なので、サブ管理者には許可しない
+              if categories.empty?
+                return render(json: { error: "勤怠カテゴリの全解除(全カテゴリ開放)は管理者のみ行えます" }, status: :forbidden)
+              end
+              unless (categories - current_user.visible_work_categories).empty?
+                return render(json: { error: "自分に表示されないカテゴリは設定できません" }, status: :forbidden)
+              end
             end
             user.update!(work_categories: categories.presence)
           end

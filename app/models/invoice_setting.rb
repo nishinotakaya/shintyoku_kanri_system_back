@@ -115,6 +115,7 @@ class InvoiceSetting < ApplicationRecord
     "techleaders" => "テックリーダーズ",
     "resystems" => "REシステムズ",
     "video" => "動画編集",
+    "proaka" => "プロアカ",
     "transport" => "運送"
   }.freeze
 

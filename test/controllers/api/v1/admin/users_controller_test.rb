@@ -113,6 +113,39 @@ class Api::V1::Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_nil @driver.reload.work_categories
   end
 
+  def test_tenant_owner_can_assign_own_visible_category_to_member
+    patch "/api/v1/admin/users/#{@driver.id}", params: { work_categories: [ "transport" ] },
+          headers: auth_headers(@owner), as: :json
+
+    assert_response :success
+    assert_equal [ "transport" ], @driver.reload.work_categories
+  end
+
+  def test_tenant_owner_cannot_change_own_categories
+    patch "/api/v1/admin/users/#{@owner.id}", params: { work_categories: [ "transport", "wings" ] },
+          headers: auth_headers(@owner), as: :json
+
+    assert_response :forbidden
+    assert_equal [ "transport" ], @owner.reload.work_categories
+  end
+
+  def test_tenant_owner_cannot_clear_member_categories
+    @driver.update!(work_categories: [ "transport" ])
+    patch "/api/v1/admin/users/#{@driver.id}", params: { work_categories: [] },
+          headers: auth_headers(@owner), as: :json
+
+    assert_response :forbidden
+    assert_equal [ "transport" ], @driver.reload.work_categories
+  end
+
+  def test_admin_can_assign_proaka_category
+    patch "/api/v1/admin/users/#{@driver.id}", params: { work_categories: [ "proaka" ] },
+          headers: auth_headers(@admin), as: :json
+
+    assert_response :success
+    assert_equal [ "proaka" ], @driver.reload.work_categories
+  end
+
   def test_admin_can_still_assign_managees
     patch "/api/v1/admin/users/#{@owner.id}", params: { managee_ids: [ @stranger.id ] },
           headers: auth_headers(@admin), as: :json
