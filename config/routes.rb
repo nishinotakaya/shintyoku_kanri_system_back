@@ -144,10 +144,12 @@ Rails.application.routes.draw do
           post :transcribe
           post :import_progress
           post :append_task
+          post :read_meter
         end
         member do
           patch  :approve
           delete :approve, action: :unapprove
+          get :meter_photo
         end
       end
 

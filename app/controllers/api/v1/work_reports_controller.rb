@@ -1,7 +1,7 @@
 module Api
   module V1
     class WorkReportsController < BaseController
-      before_action :set_report, only: [ :update, :destroy ]
+      before_action :set_report, only: [ :update, :destroy, :meter_photo ]
       before_action :set_report_for_approval, only: [ :approve, :unapprove ]
 
       def index
@@ -9,9 +9,12 @@ module Api
         target = viewing_user
         period = target.period_for(year, month)
         reports = target.work_reports.in_range(period)
+        photo_kinds = WorkReportMeterPhoto.where(work_report_id: reports.map(&:id))
+                                          .pluck(:work_report_id, :kind)
+                                          .group_by(&:first).transform_values { |pairs| pairs.map(&:last) }
         render json: {
           period: { from: period.first, to: period.last },
-          reports: reports.map { |r| serialize(r) },
+          reports: reports.map { |r| serialize(r, meter_photo_kinds: photo_kinds[r.id] || []) },
           viewing: { id: target.id, display_name: target.display_name }
         }
       end
@@ -27,14 +30,40 @@ module Api
         end
         report.assign_attributes(attrs)
         report.save!
+        apply_meter_photo_params(report)
         sync_expense_from_report(report)
         render json: serialize(report), status: :created
       end
 
       def update
         @report.update!(report_params)
+        apply_meter_photo_params(@report)
         sync_expense_from_report(@report)
         render json: serialize(@report)
+      end
+
+      # POST /api/v1/work_reports/read_meter (multipart: file=メーター写真)
+      # 写真をAIで読み取り、走行距離(km)を返す。保存はしない(保存は create/update の photo params で行う)。
+      def read_meter
+        file = params[:file]
+        return render(json: { error: "メーター写真を添付してください" }, status: :unprocessable_entity) unless file.respond_to?(:read)
+
+        bytes = file.read
+        content_type = file.respond_to?(:content_type) ? file.content_type : "image/jpeg"
+        result = MeterPhotoReader.call(bytes, content_type)
+        return render(json: { error: result[:error] }, status: :unprocessable_entity) if result[:error]
+
+        render json: { value: result[:value], confidence: result[:confidence] }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/v1/work_reports/:id/meter_photo?kind=start|end
+      def meter_photo
+        photo = @report.meter_photos.find_by(kind: params[:kind])
+        return head :not_found unless photo&.data.present?
+
+        send_data photo.data, type: photo.content_type || "image/jpeg", disposition: "inline"
       end
 
       def destroy
@@ -275,6 +304,30 @@ module Api
         end
       end
 
+      # メーター写真の保存/削除。値は data URL(data:image/jpeg;base64,...) で受け取る。
+      # 写真クリア時は remove_meter_{start,end}_photo=true が来る(値のクリアは meter_start/end 側で行われる)。
+      def apply_meter_photo_params(report)
+        { "start" => [ :meter_start_photo_base64, :remove_meter_start_photo ],
+          "end"   => [ :meter_end_photo_base64, :remove_meter_end_photo ] }.each do |kind, (data_key, remove_key)|
+          if params[data_key].present?
+            content_type, bytes = decode_data_url(params[data_key])
+            next if bytes.blank?
+            photo = report.meter_photos.find_or_initialize_by(kind: kind)
+            photo.update!(content_type: content_type, data: bytes)
+          elsif ActiveModel::Type::Boolean.new.cast(params[remove_key])
+            report.meter_photos.find_by(kind: kind)&.destroy!
+          end
+        end
+      end
+
+      def decode_data_url(value)
+        if value =~ %r{\Adata:([^;]+);base64,(.+)\z}m
+          [ Regexp.last_match(1), (Base64.strict_decode64(Regexp.last_match(2)) rescue nil) ]
+        else
+          [ "image/jpeg", (Base64.strict_decode64(value) rescue nil) ]
+        end
+      end
+
       def report_params
         # approved_by_id はここでは受け付けない(検印は approve!/unapprove! 経由でのみ更新する)
         params.permit(:work_date, :content, :hours, :clock_in, :clock_out,
@@ -283,8 +336,9 @@ module Api
                       :note, :weekly_payment)
       end
 
-      def serialize(r)
+      def serialize(r, meter_photo_kinds: nil)
         {
+          meter_photo_kinds: meter_photo_kinds || r.meter_photos.pluck(:kind),
           id: r.id, work_date: r.work_date, content: r.content,
           hours: r.hours&.to_f, clock_in: r.clock_in&.strftime("%H:%M"),
           clock_out: r.clock_out&.strftime("%H:%M"),
