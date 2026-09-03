@@ -121,13 +121,18 @@ class EmailDrafter
       grand_total = (@context[:grand_total].to_i.nonzero?) || (invoice_total + expense_total)
       sender_name = @context[:sender_name].to_s
       labop_recipient_raw = (@context[:recipient_name].to_s.presence || "御中")
-      labop_recipient = labop_recipient_raw.end_with?("御中") ? "#{I18n.t("companies.labop.name")} #{labop_recipient_raw}" : "#{I18n.t("companies.labop.name")} #{labop_recipient_raw}様"
+      # ラボップ補完は admin(西野→ラボップ既定)のみ。サブ管理者(雄太郎等)は自分の請求先の宛名をそのまま使う
+      labop_recipient = if @context.fetch(:labop_default, true)
+        labop_recipient_raw.end_with?("御中") ? "#{I18n.t("companies.labop.name")} #{labop_recipient_raw}" : "#{I18n.t("companies.labop.name")} #{labop_recipient_raw}様"
+      else
+        labop_recipient_raw.end_with?("御中", "様") ? labop_recipient_raw : "#{labop_recipient_raw} 様"
+      end
       <<~PROMPT
         以下情報で、#{labop_recipient} 宛に
         #{kind_label}と立替金資料を送付するメール下書きを作って。
         宛名行は必ず「#{labop_recipient}」で始めること（御中の場合は「様」を付けない）。件名に「ご担当者」「担当者」は含めないこと。
         - 対象: #{@context[:year]}年#{@context[:month]}月分
-        - 添付: ラボップ宛 請求書 PDF / 立替金 PDF / 立替金 Excel#{ @context[:extra_attachments] ? "（領収書ほか）" : "" }
+        - 添付: 請求書 PDF / 立替金 PDF / 立替金 Excel#{ @context[:extra_attachments] ? "（領収書ほか）" : "" }
         - 請求書合計（税込）: ¥#{invoice_total}
         - 立替金合計: ¥#{expense_total}
         - 総額: ¥#{grand_total}
@@ -421,10 +426,15 @@ class EmailDrafter
   def build_invoice_email(name_for_subject:, cat_label:, invoice_total:, expense_total:, grand_total:, include_expense:)
     fmt = ->(n) { sign = n.to_i < 0 ? "-" : ""; "#{sign}¥#{n.to_i.abs.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }
 
-    # 宛名行: 「株式会社ラボップ 御中」が無ければ補完して整形
+    # 宛名行: admin(ラボップ既定)は「株式会社ラボップ 御中」を補完して整形。
+    # サブ管理者は自分の請求先の宛名をそのまま使う(ラボップは付けない)。
+    labop_default = @context.fetch(:labop_default, true)
     recipient_raw = @context[:recipient_name].to_s.strip
-    recipient_raw = "#{I18n.t("companies.labop.name")} #{I18n.t("companies.labop.honorific_default")}" if recipient_raw.empty?
-    recipient_line = if recipient_raw.start_with?("株式会社")
+    recipient_raw = "#{I18n.t("companies.labop.name")} #{I18n.t("companies.labop.honorific_default")}" if recipient_raw.empty? && labop_default
+    recipient_raw = "御中" if recipient_raw.empty?
+    recipient_line = if !labop_default
+      recipient_raw.end_with?("御中", "様") ? recipient_raw : "#{recipient_raw} 様"
+    elsif recipient_raw.start_with?("株式会社")
       recipient_raw.end_with?("御中") ? recipient_raw : "#{recipient_raw} 様"
     else
       recipient_raw.end_with?("御中") ? "#{I18n.t("companies.labop.name")} #{recipient_raw}" : "#{I18n.t("companies.labop.name")} #{recipient_raw} 様"

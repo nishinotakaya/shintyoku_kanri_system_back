@@ -25,6 +25,7 @@ module Api
         first_month = invoices.first&.month || expenses.first&.month || issued_pdfs.first&.month
         first_cat = invoices.first&.category || expenses.first&.category || issued_pdfs.first&.category
         ctx = {
+          labop_default: current_user.admin?,
           recipient_name: params[:recipient_name].presence || default_bulk_mail_recipient(invoices.first || expenses.first),
           year: first_year,
           month: first_month,
