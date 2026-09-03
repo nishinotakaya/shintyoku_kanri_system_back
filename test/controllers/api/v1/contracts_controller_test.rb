@@ -93,10 +93,8 @@ class Api::V1::ContractsControllerTest < ActionDispatch::IntegrationTest
     body = response.parsed_body
     assert_equal 29, body["articles"].size
     assert_equal "第1条（目的）", body["articles"].first["heading"]
-    # 紙の原本は6ページ。1ページ目以外の先頭(第7/14/20/24/27条)で改ページする。
-    page_break_headings = body["articles"].select { |article| article["page_break_before"] }.map { |article| article["heading"] }
-    assert_equal [ "第7条（運送事業委託の開始）", "第14条（規律）", "第20条（通信機保持義務）",
-                   "第24条（直接または間接取引の禁止）", "第27条（損害賠償）" ], page_break_headings
+    # 強制改ページは廃止(ページ下部の空白の原因)。条文は自然に流し込む
+    assert_empty body["articles"].select { |article| article["page_break_before"] }
   end
 
   def test_create_default_party_a_inherits_previous_contract

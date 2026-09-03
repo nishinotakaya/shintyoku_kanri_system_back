@@ -78,12 +78,9 @@ class Contract
       ]
     ].freeze
 
-    # 紙の原本と同じ位置で改ページさせるため、各ページ先頭(1ページ目を除く)に page_break_before を立てる。
-    LIST = PAGES.each_with_index.flat_map { |articles_in_page, page_index|
-      articles_in_page.each_with_index.map do |article, article_index|
-        page_break_before = page_index.positive? && article_index.zero?
-        page_break_before ? article.merge(page_break_before: true) : article
-      end
-    }.freeze
+    # 以前は紙の原本と同じ位置(第7/14/20/24/27条)で強制改ページしていたが、
+    # 電子版で文字を拡大した結果、各ページ下部に大きな空白が残るためやめた。
+    # 条文は自然に流し込み、改ページしたい場合はエディタの「ここから新しいページ」で個別に指定する。
+    LIST = PAGES.flat_map { |articles_in_page| articles_in_page }.freeze
   end
 end
