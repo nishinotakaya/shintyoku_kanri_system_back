@@ -95,6 +95,20 @@ class Api::V1::WorkReportMeterPhotosTest < ActionDispatch::IntegrationTest
     reader_class.define_method(:call, original)
   end
 
+  def test_photo_content_type_is_whitelisted_against_stored_xss
+    post "/api/v1/work_reports", headers: auth_headers(@owner), params: {
+      work_date: Date.current.iso8601, category: "transport",
+      meter_start_photo_base64: "data:text/html;base64,#{Base64.strict_encode64('<script>alert(1)</script>')}"
+    }, as: :json
+
+    assert_response :created
+    report = @owner.work_reports.find(response.parsed_body["id"])
+    assert_equal "image/jpeg", report.meter_photos.find_by(kind: "start").content_type
+
+    get "/api/v1/work_reports/#{report.id}/meter_photo", headers: auth_headers(@owner), params: { kind: "start" }
+    assert_equal "image/jpeg", response.media_type
+  end
+
   def test_read_meter_requires_file
     post "/api/v1/work_reports/read_meter", headers: auth_headers(@owner)
     assert_response :unprocessable_entity

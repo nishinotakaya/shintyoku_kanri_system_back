@@ -3,6 +3,8 @@
 # 一覧APIで写真バイナリを読み込まないよう work_reports 本体とはテーブルを分けている。
 class WorkReportMeterPhoto < ApplicationRecord
   KINDS = %w[start end].freeze
+  # 配信は disposition: inline なので、HTML等を仕込んだ stored XSS を防ぐため画像タイプのみ許可
+  ALLOWED_CONTENT_TYPES = %w[image/jpeg image/png image/webp image/heic image/heif].freeze
 
   belongs_to :work_report
 

@@ -63,7 +63,9 @@ module Api
         photo = @report.meter_photos.find_by(kind: params[:kind])
         return head :not_found unless photo&.data.present?
 
-        send_data photo.data, type: photo.content_type || "image/jpeg", disposition: "inline"
+        content_type = photo.content_type
+        content_type = "image/jpeg" unless WorkReportMeterPhoto::ALLOWED_CONTENT_TYPES.include?(content_type)
+        send_data photo.data, type: content_type, disposition: "inline"
       end
 
       def destroy
@@ -312,6 +314,7 @@ module Api
           if params[data_key].present?
             content_type, bytes = decode_data_url(params[data_key])
             next if bytes.blank?
+            content_type = "image/jpeg" unless WorkReportMeterPhoto::ALLOWED_CONTENT_TYPES.include?(content_type)
             photo = report.meter_photos.find_or_initialize_by(kind: kind)
             photo.update!(content_type: content_type, data: bytes)
           elsif ActiveModel::Type::Boolean.new.cast(params[remove_key])
