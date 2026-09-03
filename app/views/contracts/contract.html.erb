@@ -26,10 +26,12 @@
     padding: 3px 10px; transform: rotate(6deg);
   }
   .preamble { margin: 0 0 10px; font-size: 12.5px; text-align: justify; }
-  .article { margin: 0 0 7px; page-break-inside: avoid; break-inside: avoid-page; }
+  /* 条文は紙の契約書と同じく途中でも自然に次ページへ流す(丸ごと送るとページ下部に大きな空白ができる) */
+  .article { margin: 0 0 7px; }
   /* 紙の原本の改ページ位置を再現する(運送業務委託契約書など複数ページの様式で使う) */
   .article.page-break-before { page-break-before: always; break-before: page; }
-  .article .heading { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  /* 見出しだけがページ末尾に取り残されないようにする */
+  .article .heading { font-weight: 700; font-size: 13px; margin-bottom: 2px; page-break-after: avoid; break-after: avoid-page; }
   .article .body { white-space: pre-wrap; font-size: 12.5px; text-align: justify; }
   /* 特記事項は原本(第29条(特記事項))と同じく条文体裁で出す。枠は付けない */
   .special-terms { margin: 0 0 7px; page-break-inside: avoid; break-inside: avoid-page; }
