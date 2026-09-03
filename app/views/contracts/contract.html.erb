@@ -31,9 +31,10 @@
   .article.page-break-before { page-break-before: always; break-before: page; }
   .article .heading { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
   .article .body { white-space: pre-wrap; font-size: 12.5px; text-align: justify; }
-  .special-terms { margin: 10px 0; border: 1.5px solid #333; padding: 6px 12px; page-break-inside: avoid; break-inside: avoid-page; }
-  .special-terms .h { font-weight: 700; font-size: 13px; margin-bottom: 3px; }
-  .special-terms .body { white-space: pre-wrap; font-size: 12.5px; }
+  /* 特記事項は原本(第29条(特記事項))と同じく条文体裁で出す。枠は付けない */
+  .special-terms { margin: 0 0 7px; page-break-inside: avoid; break-inside: avoid-page; }
+  .special-terms .h { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .special-terms .body { white-space: pre-wrap; font-size: 12.5px; text-align: justify; }
   .postamble { margin: 10px 0 5px; font-size: 12.5px; text-align: justify; }
   .contract-date { margin: 2px 0 10px; font-size: 13.5px; font-weight: 700; }
   .signatures { display: flex; justify-content: space-between; gap: 24px; margin-top: 6px; page-break-inside: avoid; break-inside: avoid-page; }
