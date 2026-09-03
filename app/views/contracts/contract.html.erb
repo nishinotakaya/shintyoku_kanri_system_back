@@ -9,16 +9,18 @@
   @page { size: A4; margin: 12mm 13mm 14mm; }
   * { box-sizing: border-box; }
   body {
+    position: relative;
     font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP", sans-serif;
     color: #1a1a1a;
     font-size: 12.5px;
     margin: 0;
-    padding: 0 0 24px;
+    padding: 0;
     line-height: 1.6;
   }
   h1.title { text-align: center; font-size: 22px; letter-spacing: 6px; margin: 10px 0 18px; font-weight: 700; }
+  /* fixed だと全ページに出て2ページ目以降の本文右端と重なるため、1ページ目(タイトル脇)だけに出す */
   .draft-badge {
-    position: fixed; top: 0; right: 0;
+    position: absolute; top: 0; right: 0;
     border: 2px solid #c0392b; color: #c0392b;
     font-size: 13px; font-weight: 700; letter-spacing: 4px;
     padding: 3px 10px; transform: rotate(6deg);
@@ -33,7 +35,7 @@
   .special-terms .h { font-weight: 700; font-size: 13px; margin-bottom: 3px; }
   .special-terms .body { white-space: pre-wrap; font-size: 12.5px; }
   .postamble { margin: 10px 0 5px; font-size: 12.5px; text-align: justify; }
-  .contract-date { margin: 2px 0 10px; font-size: 12.5px; }
+  .contract-date { margin: 2px 0 10px; font-size: 13.5px; font-weight: 700; }
   .signatures { display: flex; justify-content: space-between; gap: 24px; margin-top: 6px; page-break-inside: avoid; break-inside: avoid-page; }
   .signatures .party { flex: 1; border: 1.5px solid #333; padding: 10px 12px; position: relative; min-height: 112px; }
   .signatures .party .label { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
@@ -42,10 +44,13 @@
   .hanko-img { position: absolute; top: 8px; right: 10px; width: 60px; height: 60px; object-fit: contain; }
   .signature-img { display: block; margin-top: 5px; max-width: 190px; max-height: 44px; border-bottom: 1px solid #333; }
   .signed-at { font-size: 10px; color: #555; margin-top: 2px; }
+  /* 毎ページの fixed フッタは本文最終行と重なる(余白内は Chromium にクリップされる)ため、
+     文書末尾に一度だけ出す通常要素にする */
   .footer {
-    position: fixed; bottom: 0; left: 0; right: 0;
+    margin-top: 16px;
     font-size: 9px; color: #777; border-top: 1px solid #ccc; padding-top: 4px;
     display: flex; justify-content: space-between; gap: 12px;
+    page-break-inside: avoid; break-inside: avoid-page;
   }
 </style>
 </head>
@@ -78,9 +83,10 @@
     本契約の成立を証するため、本書を電磁的記録として作成し、甲は記名押印（電子印影）、乙は電子署名を行い、各自その電磁的記録を保管する。
   </div>
 
-  <div class="contract-date">契約日　<%= data[:contract_date] %></div>
+  <% format_jp_date = ->(value) { value.present? ? (value.is_a?(String) ? Date.parse(value) : value).strftime("%Y年%-m月%-d日") : "" } %>
+  <div class="contract-date">契約日　<%= format_jp_date.call(data[:contract_date]) %></div>
   <% if data[:start_on].present? || data[:end_on].present? %>
-  <% to_wareki = ->(value) { (value.is_a?(String) ? Date.parse(value) : value).strftime("%Y年%-m月%-d日") } %>
+  <% to_wareki = format_jp_date %>
   <div class="contract-date">契約期間　<%= data[:start_on].present? ? to_wareki.call(data[:start_on]) : "" %> 〜 <%= data[:end_on].present? ? to_wareki.call(data[:end_on]) : "" %></div>
   <% end %>
 
