@@ -17,7 +17,9 @@ Rails.application.routes.draw do
 
       # admin: ユーザー一覧 + 新規作成 + 招待メール + 権限/管理割当の更新
       namespace :admin do
-        resources :users, only: [ :index, :create, :update ]
+        resources :users, only: [ :index, :create, :update ] do
+          member { post :invite }
+        end
         resources :tenants, only: [ :index, :create, :update, :destroy ]
         # なりすましログイン: 管理者が他ユーザーの JWT を発行してもらう
         get    "impersonations", to: "impersonations#index"
@@ -362,11 +364,16 @@ Rails.application.routes.draw do
 
       # 業務委託契約書(甲=発行者側。乙向けの公開エンドポイントは namespace :public 以下)
       resources :contracts, only: %i[index show create update destroy] do
+        collection do
+          get :bulk_pdf
+        end
         member do
           post :issue
           post :duplicate
           post :void
           get  :pdf
+          post :send_email
+          post :polish_email
         end
       end
       namespace :public do

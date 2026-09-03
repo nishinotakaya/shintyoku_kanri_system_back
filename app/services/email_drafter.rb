@@ -73,6 +73,33 @@ class EmailDrafter
     nil
   end
 
+  # 既に書かれた件名・本文を AI で添削する(契約書送付メール等の汎用)。
+  # 誤字修正と自然なビジネス敬語への調整のみ行い、URL・keep_phrases のトークン・固有名詞・日付は変えさせない。
+  # OPENAI_API_KEY 未設定・失敗・保持すべきトークンの欠落・大幅改変時は nil を返す(呼び出し側で入力のまま使う)。
+  def self.polish(subject:, body:, keep_phrases: [])
+    api_key = ENV["OPENAI_API_KEY"].to_s
+    return nil if api_key.blank? || body.strip.blank?
+
+    drafter = new(kind: :polish, context: {})
+    sys = <<~SYS
+      あなたは日本語ビジネスメールの校正者です。与えられた件名・本文を、丁寧で自然なビジネスメールに添削してください。
+      ★ルール:
+      - 誤字脱字の修正と、不自然な表現を敬語として自然に整えることのみ行う
+      - URL、メールアドレス、{...} 形式のプレースホルダ、人名・会社名、日付・数字は一字も変えない
+      - 改行構成(宛名 → 本文 → 結び → 署名)は保つ。無い要素を勝手に追加しない
+      - 出力は厳密に JSON のみ: {"subject": "件名", "body": "本文"}
+    SYS
+    usr = "件名:\n#{subject}\n\n本文:\n#{body}"
+    parsed = drafter.send(:parse, drafter.send(:call_openai, api_key, sys, usr))
+    return nil unless parsed
+    return nil if keep_phrases.any? { |phrase| body.include?(phrase) && !parsed[:body].include?(phrase) }
+    return nil if parsed[:body].length > body.length * 1.5 || parsed[:body].length < body.length * 0.5
+    parsed
+  rescue => e
+    Rails.logger.warn("[EmailDrafter] polish error: #{e.class}: #{e.message}")
+    nil
+  end
+
   private
 
   def system_prompt

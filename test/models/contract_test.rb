@@ -220,7 +220,7 @@ class ContractTest < Minitest::Test
     contract = Contract.new(user: @user, party_a_name: "甲社")
 
     assert_equal({ name: "甲社", address: "", representative: "" }, contract.party_a_hash)
-    assert_equal({ name: "", address: "", representative: "" }, contract.party_b_hash)
+    assert_equal({ name: "", address: "", representative: "", email: "" }, contract.party_b_hash)
   end
 
   def test_duplicate_for_creates_draft_copy_without_dates_or_signature_and_leaves_original_unchanged

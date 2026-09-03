@@ -321,6 +321,185 @@ class Api::V1::ContractsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "%PDF-stored-signed-blob", response.body
   end
 
+  # --- メール送付(署名リンク) / AI添削 ---
+
+  def with_gmail_stub(error: nil)
+    sent_mails = []
+    original_send = GmailSender.instance_method(:send_mail)
+    GmailSender.define_method(:send_mail) do |to:, subject:, body:, attachments: [], from_name: nil, bcc: nil|
+      raise error if error
+      sent_mails << { to: to, subject: subject, body: body, from_name: from_name }
+      "stub-message-id"
+    end
+    yield sent_mails
+  ensure
+    GmailSender.define_method(:send_mail, original_send)
+  end
+
+  def test_send_email_issues_link_and_replaces_placeholder
+    @owner.update!(google_access_token: "dummy-token")
+    contract = @owner.contracts.create!(title: "業務委託契約書", party_a_name: "西野 雄太郎", party_b_name: "採寸 太郎")
+    sent_mails = nil
+    with_gmail_stub do |mails|
+      sent_mails = mails
+      post "/api/v1/contracts/#{contract.id}/send_email",
+           params: { to: "partner@example.com", subject: "ご署名のお願い",
+                     body: "下記リンクよりご署名ください。\n{署名URL}\nよろしくお願いいたします。" },
+           headers: auth_headers(@owner), as: :json
+    end
+
+    assert_response :success
+    body = response.parsed_body
+    assert_equal true, body["email_sent"]
+    assert_equal "sent", body["status"]
+    assert body["share_url"].present?
+
+    assert_equal 1, sent_mails.size
+    assert_equal "partner@example.com", sent_mails.first[:to]
+    refute_includes sent_mails.first[:body], "{署名URL}"
+    assert_includes sent_mails.first[:body], "/sign/contracts/"
+
+    contract.reload
+    assert_equal "sent", contract.status
+    assert_equal "partner@example.com", contract.party_b_email
+    assert contract.contract_events.exists?(event: "emailed")
+  ensure
+    contract&.destroy
+  end
+
+  def test_send_email_appends_link_when_placeholder_missing
+    @owner.update!(google_access_token: "dummy-token")
+    contract = @owner.contracts.create!(title: "業務委託契約書", party_a_name: "西野 雄太郎", party_b_name: "採寸 太郎")
+    with_gmail_stub do |mails|
+      post "/api/v1/contracts/#{contract.id}/send_email",
+           params: { to: "partner@example.com", body: "リンク書き忘れ本文" },
+           headers: auth_headers(@owner), as: :json
+      assert_includes mails.first[:body], "署名用リンク:"
+      assert_includes mails.first[:body], "/sign/contracts/"
+    end
+
+    assert_response :success
+  ensure
+    contract&.destroy
+  end
+
+  def test_send_email_requires_recipient_and_body
+    contract = @owner.contracts.create!(title: "業務委託契約書", party_a_name: "西野 雄太郎")
+    with_gmail_stub do
+      post "/api/v1/contracts/#{contract.id}/send_email",
+           params: { to: "", body: "本文" }, headers: auth_headers(@owner), as: :json
+      assert_response :unprocessable_entity
+
+      post "/api/v1/contracts/#{contract.id}/send_email",
+           params: { to: "partner@example.com", body: "  " }, headers: auth_headers(@owner), as: :json
+      assert_response :unprocessable_entity
+    end
+  ensure
+    contract&.destroy
+  end
+
+  def test_send_email_gmail_failure_returns_bad_gateway
+    @owner.update!(google_access_token: "dummy-token")
+    contract = @owner.contracts.create!(title: "業務委託契約書", party_a_name: "西野 雄太郎")
+    with_gmail_stub(error: RuntimeError.new("gmail down")) do
+      post "/api/v1/contracts/#{contract.id}/send_email",
+           params: { to: "partner@example.com", body: "本文" }, headers: auth_headers(@owner), as: :json
+    end
+
+    assert_response :bad_gateway
+  ensure
+    contract&.destroy
+  end
+
+  def test_send_email_of_other_users_contract_is_not_found
+    contract = @owner.contracts.create!(title: "業務委託契約書", party_a_name: "西野 雄太郎")
+    with_gmail_stub do
+      post "/api/v1/contracts/#{contract.id}/send_email",
+           params: { to: "partner@example.com", body: "本文" }, headers: auth_headers(@stranger), as: :json
+    end
+
+    assert_response :not_found
+  ensure
+    contract&.destroy
+  end
+
+  def test_polish_email_without_openai_key_returns_input_unchanged
+    contract = @owner.contracts.create!(title: "業務委託契約書", party_a_name: "西野 雄太郎")
+    original_key = ENV["OPENAI_API_KEY"]
+    ENV["OPENAI_API_KEY"] = ""
+    post "/api/v1/contracts/#{contract.id}/polish_email",
+         params: { subject: "件名テスト", body: "本文テスト {署名URL}" },
+         headers: auth_headers(@owner), as: :json
+
+    assert_response :success
+    body = response.parsed_body
+    assert_equal false, body["polished"]
+    assert_equal "件名テスト", body["subject"]
+    assert_equal "本文テスト {署名URL}", body["body"]
+  ensure
+    ENV["OPENAI_API_KEY"] = original_key
+    contract&.destroy
+  end
+
+  # --- 契約日フィルター / 一括ダウンロード ---
+
+  def test_index_filters_by_contract_date_range
+    old_contract = @owner.contracts.create!(title: "旧契約", party_a_name: "西野 雄太郎",
+                                            contract_date: Date.new(2026, 7, 1))
+    new_contract = @owner.contracts.create!(title: "新契約", party_a_name: "西野 雄太郎",
+                                            contract_date: Date.new(2026, 9, 1))
+    undated_contract = @owner.contracts.create!(title: "日付なし契約", party_a_name: "西野 雄太郎")
+
+    get "/api/v1/contracts", params: { contract_date_from: "2026-08-01", contract_date_to: "2026-09-30" },
+        headers: auth_headers(@owner)
+
+    assert_response :success
+    titles = response.parsed_body.map { |row| row["title"] }
+    assert_includes titles, "新契約"
+    refute_includes titles, "旧契約"
+    refute_includes titles, "日付なし契約"
+  ensure
+    [ old_contract, new_contract, undated_contract ].compact.each(&:destroy)
+  end
+
+  def test_bulk_pdf_downloads_filtered_contracts_as_zip
+    in_range = @owner.contracts.create!(title: "対象契約", party_a_name: "西野 雄太郎",
+                                        party_b_name: "採寸 太郎", contract_date: Date.new(2026, 9, 1))
+    out_of_range = @owner.contracts.create!(title: "対象外契約", party_a_name: "西野 雄太郎",
+                                            contract_date: Date.new(2026, 7, 1))
+    # 実PDF生成(node)を避けるため、署名済み+凍結PDFの状態を直接作る
+    [ in_range, out_of_range ].each do |contract|
+      contract.update_columns(status: "signed", signed_pdf: "%PDF-1.4 fake #{contract.id}")
+    end
+
+    get "/api/v1/contracts/bulk_pdf",
+        params: { contract_date_from: "2026-08-01", contract_date_to: "2026-09-30" },
+        headers: auth_headers(@owner)
+
+    assert_response :success
+    assert_equal "application/zip", response.media_type
+
+    require "zip"
+    entry_names = []
+    Zip::InputStream.open(StringIO.new(response.body)) do |zip_stream|
+      while (entry = zip_stream.get_next_entry)
+        entry_names << entry.name.dup.force_encoding(Encoding::UTF_8)
+      end
+    end
+    assert_equal 1, entry_names.size
+    assert_includes entry_names.first, "対象契約"
+    assert_includes entry_names.first, "20260901"
+  ensure
+    [ in_range, out_of_range ].compact.each(&:destroy)
+  end
+
+  def test_bulk_pdf_with_no_match_returns_unprocessable
+    get "/api/v1/contracts/bulk_pdf", params: { contract_date_from: "2030-01-01" },
+        headers: auth_headers(@owner)
+
+    assert_response :unprocessable_entity
+  end
+
   private
 
   def auth_headers(user)

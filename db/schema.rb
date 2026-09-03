@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_02_143620) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_03_030000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -192,6 +192,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_02_143620) do
     t.binary "signed_pdf"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "party_b_email"
     t.index ["share_token_digest"], name: "index_contracts_on_share_token_digest", unique: true
     t.index ["user_id"], name: "index_contracts_on_user_id"
   end

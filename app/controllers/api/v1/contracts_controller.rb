@@ -2,15 +2,42 @@ module Api
   module V1
     # 業務委託契約書。発行者(甲=current_user)側の CRUD と、署名リンク発行・複製・無効化・PDF。
     class ContractsController < BaseController
+      # メール本文中でこの文字列を書いておくと、送信時に実際の署名リンクへ置き換わる
+      SIGN_URL_PLACEHOLDER = "{署名URL}".freeze
+
       before_action do
         render(json: { error: "契約書機能の権限がありません" }, status: :forbidden) unless current_user.can_use?(:contracts)
       end
-      before_action :set_contract, only: %i[show update destroy issue duplicate void pdf]
+      before_action :set_contract, only: %i[show update destroy issue duplicate void pdf send_email polish_email]
 
       # GET /api/v1/contracts
+      # contract_date_from / contract_date_to / status で絞り込める(一括DLと共通のフィルター)。
       def index
-        contracts = scope.order(updated_at: :desc)
+        contracts = filtered_scope.order(updated_at: :desc)
         render json: contracts.map { |contract| contract_json(contract) }
+      end
+
+      # GET /api/v1/contracts/bulk_pdf?contract_date_from=&contract_date_to=&status=
+      # フィルターに合致する契約書のPDFをzipで一括ダウンロードする。署名済みは凍結済みPDFをそのまま使う。
+      def bulk_pdf
+        contracts = filtered_scope.order(:contract_date, :id)
+        return render(json: { error: "対象の契約書がありません" }, status: :unprocessable_entity) if contracts.empty?
+
+        require "zip"
+        buffer = Zip::OutputStream.write_buffer do |zip|
+          contracts.each do |contract|
+            pdf_bytes =
+              if contract.status == "signed" && contract.signed_pdf.present?
+                contract.signed_pdf
+              else
+                ContractPdfRenderer.new(contract).render_bytes
+              end
+            zip.put_next_entry(bulk_entry_name(contract))
+            zip.write(pdf_bytes)
+          end
+        end
+        send_data buffer.string, type: "application/zip",
+                  filename: "契約書一括_#{Date.current.strftime('%Y%m%d')}.zip", disposition: "attachment"
       end
 
       # GET /api/v1/contracts/:id
@@ -81,6 +108,52 @@ module Api
         render json: contract_json(@contract)
       end
 
+      # POST /api/v1/contracts/:id/send_email { to, subject, body }
+      # 署名リンクを発行し直し、本文中の {署名URL} を実リンクに置き換えて乙へメール送信する。
+      # 送信者の Google トークンが無ければ Google 連携済み admin のトークンで送る(招待メールと同じ方式)。
+      def send_email
+        unless @contract.editable?
+          return render(json: { error: "この契約書はメール送付できません(署名済み/無効)" }, status: :unprocessable_entity)
+        end
+        to = params[:to].to_s.strip
+        return render(json: { error: "宛先メールアドレスを入力してください" }, status: :unprocessable_entity) if to.blank?
+        subject = params[:subject].to_s.strip.presence || "【#{@contract.title}】ご署名のお願い"
+        body = params[:body].to_s
+        return render(json: { error: "本文が空です" }, status: :unprocessable_entity) if body.strip.blank?
+
+        raw_token = @contract.issue!(actor: actor_label)
+        share_url = "#{ENV.fetch('FRONTEND_BASE_URL', 'https://react-frontend-beige.vercel.app')}/sign/contracts/#{raw_token}"
+        body = body.gsub(SIGN_URL_PLACEHOLDER, share_url)
+        body += "\n\n署名用リンク:\n#{share_url}\n" unless body.include?(share_url)
+
+        sender = GoogleAuth.credential_user(current_user)
+        begin
+          GmailSender.new(user: sender).send_mail(
+            to: to, subject: subject, body: body, from_name: current_user.display_name
+          )
+        rescue StandardError => e
+          Rails.logger.error("[contracts#send_email] failed: #{e.class}: #{e.message}")
+          return render(json: { error: "メール送信に失敗しました: #{e.message}" }, status: :bad_gateway)
+        end
+
+        @contract.update!(party_b_email: to)
+        @contract.record_event("emailed", actor: actor_label, ip: request.remote_ip,
+                               user_agent: request.user_agent, detail: { to: to, subject: subject })
+        render json: contract_json(@contract, share_url: share_url).merge(email_sent: true)
+      end
+
+      # POST /api/v1/contracts/:id/polish_email { subject, body }
+      # AI(OpenAI)でメール文面を添削する。キー未設定・失敗時は入力をそのまま返す(polished: false)。
+      def polish_email
+        polished = EmailDrafter.polish(subject: params[:subject].to_s, body: params[:body].to_s,
+                                       keep_phrases: [ SIGN_URL_PLACEHOLDER ])
+        if polished
+          render json: { subject: polished[:subject], body: polished[:body], polished: true }
+        else
+          render json: { subject: params[:subject].to_s, body: params[:body].to_s, polished: false }
+        end
+      end
+
       # GET /api/v1/contracts/:id/pdf
       def pdf
         if @contract.status == "signed" && @contract.signed_pdf.present?
@@ -97,6 +170,32 @@ module Api
         current_user.admin? ? Contract.all : current_user.contracts
       end
 
+      # 一覧と一括DLで共通の絞り込み。日付は不正値なら無視する(全部返すより安全側で 422 にしない)。
+      def filtered_scope
+        contracts = scope
+        from_date = parse_iso_date(params[:contract_date_from])
+        to_date = parse_iso_date(params[:contract_date_to])
+        contracts = contracts.where(contract_date: from_date.. ) if from_date
+        contracts = contracts.where(contract_date: ..to_date) if to_date
+        contracts = contracts.where(status: params[:status]) if params[:status].present?
+        contracts
+      end
+
+      def parse_iso_date(value)
+        return nil if value.blank?
+        Date.iso8601(value.to_s)
+      rescue Date::Error
+        nil
+      end
+
+      # zip 内のファイル名。契約日_タイトル_乙名_id.pdf(重複防止に id を含める)
+      def bulk_entry_name(contract)
+        date_part = contract.contract_date ? contract.contract_date.strftime("%Y%m%d") : "日付なし"
+        name_part = [ contract.title, contract.party_b_name.presence ].compact.join("_")
+        sanitized = name_part.gsub(%r{[/\\:*?"<>|]}, "_")
+        "#{date_part}_#{sanitized}_#{contract.id}.pdf"
+      end
+
       def set_contract
         @contract = scope.find(params[:id])
       end
@@ -108,7 +207,7 @@ module Api
       def contract_params
         params.fetch(:contract, {}).permit(
           :title, :party_a_name, :party_a_address, :party_a_representative,
-          :party_b_name, :party_b_address, :party_b_representative,
+          :party_b_name, :party_b_address, :party_b_representative, :party_b_email,
           :contract_date, :start_on, :end_on, :special_terms,
           articles: [ :heading, :body, :page_break_before ]
         ).to_h.symbolize_keys

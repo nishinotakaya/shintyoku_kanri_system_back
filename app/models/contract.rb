@@ -98,7 +98,8 @@ class Contract < ApplicationRecord
   end
 
   def party_b_hash
-    { name: party_b_name.to_s, address: party_b_address.to_s, representative: party_b_representative.to_s }
+    { name: party_b_name.to_s, address: party_b_address.to_s, representative: party_b_representative.to_s,
+      email: party_b_email.to_s }
   end
 
   # 複製して新規 draft を作る。日付・署名系は引き継がない。
@@ -112,6 +113,7 @@ class Contract < ApplicationRecord
       party_b_name: party_b_name,
       party_b_address: party_b_address,
       party_b_representative: party_b_representative,
+      party_b_email: party_b_email,
       articles: articles,
       special_terms: special_terms,
       status: "draft"
