@@ -120,4 +120,62 @@ class Api::V1::Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal [ @stranger.id ], @owner.managees.reload.map(&:id)
   end
+  # GmailSender をスタブして外部送信しない(送信内容は配列で受け取る)
+  def with_gmail_stub(error: nil)
+    sent_mails = []
+    original_send = GmailSender.instance_method(:send_mail)
+    GmailSender.define_method(:send_mail) do |to:, subject:, body:, attachments: [], from_name: nil, bcc: nil|
+      raise error if error
+      sent_mails << { to: to, subject: subject, body: body, from_name: from_name }
+      "stub-message-id"
+    end
+    yield sent_mails
+  ensure
+    GmailSender.define_method(:send_mail, original_send)
+  end
+
+  def test_sub_admin_can_resend_invite_to_their_member
+    @owner.update!(google_access_token: "dummy-token")
+    sent_mails = nil
+    with_gmail_stub do |mails|
+      sent_mails = mails
+      post "/api/v1/admin/users/#{@driver.id}/invite", headers: auth_headers(@owner), as: :json
+    end
+
+    assert_response :success
+    assert_equal true, response.parsed_body["invite_sent"]
+    assert_equal 1, sent_mails.size
+    assert_equal @driver.email, sent_mails.first[:to]
+    assert_includes sent_mails.first[:body], "/sign_in"
+    assert_equal @owner.display_name, sent_mails.first[:from_name]
+  end
+
+  def test_sub_admin_cannot_invite_users_outside_their_scope
+    @owner.update!(google_access_token: "dummy-token")
+    with_gmail_stub do
+      post "/api/v1/admin/users/#{@stranger.id}/invite", headers: auth_headers(@owner), as: :json
+    end
+
+    assert_response :forbidden
+  end
+
+  def test_admin_can_resend_invite_to_anyone
+    @admin.update!(google_access_token: "dummy-token")
+    with_gmail_stub do |mails|
+      post "/api/v1/admin/users/#{@stranger.id}/invite", headers: auth_headers(@admin), as: :json
+      assert_equal [ @stranger.email ], mails.map { |m| m[:to] }
+    end
+
+    assert_response :success
+  end
+
+  def test_invite_failure_returns_bad_gateway
+    @admin.update!(google_access_token: "dummy-token")
+    with_gmail_stub(error: RuntimeError.new("gmail down")) do
+      post "/api/v1/admin/users/#{@stranger.id}/invite", headers: auth_headers(@admin), as: :json
+    end
+
+    assert_response :bad_gateway
+    assert_equal false, response.parsed_body["invite_sent"]
+  end
 end

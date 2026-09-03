@@ -149,6 +149,64 @@ class Api::V1::Admin::ImpersonationsControllerTest < ActionDispatch::Integration
     @linked&.destroy
   end
 
+  # --- サブ管理者(テナント代表) ---
+
+  def test_sub_admin_can_impersonate_their_tenant_member
+    suffix = SecureRandom.hex(4)
+    sub_owner = User.create!(email: "imp_sub_#{suffix}@example.com", password: "password123",
+                             display_name: "西野 雄太郎", closing_day: 31)
+    tenant = Tenant.create!(name: "なりすまし運送_#{suffix}", code: "imp-#{suffix}", owner_user: sub_owner)
+    tenant.tenant_memberships.create!(user: @target)
+
+    post "/api/v1/admin/impersonations", params: { user_id: @target.id },
+         headers: auth_headers(sub_owner), as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal @target.id, body.dig("user", "id")
+
+    get "/api/v1/me", headers: { "Authorization" => "Bearer #{body['token']}" }
+    assert_response :success
+    assert_equal @target.id, JSON.parse(response.body)["id"]
+  ensure
+    tenant&.destroy
+    sub_owner&.destroy
+  end
+
+  def test_sub_admin_cannot_impersonate_users_outside_their_scope
+    suffix = SecureRandom.hex(4)
+    sub_owner = User.create!(email: "imp_sub2_#{suffix}@example.com", password: "password123",
+                             display_name: "西野 雄太郎", closing_day: 31)
+    tenant = Tenant.create!(name: "なりすまし運送2_#{suffix}", code: "imp2-#{suffix}", owner_user: sub_owner)
+
+    post "/api/v1/admin/impersonations", params: { user_id: @non_admin.id },
+         headers: auth_headers(sub_owner), as: :json
+
+    assert_response :forbidden
+  ensure
+    tenant&.destroy
+    sub_owner&.destroy
+  end
+
+  def test_sub_admin_index_lists_only_manageable_users
+    suffix = SecureRandom.hex(4)
+    sub_owner = User.create!(email: "imp_sub3_#{suffix}@example.com", password: "password123",
+                             display_name: "西野 雄太郎", closing_day: 31)
+    tenant = Tenant.create!(name: "なりすまし運送3_#{suffix}", code: "imp3-#{suffix}", owner_user: sub_owner)
+    tenant.tenant_memberships.create!(user: @target)
+
+    get "/api/v1/admin/impersonations", headers: auth_headers(sub_owner)
+
+    assert_response :success
+    ids = JSON.parse(response.body).map { |row| row["id"] }
+    assert_includes ids, @target.id
+    refute_includes ids, @non_admin.id
+    refute_includes ids, sub_owner.id
+  ensure
+    tenant&.destroy
+    sub_owner&.destroy
+  end
+
   private
 
   def impersonation_headers_for(user, impersonated_by: nil)

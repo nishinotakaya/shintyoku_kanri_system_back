@@ -117,6 +117,23 @@ module Api
           render json: { error: e.message }, status: :unprocessable_entity
         end
 
+        # POST /api/v1/admin/users/:id/invite
+        # 登録URL(Google ログイン案内)の招待メールを送り直す。admin は誰にでも、
+        # サブ管理者は自分の管理対象にだけ送れる。
+        def invite
+          target = User.find_by(id: params[:id])
+          return render(json: { error: "ユーザーが見つかりません" }, status: :not_found) if target.nil?
+          unless current_user.admin? || current_user.can_manage_user?(target.id)
+            return render(json: { error: "このユーザーへの招待権限がありません" }, status: :forbidden)
+          end
+
+          send_invitation_email(target)
+          render json: { invite_sent: true, email: target.email }
+        rescue => e
+          Rails.logger.error("[admin/users#invite] failed: #{e.class}: #{e.message}")
+          render json: { invite_sent: false, error: e.message }, status: :bad_gateway
+        end
+
         private
 
         # 「カレンダーで見える人」のチェック候補。取込データ由来の人物名(TeamSchedule.selectable_persons)に
@@ -205,7 +222,10 @@ module Api
             勤怠アプリ
           BODY
 
-          GmailSender.new(user: current_user).send_mail(
+          # サブ管理者(例: 雄太郎)は Google 未連携のことがあるので、トークンを持つ
+          # ユーザー(無ければ Google 連携済み admin)のアカウントから送る。文面上の差出人は操作者のまま。
+          sender = GoogleAuth.credential_user(current_user)
+          GmailSender.new(user: sender).send_mail(
             to: invitee.email,
             subject: subject,
             body: body,
