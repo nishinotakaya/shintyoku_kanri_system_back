@@ -63,6 +63,18 @@ class Api::V1::InvoiceSubmissionBulkFeaturesTest < ActionDispatch::IntegrationTe
   end
 
   # 下書きでも PDF と同じ金額・明細・(運送は)立替金の既定値が返る（「編集だと金額が空」対策）
+  def test_create_with_direct_client_name_override
+    post "/api/v1/invoice_submissions", headers: auth_headers(@owner), params: {
+      year: 2026, month: 8, category: "transport", kind: "invoice",
+      client_name_override: "株式会社テスト物流", client_honorific_override: "御中"
+    }, as: :json
+
+    assert_response :success
+    record = InvoiceSubmission.find(response.parsed_body["id"])
+    assert_equal "株式会社テスト物流", record.client_name_override
+    assert_equal "御中", record.client_honorific_override
+  end
+
   def test_draft_invoice_returns_pdf_matching_defaults
     create_submission(@owner)
 

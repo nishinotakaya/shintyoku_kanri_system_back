@@ -70,8 +70,12 @@ module Api
         record.application_date_override = parse_date_param(params[:application_date_override]) if params.key?(:application_date_override)
         record.due_date_override = parse_date_param(params[:due_date_override]) if params.key?(:due_date_override)
         record.bank_info_override = params[:bank_info_override].to_s.presence if params.key?(:bank_info_override)
-        # 請求先: 明示指定があればそれ、無ければ登録済みマスタの既定を宛先に入れておく
-        if params.key?(:invoice_client_id)
+        # 請求先: 直接入力 > マスタ明示指定 > 登録済みマスタの既定 (編集モーダルと同じ優先順)
+        if params[:client_name_override].to_s.strip.present?
+          record.invoice_client_id = params[:invoice_client_id].presence
+          record.client_name_override = params[:client_name_override].to_s.strip
+          record.client_honorific_override = params[:client_honorific_override].to_s.presence || "御中"
+        elsif params.key?(:invoice_client_id)
           record.assign_attributes(client_attrs_from(target_user, params[:invoice_client_id]))
         elsif record.client_name_override.blank?
           record.assign_attributes(client_attrs_from_default(target_user))
