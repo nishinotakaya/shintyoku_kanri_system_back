@@ -1,7 +1,7 @@
 module Api
   module V1
     class WorkReportsController < BaseController
-      before_action :set_report, only: [ :update, :destroy, :meter_photo ]
+      before_action :set_report, only: [ :update, :destroy, :meter_photo, :expense_photo ]
       before_action :set_report_for_approval, only: [ :approve, :unapprove ]
 
       def index
@@ -12,9 +12,14 @@ module Api
         photo_kinds = WorkReportMeterPhoto.where(work_report_id: reports.map(&:id))
                                           .pluck(:work_report_id, :kind)
                                           .group_by(&:first).transform_values { |pairs| pairs.map(&:last) }
+        expense_photo_rows = WorkReportExpensePhoto.where(work_report_id: reports.map(&:id))
+                                                   .order(:id)
+                                                   .pluck(:work_report_id, :id, :amount, :label)
+                                                   .group_by(&:first)
+                                                   .transform_values { |rows| rows.map { |(_, id, amount, label)| { id: id, amount: amount, label: label } } }
         render json: {
           period: { from: period.first, to: period.last },
-          reports: reports.map { |r| serialize(r, meter_photo_kinds: photo_kinds[r.id] || []) },
+          reports: reports.map { |r| serialize(r, meter_photo_kinds: photo_kinds[r.id] || [], expense_photos: expense_photo_rows[r.id] || []) },
           viewing: { id: target.id, display_name: target.display_name }
         }
       end
@@ -31,6 +36,7 @@ module Api
         report.assign_attributes(attrs)
         report.save!
         apply_meter_photo_params(report)
+        apply_expense_photo_params(report)
         sync_expense_from_report(report)
         render json: serialize(report), status: :created
       end
@@ -38,6 +44,7 @@ module Api
       def update
         @report.update!(report_params)
         apply_meter_photo_params(@report)
+        apply_expense_photo_params(@report)
         sync_expense_from_report(@report)
         render json: serialize(@report)
       end
@@ -56,6 +63,32 @@ module Api
         render json: { value: result[:value], confidence: result[:confidence] }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/work_reports/read_expense (multipart: file=レシート写真)
+      # 実費レシートをAIで読み取り、金額と内容を返す。保存はしない(保存は create/update の photo params で行う)。
+      def read_expense
+        file = params[:file]
+        return render(json: { error: "レシート写真を添付してください" }, status: :unprocessable_entity) unless file.respond_to?(:read)
+
+        bytes = file.read
+        content_type = file.respond_to?(:content_type) ? file.content_type : "image/jpeg"
+        result = ExpensePhotoReader.call(bytes, content_type)
+        return render(json: { error: result[:error] }, status: :unprocessable_entity) if result[:error]
+
+        render json: { amount: result[:amount], label: result[:label], confidence: result[:confidence] }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/v1/work_reports/:id/expense_photo?photo_id=
+      def expense_photo
+        photo = @report.expense_photos.find_by(id: params[:photo_id])
+        return head :not_found unless photo&.data.present?
+
+        content_type = photo.content_type
+        content_type = "image/jpeg" unless WorkReportExpensePhoto::ALLOWED_CONTENT_TYPES.include?(content_type)
+        send_data photo.data, type: content_type, disposition: "inline"
       end
 
       # GET /api/v1/work_reports/:id/meter_photo?kind=start|end
@@ -323,6 +356,27 @@ module Api
         end
       end
 
+      # 実費レシート写真の追加/削除。
+      # expense_photos_add: [{ data_base64(data URL), amount, label }] / remove_expense_photo_ids: [id]
+      def apply_expense_photo_params(report)
+        Array(params[:remove_expense_photo_ids]).each do |photo_id|
+          report.expense_photos.find_by(id: photo_id)&.destroy!
+        end
+        Array(params[:expense_photos_add]).each do |photo_params|
+          data_value = photo_params[:data_base64].presence
+          next if data_value.blank?
+          content_type, bytes = decode_data_url(data_value)
+          next if bytes.blank?
+          content_type = "image/jpeg" unless WorkReportExpensePhoto::ALLOWED_CONTENT_TYPES.include?(content_type)
+          report.expense_photos.create!(
+            content_type: content_type,
+            data: bytes,
+            amount: photo_params[:amount].presence&.to_i,
+            label: photo_params[:label].to_s.strip.presence
+          )
+        end
+      end
+
       def decode_data_url(value)
         if value =~ %r{\Adata:([^;]+);base64,(.+)\z}m
           [ Regexp.last_match(1), (Base64.strict_decode64(Regexp.last_match(2)) rescue nil) ]
@@ -339,9 +393,11 @@ module Api
                       :note, :weekly_payment)
       end
 
-      def serialize(r, meter_photo_kinds: nil)
+      def serialize(r, meter_photo_kinds: nil, expense_photos: nil)
         {
           meter_photo_kinds: meter_photo_kinds || r.meter_photos.pluck(:kind),
+          expense_photos: expense_photos ||
+            r.expense_photos.order(:id).pluck(:id, :amount, :label).map { |(id, amount, label)| { id: id, amount: amount, label: label } },
           id: r.id, work_date: r.work_date, content: r.content,
           hours: r.hours&.to_f, clock_in: r.clock_in&.strftime("%H:%M"),
           clock_out: r.clock_out&.strftime("%H:%M"),

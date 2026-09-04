@@ -25,21 +25,30 @@ module UserProvisioning
     user
   end
 
-  # 登録URL(Google ログイン案内)の招待メール。送信者(inviter)が Google 未連携でも
-  # 連携済みユーザーのトークンにフォールバックして送る。文面上の差出人は inviter のまま。
+  # 招待リンク(署名付きトークン)の有効期限
+  INVITATION_EXPIRY = 14.days
+
+  def frontend_url
+    ENV["FRONTEND_URL"].presence || "https://react-frontend-beige.vercel.app"
+  end
+
+  # 登録URL付きの招待メール。リンク先(/invite/:token)でパスワードを設定すると登録が完了する。
+  # 送信者(inviter)が Google 未連携でも連携済みユーザーのトークンにフォールバックして送る。
   def send_invite!(invitee:, inviter:)
-    sign_in_url = ENV["FRONTEND_URL"].presence || "https://react-frontend-beige.vercel.app"
+    invite_token = invitee.signed_id(purpose: :invitation, expires_in: INVITATION_EXPIRY)
+    invite_url = "#{frontend_url}/invite/#{invite_token}"
+    tenant_name = inviter.owned_tenants.first&.name
     subject = "【勤怠アプリ】#{inviter.display_name}さんから招待が届きました"
     body = <<~BODY
       #{invitee.display_name} 様
 
-      #{inviter.display_name}さんが勤怠アプリにあなたを招待しました。
+      #{inviter.display_name}さんが勤怠アプリ#{tenant_name.present? ? "（#{tenant_name}）" : ""}にあなたを招待しました。
 
-      下記URLにアクセスし、Googleアカウント（このメールアドレス: #{invitee.email}）でログインしてください。
-      #{sign_in_url}/sign_in
+      下記URLからパスワードを設定して、登録を完了してください（リンクの有効期限: 14日間）。
+      #{invite_url}
 
-      ※ Googleログインのメールアドレスが上記と一致すれば、自動で本アプリのアカウントに紐づきます。
-      ※ ログイン後、メニュー右上の ⚙ 設定 → アカウント から表示名や請求書情報を編集できます。
+      ※ Googleアカウント（このメールアドレス: #{invitee.email}）をお持ちの場合は、
+         #{frontend_url}/sign_in の「Googleでログイン」からもそのまま利用を開始できます。
 
       ご不明点があれば #{inviter.email} までご連絡ください。
 
@@ -52,6 +61,28 @@ module UserProvisioning
       subject: subject,
       body: body,
       from_name: inviter.display_name
+    )
+  end
+
+  # 登録完了の確認メール。招待リンクからパスワードを設定し終えたユーザーに送る。
+  def send_registration_complete!(user:)
+    subject = "【勤怠アプリ】登録が完了しました"
+    body = <<~BODY
+      #{user.display_name} 様
+
+      勤怠アプリへの登録が完了しました。このメールは登録確認のお知らせです。
+
+      ログインはこちら:
+      #{frontend_url}/sign_in
+
+      メールアドレス: #{user.email}
+
+      ---
+      勤怠アプリ
+    BODY
+
+    GmailSender.new(user: GoogleAuth.credential_user(user)).send_mail(
+      to: user.email, subject: subject, body: body, from_name: "勤怠アプリ"
     )
   end
 

@@ -2,6 +2,7 @@ class WorkReport < ApplicationRecord
   belongs_to :user
   belongs_to :approved_by, class_name: "User", optional: true
   has_many :meter_photos, class_name: "WorkReportMeterPhoto", dependent: :destroy
+  has_many :expense_photos, class_name: "WorkReportExpensePhoto", dependent: :destroy
 
   CATEGORIES = %w[wings living techleaders resystems proaka transport].freeze
 

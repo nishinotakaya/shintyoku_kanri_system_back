@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_04_010000) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_05_010001) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -906,10 +906,22 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_04_010000) do
     t.text "calendar_persons"
     t.string "name_kana"
     t.text "work_categories"
+    t.datetime "invitation_accepted_at"
     t.index ["canva_oauth_state"], name: "index_users_on_canva_oauth_state"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
+  end
+
+  create_table "work_report_expense_photos", force: :cascade do |t|
+    t.integer "work_report_id", null: false
+    t.string "content_type", null: false
+    t.binary "data", null: false
+    t.integer "amount"
+    t.string "label"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["work_report_id"], name: "index_work_report_expense_photos_on_work_report_id"
   end
 
   create_table "work_report_meter_photos", force: :cascade do |t|
@@ -980,6 +992,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_04_010000) do
   add_foreign_key "user_data_source_permissions", "users"
   add_foreign_key "user_data_source_permissions", "users", column: "credential_owner_id"
   add_foreign_key "users", "users", column: "linked_user_id"
+  add_foreign_key "work_report_expense_photos", "work_reports"
   add_foreign_key "work_report_meter_photos", "work_reports"
   add_foreign_key "work_reports", "users"
   add_foreign_key "work_reports", "users", column: "approved_by_id"

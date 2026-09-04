@@ -145,11 +145,13 @@ Rails.application.routes.draw do
           post :import_progress
           post :append_task
           post :read_meter
+          post :read_expense
         end
         member do
           patch  :approve
           delete :approve, action: :unapprove
           get :meter_photo
+          get :expense_photo
         end
       end
 
@@ -383,6 +385,8 @@ Rails.application.routes.draw do
         get  "contracts/:token",     to: "contracts#show"
         get  "contracts/:token/pdf", to: "contracts#pdf"
         post "contracts/:token/sign", to: "contracts#sign"
+        get  "invitations/:token",        to: "invitations#show"
+        post "invitations/:token/accept", to: "invitations#accept"
       end
     end
   end
