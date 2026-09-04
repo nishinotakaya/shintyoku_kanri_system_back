@@ -3,13 +3,17 @@ require "net/http"
 require "uri"
 require "base64"
 
-# 車のオドメーター(走行距離計)の写真を OpenAI(gpt-4o vision) で読み取り、km 値を返す。
+# 車のオドメーター(走行距離計)の写真を OpenAI vision で読み取り、km 値を返す。
 # カレンダーの稼働報告書(運送)で「開始メーター/終了メーター」を写真から自動入力するために使う。
 # 期待出力:
 #   - value:      読み取った走行距離 (km・整数。読み取れなければ nil)
 #   - confidence: 読み取りの確信度 (0-100)
 class MeterPhotoReader
   CHAT_URL = "https://api.openai.com/v1/chat/completions".freeze
+
+  # ダッシュボード全景の小さな数字を読むため、視覚性能の高い最新モデルを使う。
+  # gpt-5 系は temperature の変更を受け付けないため、リクエストには含めない。
+  MODEL = ENV.fetch("METER_READER_MODEL", "gpt-5.5").freeze
 
   def self.call(image_bytes, content_type)
     new(image_bytes, content_type).call
@@ -26,8 +30,7 @@ class MeterPhotoReader
 
     data_url = "data:#{@content_type};base64,#{Base64.strict_encode64(@image_bytes)}"
     body = {
-      model: "gpt-4o",
-      temperature: 0.0,
+      model: MODEL,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -52,7 +55,9 @@ class MeterPhotoReader
 
     content = JSON.parse(response.body).dig("choices", 0, "message", "content").to_s
     parsed = JSON.parse(content) rescue {}
-    normalize(parsed)
+    result = normalize(parsed)
+    Rails.logger.info("[MeterPhotoReader] model=#{MODEL} value=#{result[:value].inspect} confidence=#{result[:confidence]}")
+    result
   end
 
   private
@@ -65,10 +70,15 @@ class MeterPhotoReader
       "confidence": 読み取りの確信度 0-100
     }
     【読み取りの目安】
-    - オドメーター(ODO・総走行距離)の数値を読む。トリップメーター(TRIP A/B)ではない
-    - 単位表示が km であることを前提に、数字だけを整数で返す (例: "123456 km" → 123456)
-    - 数字の一部が隠れている・ぼやけて確信が持てないときは confidence を低くする
-    - メーターが写っていない写真なら value は null
+    - 写真にはスピードメーター・タコメーター・時計・燃料計・警告灯など多くの表示が写り込むことがある。
+      その中から「オドメーター(ODO・総走行距離)」だけを探して読む
+    - トリップメーター(TRIP A/B)ではない。TRIP は小数点付き(例: 123.4)のことが多く、
+      ODO は桁数が多い整数(例: 45678)のことが多い。「ODO」「km」の表記が近くにあればそれを優先
+    - 時計(コロン付き 12:34)・スピード表示・燃料残量の数字と混同しない
+    - デジタル液晶でもアナログ回転式(ローラー数字)でも読む
+    - 数字だけを整数で返す (例: "123456 km" → 123456)
+    - 一部がぼやけていても読める桁から自信を持って推定できるなら value を返し、confidence を下げる
+    - オドメーターがどこにも写っていない写真なら value は null
   SYS
 
   def normalize(parsed)
