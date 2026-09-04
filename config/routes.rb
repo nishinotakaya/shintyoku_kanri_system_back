@@ -376,6 +376,7 @@ Rails.application.routes.draw do
           get  :pdf
           post :send_email
           post :polish_email
+          post :invite_party_b
         end
       end
       namespace :public do

@@ -8,7 +8,7 @@ module Api
       before_action do
         render(json: { error: "契約書機能の権限がありません" }, status: :forbidden) unless current_user.can_use?(:contracts)
       end
-      before_action :set_contract, only: %i[show update destroy issue duplicate void pdf send_email polish_email]
+      before_action :set_contract, only: %i[show update destroy issue duplicate void pdf send_email polish_email invite_party_b]
 
       # GET /api/v1/contracts
       # contract_date_from / contract_date_to / status で絞り込める(一括DLと共通のフィルター)。
@@ -105,6 +105,34 @@ module Api
 
         @contract.update!(status: "void")
         @contract.record_event("voided", actor: actor_label, ip: request.remote_ip, user_agent: request.user_agent)
+        render json: contract_json(@contract)
+      end
+
+      # POST /api/v1/contracts/:id/invite_party_b
+      # 署名済み契約書の乙をユーザー登録し、登録用の招待メールを送る(甲による承認アクション)。
+      # 既に同じメールのユーザーがいれば登録はスキップし、招待メールの再送だけ行う。
+      def invite_party_b
+        unless @contract.status == "signed"
+          return render(json: { error: "署名済みの契約書のみ招待メールを送れます" }, status: :unprocessable_entity)
+        end
+        email = @contract.party_b_email.to_s.strip.downcase
+        if email.blank?
+          return render(json: { error: "乙のメールアドレスが未入力のため招待できません" }, status: :unprocessable_entity)
+        end
+
+        invitee = User.find_by(email: email)
+        newly_created = invitee.nil?
+        # 作成・テナント紐づけは甲(契約書の発行者)基準。admin が代行しても乙は発行者の配下になる。
+        invitee ||= UserProvisioning.create_member!(email: email, display_name: @contract.party_b_name,
+                                                    creator: @contract.user)
+        begin
+          UserProvisioning.send_invite!(invitee: invitee, inviter: @contract.user)
+        rescue StandardError => e
+          Rails.logger.error("[contracts#invite_party_b] failed: #{e.class}: #{e.message}")
+          return render(json: { error: "招待メールの送信に失敗しました: #{e.message}" }, status: :bad_gateway)
+        end
+        @contract.record_event("party_b_invited", actor: actor_label,
+                               detail: { user_id: invitee.id, email: email, newly_created: newly_created })
         render json: contract_json(@contract)
       end
 
@@ -252,6 +280,14 @@ module Api
           created_at: contract.created_at.iso8601,
           updated_at: contract.updated_at.iso8601
         }
+        if contract.status == "signed"
+          # 署名済みのみ: 「📨 招待」ボタンの表示制御用。乙が登録済みか・招待送信済みかを返す。
+          email = contract.party_b_email.to_s.strip.downcase
+          json[:party_b_registered] = email.present? && User.exists?(email: email)
+          json[:party_b_invited_at] = contract.contract_events
+                                              .where(event: %w[party_b_registered party_b_invited])
+                                              .maximum(:created_at)&.iso8601
+        end
         json[:share_url] = share_url if share_url.present?
         json
       end

@@ -173,7 +173,7 @@ class Api::V1::Public::ContractsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "%PDF-stored-signed-blob", response.body
   end
 
-  # --- 署名後の乙自動登録(ユーザー一覧への追加 + 招待メール) ---
+  # --- 署名後の甲への通知(自動登録はせず、甲の「招待」操作で登録する) ---
 
   def with_sign_side_effect_stubs
     sent_mails = []
@@ -190,7 +190,7 @@ class Api::V1::Public::ContractsControllerTest < ActionDispatch::IntegrationTest
     ContractPdfRenderer.define_method(:render_bytes, original_render)
   end
 
-  def test_sign_registers_party_b_as_user_and_sends_invite
+  def test_sign_notifies_party_a_and_does_not_auto_register
     @issuer.update!(google_access_token: "dummy-token")
     partner_email = "party_b_#{SecureRandom.hex(4)}@example.com"
     contract, raw_token = issue_contract(party_b_name: "運送外注 太郎", party_b_email: partner_email)
@@ -202,35 +202,35 @@ class Api::V1::Public::ContractsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    created_user = User.find_by(email: partner_email)
-    assert created_user.present?, "乙のユーザーが作成されること"
-    assert_equal "運送外注 太郎", created_user.display_name
-    # 発行者(非admin)の管理対象+テナントメンバーになる
-    assert @issuer.manager_assignments.exists?(managee_id: created_user.id)
+    # 自動登録はしない(甲が「招待」を押すまで登録されない承認ゲート)
+    assert_nil User.find_by(email: partner_email), "署名だけでは乙のユーザーは作られないこと"
+    refute contract.contract_events.exists?(event: "party_b_registered")
+    # 甲へ署名通知メールが飛ぶ
     assert_equal 1, sent_mails.size
-    assert_equal partner_email, sent_mails.first[:to]
-    assert_includes sent_mails.first[:body], "/sign_in"
-    assert contract.contract_events.exists?(event: "party_b_registered")
+    assert_equal @issuer.email, sent_mails.first[:to]
+    assert_includes sent_mails.first[:subject], "署名しました"
+    assert_includes sent_mails.first[:body], partner_email
+    assert contract.contract_events.exists?(event: "party_a_notified")
   ensure
     User.find_by(email: partner_email)&.destroy
   end
 
-  def test_sign_does_not_duplicate_existing_user
-    @issuer.update!(google_access_token: "dummy-token")
-    existing = User.create!(email: "party_b_existing_#{SecureRandom.hex(4)}@example.com",
-                            password: "password123", display_name: "既存 乙", closing_day: 25)
-    contract, raw_token = issue_contract(party_b_email: existing.email)
+  def test_sign_succeeds_even_if_notification_mail_fails
+    contract, raw_token = issue_contract(party_b_email: "party_b_#{SecureRandom.hex(4)}@example.com")
 
-    with_sign_side_effect_stubs do |mails|
+    original_send = GmailSender.instance_method(:send_mail)
+    GmailSender.define_method(:send_mail) { |**| raise "SMTP down" }
+    original_render = ContractPdfRenderer.instance_method(:render_bytes)
+    ContractPdfRenderer.define_method(:render_bytes) { "%PDF-1.4 stub".b }
+    begin
       post "/api/v1/public/contracts/#{raw_token}/sign", params: valid_sign_params, as: :json
-      assert_empty mails
+    ensure
+      GmailSender.define_method(:send_mail, original_send)
+      ContractPdfRenderer.define_method(:render_bytes, original_render)
     end
 
     assert_response :success
-    assert_equal 1, User.where(email: existing.email).count
-    refute contract.contract_events.exists?(event: "party_b_registered")
-  ensure
-    existing&.destroy
+    assert_equal "signed", contract.reload.status
   end
 
   private

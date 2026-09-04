@@ -4,7 +4,7 @@
 class ContractEvent < ApplicationRecord
   belongs_to :contract
 
-  EVENTS = %w[created updated issued emailed viewed signed voided duplicated pdf_viewed party_b_registered].freeze
+  EVENTS = %w[created updated issued emailed viewed signed voided duplicated pdf_viewed party_b_registered party_b_invited party_a_notified].freeze
 
   serialize :detail, coder: JSON
 

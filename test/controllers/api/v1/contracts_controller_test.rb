@@ -294,6 +294,94 @@ class Api::V1::ContractsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "draft", contract.reload.status
   end
 
+  # --- invite_party_b(署名済み契約書の乙をユーザー登録+招待メール) ---
+
+  def with_gmail_stub
+    sent_mails = []
+    original_send = GmailSender.instance_method(:send_mail)
+    GmailSender.define_method(:send_mail) do |to:, subject:, body:, attachments: [], from_name: nil, bcc: nil|
+      sent_mails << { to: to, subject: subject, body: body }
+      "stub-message-id"
+    end
+    yield sent_mails
+  ensure
+    GmailSender.define_method(:send_mail, original_send)
+  end
+
+  def test_invite_party_b_creates_user_and_sends_invite
+    @owner.update!(google_access_token: "dummy-token")
+    partner_email = "invitee_#{SecureRandom.hex(4)}@example.com"
+    contract = create_contract(@owner, party_b_name: "運送外注 太郎", party_b_email: partner_email)
+    contract.update_columns(status: "signed")
+
+    sent_mails = nil
+    with_gmail_stub do |mails|
+      sent_mails = mails
+      post "/api/v1/contracts/#{contract.id}/invite_party_b", headers: auth_headers(@owner)
+    end
+
+    assert_response :success
+    invitee = User.find_by(email: partner_email)
+    assert invitee.present?, "乙のユーザーが作成されること"
+    assert_equal "運送外注 太郎", invitee.display_name
+    assert @owner.manager_assignments.exists?(managee_id: invitee.id)
+    assert_equal 1, sent_mails.size
+    assert_equal partner_email, sent_mails.first[:to]
+    assert_includes sent_mails.first[:body], "/sign_in"
+    assert contract.contract_events.exists?(event: "party_b_invited")
+    assert_equal true, response.parsed_body["party_b_registered"]
+    assert response.parsed_body["party_b_invited_at"].present?
+  ensure
+    User.find_by(email: partner_email)&.destroy
+  end
+
+  def test_invite_party_b_resends_without_duplicating_existing_user
+    @owner.update!(google_access_token: "dummy-token")
+    existing = User.create!(email: "invitee_existing_#{SecureRandom.hex(4)}@example.com",
+                            password: "password123", display_name: "既存 乙", closing_day: 25)
+    contract = create_contract(@owner, party_b_email: existing.email)
+    contract.update_columns(status: "signed")
+
+    with_gmail_stub do |mails|
+      post "/api/v1/contracts/#{contract.id}/invite_party_b", headers: auth_headers(@owner)
+      assert_equal 1, mails.size
+      assert_equal existing.email, mails.first[:to]
+    end
+
+    assert_response :success
+    assert_equal 1, User.where(email: existing.email).count
+  ensure
+    existing&.destroy
+  end
+
+  def test_invite_party_b_rejects_unsigned_contract
+    contract = create_contract(@owner, party_b_email: "draft_#{SecureRandom.hex(4)}@example.com") # draft のまま
+
+    post "/api/v1/contracts/#{contract.id}/invite_party_b", headers: auth_headers(@owner)
+
+    assert_response :unprocessable_entity
+    assert_equal "署名済みの契約書のみ招待メールを送れます", response.parsed_body["error"]
+  end
+
+  def test_invite_party_b_rejects_when_email_missing
+    contract = create_contract(@owner)
+    contract.update_columns(status: "signed")
+
+    post "/api/v1/contracts/#{contract.id}/invite_party_b", headers: auth_headers(@owner)
+
+    assert_response :unprocessable_entity
+    assert_includes response.parsed_body["error"], "メールアドレスが未入力"
+  end
+
+  def test_invite_party_b_not_found_for_strangers_contract
+    contract = create_contract(@owner, party_b_email: "x_#{SecureRandom.hex(4)}@example.com")
+    contract.update_columns(status: "signed")
+
+    post "/api/v1/contracts/#{contract.id}/invite_party_b", headers: auth_headers(@stranger)
+
+    assert_response :not_found
+  end
+
   # --- pdf ---
 
   # PDFを実際に生成する(Node/Playwrightを起動する)ケース。認証あり側のpdfアクションで1本のみ。

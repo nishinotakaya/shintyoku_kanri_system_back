@@ -54,4 +54,33 @@ module UserProvisioning
       from_name: inviter.display_name
     )
   end
+
+  # 乙が契約書に署名したことを甲(発行者)へ知らせるメール。
+  # ユーザー登録は自動では行わず、甲が契約書一覧の「招待」ボタンを押したときに
+  # 招待メール送信＋登録が走る(承認ゲート)。
+  def send_signed_notice!(contract:)
+    owner = contract.user
+    app_url = ENV["FRONTEND_URL"].presence || "https://react-frontend-beige.vercel.app"
+    subject = "【勤怠アプリ】#{contract.party_b_name}さんが契約書に署名しました"
+    body = <<~BODY
+      #{owner.display_name} 様
+
+      「#{contract.title}」に署名がありました。
+
+      署名者: #{contract.signer_name}
+      乙の氏名: #{contract.party_b_name}
+      メールアドレス: #{contract.party_b_email.presence || "(未入力)"}
+
+      内容を確認のうえ、アプリの契約書一覧で「📨 招待」を押すと、
+      上記メールアドレスへ登録用の招待メールが送られ、ユーザーとして登録されます。
+      #{app_url}/contracts
+
+      ---
+      勤怠アプリ
+    BODY
+
+    GmailSender.new(user: GoogleAuth.credential_user(owner)).send_mail(
+      to: owner.email, subject: subject, body: body, from_name: "勤怠アプリ"
+    )
+  end
 end
