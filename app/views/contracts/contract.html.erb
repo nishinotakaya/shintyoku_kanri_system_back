@@ -15,7 +15,7 @@
     font-size: 12.5px;
     margin: 0;
     padding: 0;
-    line-height: 1.6;
+    line-height: 1.5;
   }
   h1.title { text-align: center; font-size: 22px; letter-spacing: 6px; margin: 10px 0 18px; font-weight: 700; }
   /* fixed だと全ページに出て2ページ目以降の本文右端と重なるため、1ページ目(タイトル脇)だけに出す */
@@ -26,8 +26,9 @@
     padding: 3px 10px; transform: rotate(6deg);
   }
   .preamble { margin: 0 0 10px; font-size: 12.5px; text-align: justify; }
-  /* 条文は紙の契約書と同じく途中でも自然に次ページへ流す(丸ごと送るとページ下部に大きな空白ができる) */
-  .article { margin: 0 0 7px; }
+  /* 条文は紙の契約書と同じく途中でも自然に次ページへ流す(丸ごと送るとページ下部に大きな空白ができる)。
+     余白は 5px に詰めている(運送29条を実データで3ページに収める余裕を確保するため 1.5 / 5px) */
+  .article { margin: 0 0 5px; }
   /* 紙の原本の改ページ位置を再現する(運送業務委託契約書など複数ページの様式で使う) */
   .article.page-break-before { page-break-before: always; break-before: page; }
   /* 見出しだけがページ末尾に取り残されないようにする */
@@ -37,6 +38,8 @@
   .special-terms { margin: 0 0 7px; page-break-inside: avoid; break-inside: avoid-page; }
   .special-terms .h { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
   .special-terms .body { white-space: pre-wrap; font-size: 12.5px; text-align: justify; }
+  /* 結び文・契約日・契約期間・署名欄は分断せず必ず同じページに出す(契約日だけ前ページに残る事故の防止) */
+  .closing { page-break-inside: avoid; break-inside: avoid-page; }
   .postamble { margin: 10px 0 5px; font-size: 12.5px; text-align: justify; }
   .contract-date { margin: 2px 0 10px; font-size: 13.5px; font-weight: 700; }
   .signatures { display: flex; justify-content: space-between; gap: 24px; margin-top: 6px; page-break-inside: avoid; break-inside: avoid-page; }
@@ -82,41 +85,43 @@
   </div>
   <% end %>
 
-  <div class="postamble">
-    本契約の成立を証するため、本書を電磁的記録として作成し、甲は記名押印（電子印影）、乙は電子署名を行い、各自その電磁的記録を保管する。
-  </div>
-
-  <% format_jp_date = ->(value) { value.present? ? (value.is_a?(String) ? Date.parse(value) : value).strftime("%Y年%-m月%-d日") : "" } %>
-  <div class="contract-date">契約日　<%= format_jp_date.call(data[:contract_date]) %></div>
-  <% if data[:start_on].present? || data[:end_on].present? %>
-  <% to_wareki = format_jp_date %>
-  <div class="contract-date">契約期間　<%= data[:start_on].present? ? to_wareki.call(data[:start_on]) : "" %> 〜 <%= data[:end_on].present? ? to_wareki.call(data[:end_on]) : "" %></div>
-  <% end %>
-
-  <div class="signatures">
-    <div class="party">
-      <% if data[:hanko_src] %>
-      <img class="hanko-img" src="<%= data[:hanko_src] %>" />
-      <% end %>
-      <div class="label">甲</div>
-      <div class="name"><%= data[:party_a][:name] %></div>
-      <% if data[:party_a][:representative].to_s.present? %>
-      <div class="addr"><%= data[:party_a][:representative] %></div>
-      <% end %>
-      <% data[:party_a][:address].to_s.split("\n").each do |line| %>
-      <div class="addr"><%= line %></div>
-      <% end %>
+  <div class="closing">
+    <div class="postamble">
+      本契約の成立を証するため、本書を電磁的記録として作成し、甲は記名押印（電子印影）、乙は電子署名を行い、各自その電磁的記録を保管する。
     </div>
-    <div class="party">
-      <div class="label">乙</div>
-      <div class="name"><%= data[:party_b][:name] %></div>
-      <% data[:party_b][:address].to_s.split("\n").each do |line| %>
-      <div class="addr"><%= line %></div>
-      <% end %>
-      <% if data[:is_signed] %>
-      <img class="signature-img" src="<%= data[:signature_image] %>" />
-      <div class="signed-at">署名日時: <%= data[:signed_at]&.strftime("%Y-%m-%d %H:%M") %></div>
-      <% end %>
+
+    <% format_jp_date = ->(value) { value.present? ? (value.is_a?(String) ? Date.parse(value) : value).strftime("%Y年%-m月%-d日") : "" } %>
+    <div class="contract-date">契約日　<%= format_jp_date.call(data[:contract_date]) %></div>
+    <% if data[:start_on].present? || data[:end_on].present? %>
+    <% to_wareki = format_jp_date %>
+    <div class="contract-date">契約期間　<%= data[:start_on].present? ? to_wareki.call(data[:start_on]) : "" %> 〜 <%= data[:end_on].present? ? to_wareki.call(data[:end_on]) : "" %></div>
+    <% end %>
+
+    <div class="signatures">
+      <div class="party">
+        <% if data[:hanko_src] %>
+        <img class="hanko-img" src="<%= data[:hanko_src] %>" />
+        <% end %>
+        <div class="label">甲</div>
+        <div class="name"><%= data[:party_a][:name] %></div>
+        <% if data[:party_a][:representative].to_s.present? %>
+        <div class="addr"><%= data[:party_a][:representative] %></div>
+        <% end %>
+        <% data[:party_a][:address].to_s.split("\n").each do |line| %>
+        <div class="addr"><%= line %></div>
+        <% end %>
+      </div>
+      <div class="party">
+        <div class="label">乙</div>
+        <div class="name"><%= data[:party_b][:name] %></div>
+        <% data[:party_b][:address].to_s.split("\n").each do |line| %>
+        <div class="addr"><%= line %></div>
+        <% end %>
+        <% if data[:is_signed] %>
+        <img class="signature-img" src="<%= data[:signature_image] %>" />
+        <div class="signed-at">署名日時: <%= data[:signed_at]&.strftime("%Y-%m-%d %H:%M") %></div>
+        <% end %>
+      </div>
     </div>
   </div>
 
