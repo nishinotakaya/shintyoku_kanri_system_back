@@ -2,7 +2,7 @@ require "test_helper"
 
 # InvoicePdfRenderer#calculation の明細生成テスト。
 # labop モード(発行者≠申請者) + total_override あり + items_override なし のとき、
-# 「請求書/支払通知書の 数量」が実働時間になり、数量×単価=金額 が実態と一致することを検証する。
+# 「請求書/支払明細書の 数量」が実働時間になり、数量×単価=金額 が実態と一致することを検証する。
 # 回帰: 以前はデフォルト単価(wings=3,500)で数量を逆算し 160.0h の申請が 131.4h と表示されていた。
 class InvoicePdfRendererCalculationTest < Minitest::Test
   def setup

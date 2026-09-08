@@ -36,7 +36,7 @@ class InvoicePdfRenderer
     @subject_override = subject_override.to_s.presence
     @items_override = items_override if items_override.is_a?(Array) && items_override.any?
     @note = note.to_s.presence # 備考欄に出すテキスト（発注番号など）
-    @e_sign = e_sign # 電子サイン情報 { signer_name:, signed_at:, verify_id: }（支払通知書のみ描画）
+    @e_sign = e_sign # 電子サイン情報 { signer_name:, signed_at:, verify_id: }（支払明細書のみ描画）
     @title_override = title_override.to_s.presence
     @setting = user.invoice_setting_for(@category || "wings")
     @issuer_setting = @issuer_user.invoice_setting_for(@category || "wings")
@@ -62,8 +62,8 @@ class InvoicePdfRenderer
     rate = labop_mode? ? 10 : @setting.tax_rate.to_i
     # 税込(内税)設定: 明細の単価・金額が税込。合計=明細合計、税抜小計は ÷(1+税率) を四捨五入、消費税=差額。
     # (total_override の逆算と同じ式にして、1枚の請求書内で端数処理を揃える)
-    # 税込/税抜は「発行者」の設定に従う: 自己発行=本人、代理発行(支払通知書・ラボップ宛)=発行者。
-    # 雄太郎(税込)が外注ドライバーへ出す支払通知書も税込になり、西野(税抜)のラボップ宛統合請求書は従来どおり。
+    # 税込/税抜は「発行者」の設定に従う: 自己発行=本人、代理発行(支払明細書・ラボップ宛)=発行者。
+    # 雄太郎(税込)が外注ドライバーへ出す支払明細書も税込になり、西野(税抜)のラボップ宛統合請求書は従来どおり。
     tax_included = (labop_mode? ? @issuer_setting : @setting).tax_included?
     if tax_included
       total = items.sum { |i| i[:amount] }
@@ -194,7 +194,7 @@ class InvoicePdfRenderer
     title_text = @title_override || "請求書"
     registration_no_override = @registration_no_override  # インボイス番号の請求書単体上書き(ERBで使用)
     bank_info_text = @bank_info_override || setting.bank_info  # 振込先: 請求書単体の上書き優先、無ければ設定値(ERBで使用)
-    e_sign = @e_sign  # 電子サイン(支払通知書のみ描画。ERBで使用)
+    e_sign = @e_sign  # 電子サイン(支払明細書のみ描画。ERBで使用)
 
     # 運送の立替金(高速代・駐車場代など)。専用テンプレートが同じ紙面に表を出す
     advanced_expenses = transport? ? transport_expenses : []

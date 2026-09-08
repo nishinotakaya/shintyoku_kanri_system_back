@@ -1,6 +1,6 @@
 require "test_helper"
 
-# 印鑑(ハンコ)は「請求書/立替金=請求者(対象ユーザー=user)」「支払通知書=発行者」の印鑑を使い、
+# 印鑑(ハンコ)は「請求書/立替金=請求者(対象ユーザー=user)」「支払明細書=発行者」の印鑑を使い、
 # まず DB(users.seal_image)を優先、無ければ従来の public/hanko_* にフォールバックすること。
 class InvoiceSealTemplateTest < Minitest::Test
   def erb(name)

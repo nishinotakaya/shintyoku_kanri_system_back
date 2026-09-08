@@ -1,7 +1,7 @@
 require "digest"
 require "securerandom"
 
-# 請求書・支払通知書の電子証明(レベルA)を発行する。
+# 請求書・支払明細書の電子証明(レベルA)を発行する。
 # payload(証明する内容)を正規化して SHA256 を取り、署名者・日時とともに証跡を残す。
 class InvoiceCertifier
   # target_type/target_id: 証明対象 / kind: "application" | "payment_proof"

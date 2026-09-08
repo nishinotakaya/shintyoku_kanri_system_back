@@ -25,9 +25,9 @@ class ExpensePdfRenderer
     #   :positive (default) → amount > 0 の expense（通常立替金）
     #   :negative → amount < 0 の expense（シェアラウンジ相殺など）
     @mode = mode.to_sym
-    # 支払通知書モードで使う: H1 タイトルを「支払通知書」等に差替
+    # 支払明細書モードで使う: H1 タイトルを「支払明細書」等に差替
     @title_override = title_override.to_s.presence
-    @e_sign = e_sign # 電子サイン { signer_name:, signed_at:, verify_id: }（支払通知書のみ描画）
+    @e_sign = e_sign # 電子サイン { signer_name:, signed_at:, verify_id: }（支払明細書のみ描画）
   end
 
   def call
@@ -111,7 +111,7 @@ class ExpensePdfRenderer
 
     user = @user
     title_text = @title_override || "請求書"
-    e_sign = @e_sign # 電子サイン(支払通知書のみ描画。ERBで使用)
+    e_sign = @e_sign # 電子サイン(支払明細書のみ描画。ERBで使用)
     data = { items: items, subtotal: subtotal, total: total,
              issue_date: issue_date, due_date: due_date, invoice_no: invoice_no,
              application_date: application_date, title_text: title_text }

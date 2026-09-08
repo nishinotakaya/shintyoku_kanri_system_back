@@ -6,12 +6,12 @@ end
 require "base64"
 _issuer_setting = (defined?(issuer_setting) && issuer_setting) || setting
 _issuer_user    = (defined?(issuer_user) && issuer_user) || user
-# 印鑑の持ち主: 立替金/請求書=請求者(対象ユーザー=user)、支払通知書=発行者(_issuer_user)
-_is_payment_notice = (defined?(title_text) && title_text == "支払通知書")
+# 印鑑の持ち主: 立替金/請求書=請求者(対象ユーザー=user)、支払明細書=発行者(_issuer_user)
+_is_payment_notice = (defined?(title_text) && title_text == "支払明細書")
 _seal_user    = _is_payment_notice ? _issuer_user : user
 _seal_setting = _is_payment_notice ? _issuer_setting : setting
 # 差出人(発行者)ブロックの名義・住所・登録番号・振込先に使う設定。
-# 請求書/立替金 は請求者(=対象ユーザー setting)、支払通知書 は支払者(=_issuer_setting)。
+# 請求書/立替金 は請求者(=対象ユーザー setting)、支払明細書 は支払者(=_issuer_setting)。
 # admin(西野)が代理で川村の立替金を出しても、差出人は川村本人になる(西野口座/住所にしない)。
 _sender_setting = _is_payment_notice ? _issuer_setting : setting
 _db_seal = (_seal_user.respond_to?(:seal_image) ? _seal_user.seal_image.to_s : "")
@@ -44,7 +44,7 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
   .head { display: flex; justify-content: space-between; gap: 32px; margin-bottom: 24px; }
   .head .left { flex: 1; }
   .head .right { flex: 0 0 38%; font-size: 11px; line-height: 1.55; position: relative; }
-  /* 西野ハンコ（画像） — 請求書/支払通知書 共通で右上 */
+  /* 西野ハンコ（画像） — 請求書/支払明細書 共通で右上 */
   .hanko-img {
     position: absolute; top: -8px; right: -4px;
     width: 80px; height: 80px;
@@ -87,9 +87,9 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
 </style>
 </head>
 <% _title_text = data[:title_text].presence || "請求書" %>
-<body class="<%= _title_text == '支払通知書' ? 'payment-notice' : '' %>">
+<body class="<%= _title_text == '支払明細書' ? 'payment-notice' : '' %>">
   <div class="top">
-    <% if _title_text == '支払通知書' %>
+    <% if _title_text == '支払明細書' %>
       発行日: <%= data[:application_date].strftime("%Y年%m月%d日") %><br>
       通知番号: <%= data[:invoice_no] %>
     <% else %>
@@ -104,7 +104,7 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
     <div class="left">
       <div class="client"><%= (defined?(client_name) && client_name.presence) || setting.client_name %> <%= (defined?(honorific) && honorific.presence) || setting.honorific.presence || "御中" %></div>
       <div class="subject">件名 : 立替金精算（<%= @year %>年<%= @month %>月分）</div>
-      <% if _title_text == '支払通知書' %>
+      <% if _title_text == '支払明細書' %>
         <div>下記のとおりお振込いたしましたので、ご確認のほどよろしくお願い申し上げます。</div>
         <div class="amount-box">
           <span class="label">お振込金額</span>
@@ -190,11 +190,11 @@ hanko_src = _db_seal.present? ? _db_seal : _file_seal %>
   <div class="bank">
     <div class="lbl">お振込先：</div>
     <%# 振込先は常に請求者/受領者(=対象ユーザー setting)の口座。
-        支払通知書=受領者(川村)、請求書/立替金=請求者(川村)。admin 代理でも操作者(西野)口座にしない。 %>
+        支払明細書=受領者(川村)、請求書/立替金=請求者(川村)。admin 代理でも操作者(西野)口座にしない。 %>
     <div><%= setting.bank_info %></div>
   </div>
 
-  <%# 電子サイン(証明ブロック): 支払通知書で e_sign が渡された時だけ描画 %>
+  <%# 電子サイン(証明ブロック): 支払明細書で e_sign が渡された時だけ描画 %>
   <% if defined?(e_sign) && e_sign.present? %>
   <div class="esign" style="margin-top: 14px; padding: 10px 12px; border: 1.5px solid #2f6f4f; border-radius: 6px; font-size: 11px; color: #1f4d38; background: #f2faf5; max-width: 340px;">
     <div style="font-weight: 700; margin-bottom: 4px;">✔ 電子的に証明済（電子サイン）</div>

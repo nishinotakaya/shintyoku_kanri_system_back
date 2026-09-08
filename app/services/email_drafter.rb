@@ -210,13 +210,13 @@ class EmailDrafter
       bank_block = bank_info.empty? ? "" : "\n        - お振込先:\n#{bank_info.split("\n").map { |line| "          #{line.strip}" }.join("\n")}"
       bank_rule = bank_info.empty? ? "" : "\n        - 「お振込先：」として上記の口座情報を本文の振込金額の近くに、改行を保って明記する（勝手に変えない）"
       <<~PROMPT
-        以下情報で、#{recipient_line} 宛に「お振込のご案内」(支払通知書) のメール下書きを作って。
+        以下情報で、#{recipient_line} 宛に「お振込のご案内」(支払明細書) のメール下書きを作って。
         - 振込日: #{paid_on}
         - 振込金額（税込・合計）: ¥#{grand_total}
         - 内訳:
         #{breakdown}#{bank_block}
         - 差出人: #{sender}
-        - 添付: 支払通知書 PDF（請求書と同じレイアウト・タイトルのみ「支払通知書」）
+        - 添付: 支払明細書 PDF（請求書と同じレイアウト・タイトルのみ「支払明細書」）
 
         ★必ず守ること:
         - 件名は「【お振込のご案内】#{@context[:year]}年#{@context[:month]}月分」のような明確な題名にすること（「ご請求」とは絶対に書かない、これは支払い側からの通知）
@@ -225,7 +225,7 @@ class EmailDrafter
         - 「下記の通りお振込いたしました」「ご確認のほどよろしくお願い申し上げます」のニュアンスを入れる
         - 振込日と振込金額は本文中に明記する（金額は ¥X,XXX,XXX のカンマ区切り）
         - 内訳が複数ある場合は箇条書きで本文に含める#{bank_rule}
-        - 添付の支払通知書 PDF にも同内容が記載されている旨を一言添える
+        - 添付の支払明細書 PDF にも同内容が記載されている旨を一言添える
         - 「請求」「請求書」「請求金額」という表現は使わない（あくまで支払側からの通知）
       PROMPT
     when :self_invoice
@@ -486,7 +486,7 @@ class EmailDrafter
     }
   end
 
-  # 振込通知 (支払通知書) メールの固定テンプレート
+  # 振込通知 (支払明細書) メールの固定テンプレート
   # context: recipient_name, paid_on (Date or 'YYYY-MM-DD'), grand_total, breakdown_items, sender_name, year, month
   def build_payment_notice_email
     fmt = ->(n) { sign = n.to_i < 0 ? "-" : ""; "#{sign}¥#{n.to_i.abs.to_s.reverse.scan(/\d{1,3}/).join(",").reverse}" }

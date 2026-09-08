@@ -486,7 +486,7 @@ module Api
       end
 
       # POST /api/v1/emails/payment_notice_draft
-      # 振込通知 (支払通知書) メールの件名/本文 下書き
+      # 振込通知 (支払明細書) メールの件名/本文 下書き
       # params: invoice_submission_ids[], paid_on (YYYY-MM-DD), recipient_name?, to?
       def payment_notice_draft
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
@@ -530,7 +530,7 @@ module Api
 
       # POST /api/v1/emails/payment_notice_send
       # 振込通知メールを送信し、対象 invoice_submissions の paid_at を更新
-      # 添付: 各 submission につき 支払通知書 PDF (請求書テンプレ流用、タイトルだけ差替)
+      # 添付: 各 submission につき 支払明細書 PDF (請求書テンプレ流用、タイトルだけ差替)
       def payment_notice_send
         return render(json: { error: "admin only" }, status: :forbidden) unless current_user.admin?
         ids = Array(params[:invoice_submission_ids]).map(&:to_i).reject(&:zero?)
@@ -544,7 +544,7 @@ module Api
           Date.current
         end
 
-        # 支払通知書 PDF: 川村さんの請求書をそのまま使い、タイトルだけ「支払通知書」に差替
+        # 支払明細書 PDF: 川村さんの請求書をそのまま使い、タイトルだけ「支払明細書」に差替
         # (発行者=川村、振込先=川村の口座、宛先=川村側の請求書クライアント のまま)
         subs = InvoiceSubmission.where(id: ids).includes(:user, :received_purchase_order)
         # 受取人が混在すると別人の口座宛て通知＋paid_at一括更新になるため単一申請者のみ許可
@@ -559,7 +559,7 @@ module Api
           surname = s.user&.display_name.to_s.split(/[\s　]/).first.to_s
           cat_label = CATEGORY_LABELS[s.category.to_s] || s.category.to_s
 
-          # 支払通知書(振込確認証)を電子的に証明: 支払者(西野)が署名。金額・受領者・振込日をハッシュ化して証跡を残す。
+          # 支払明細書(振込確認証)を電子的に証明: 支払者(西野)が署名。金額・受領者・振込日をハッシュ化して証跡を残す。
           po_no = s.purchase_order_no_override.presence || s.received_purchase_order&.order_no
           cert = InvoiceCertifier.certify(
             target_type: "InvoiceSubmission", target_id: s.id, kind: "payment_proof",
@@ -571,21 +571,21 @@ module Api
                      verify_id: cert.content_sha256.first(12) }
 
           if s.kind == "expense"
-            # 立替金の支払通知書 PDF (ExpensePdfRenderer 経由)
+            # 立替金の支払明細書 PDF (ExpensePdfRenderer 経由)
             exp_pdf = ExpensePdfRenderer.new(
               s.user, year: s.year, month: s.month, category: s.category,
               issuer_user_override: current_user,
               client_name_override: s.user.display_name,
-              title_override: "支払通知書",
+              title_override: "支払明細書",
               application_date: paid_on, # 発行日=振込済にした当日
               e_sign: e_sign
             ).call
-            fname = "#{cat_label}_#{surname.presence || '通知'}_支払通知書_立替金_#{s.year}年_#{s.month}月分.pdf"
+            fname = "#{cat_label}_#{surname.presence || '通知'}_支払明細書_立替金_#{s.year}年_#{s.month}月分.pdf"
             attachments << { filename: fname, content_type: "application/pdf", body: File.binread(exp_pdf) }
             next
           end
 
-          # 通常の請求書ベース 支払通知書
+          # 通常の請求書ベース 支払明細書
           effective_no = s.purchase_order_no_override.presence || s.received_purchase_order&.order_no
           po_line = effective_no.present? ? "注文番号: #{effective_no}" : nil
           composed_note = [ po_line, s.note ].compact.reject(&:blank?).join("\n")
@@ -597,8 +597,8 @@ module Api
             subject_override: s.subject_override,
             items_override: s.items_override,
             note: composed_note.presence,
-            title_override: "支払通知書",
-            # 支払通知書は「支払い側」が「受領側」に出すもの。
+            title_override: "支払明細書",
+            # 支払明細書は「支払い側」が「受領側」に出すもの。
             # 発行者(及び印影)は payer=current_user(西野)、宛名(client)は payee=s.user(川村)。
             issuer_user_override: current_user,
             client_name_override: s.user.display_name,
@@ -607,7 +607,7 @@ module Api
             due_date_override: paid_on,
             e_sign: e_sign
           ).call
-          fname = "#{cat_label}_#{surname.presence || '通知'}_支払通知書_#{s.year}年_#{s.month}月分.pdf"
+          fname = "#{cat_label}_#{surname.presence || '通知'}_支払明細書_#{s.year}年_#{s.month}月分.pdf"
           attachments << { filename: fname, content_type: "application/pdf", body: File.binread(pdf_path) }
         end
 

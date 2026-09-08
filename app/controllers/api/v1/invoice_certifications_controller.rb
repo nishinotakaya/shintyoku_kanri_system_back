@@ -1,6 +1,6 @@
 module Api
   module V1
-    # 請求書・支払通知書の電子証明(レベルA)。発行と公開検証。
+    # 請求書・支払明細書の電子証明(レベルA)。発行と公開検証。
     class InvoiceCertificationsController < BaseController
       skip_before_action :authenticate_user!, only: :verify
 

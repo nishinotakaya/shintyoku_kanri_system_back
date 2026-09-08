@@ -325,7 +325,7 @@ class User < ApplicationRecord
 
   # 発行者の身元情報(氏名/インボイス番号/住所/連絡先/口座)はカテゴリに依らず本人固有。
   # 未作成カテゴリの設定を組み立てる際は、本人の既存設定から引き継いで空欄にしない。
-  # (例: 西野が須崎(video)への支払通知書を出すとき、西野に video 設定が無くても Tel/インボイス番号を出す)
+  # (例: 西野が須崎(video)への支払明細書を出すとき、西野に video 設定が無くても Tel/インボイス番号を出す)
   ISSUER_IDENTITY_FIELDS = %i[issuer_name registration_no postal_code address tel email bank_info].freeze
   def build_invoice_setting_for(category)
     attrs = InvoiceSetting.defaults_for(category).merge(category: category)

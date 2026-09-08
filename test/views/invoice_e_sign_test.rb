@@ -1,7 +1,7 @@
 require "test_helper"
 require "erb"
 
-# 支払通知書PDFの電子サイン(証明ブロック)描画テスト。
+# 支払明細書PDFの電子サイン(証明ブロック)描画テスト。
 # e_sign が渡された時だけ「署名者/日時/検証番号」を描画し、渡されない時は描画しないことを確認する。
 class InvoiceESignTest < Minitest::Test
   INVOICE_TEMPLATE = Rails.root.join("app/views/invoices/invoice.html.erb")
@@ -21,7 +21,7 @@ class InvoiceESignTest < Minitest::Test
     setting = @setting
     user = @user
     client_name = "株式会社ラボップ"; honorific = "御中"
-    title_text = "支払通知書"
+    title_text = "支払明細書"
     bank_info_text = @setting.bank_info
     hanko_src = nil
     data = { items: [ { label: "開発業務", qty: 160, unit: "時間", unit_price: 2875, amount: 460_000 } ],

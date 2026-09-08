@@ -1,4 +1,4 @@
-# 請求書・支払通知書の電子証明(レベルA: 操作者・日時・内容ハッシュの証跡)。
+# 請求書・支払明細書の電子証明(レベルA: 操作者・日時・内容ハッシュの証跡)。
 # 追記のみ(更新・削除しない)。verify_token で公開検証する。
 class InvoiceCertification < ApplicationRecord
   belongs_to :user
@@ -14,7 +14,7 @@ class InvoiceCertification < ApplicationRecord
   end
 
   def kind_label
-    { "application" => "請求書 申請", "payment_proof" => "振込確認証 / 支払通知" }[kind] || kind
+    { "application" => "請求書 申請", "payment_proof" => "振込確認証 / 支払明細書" }[kind] || kind
   end
 
   def as_payload

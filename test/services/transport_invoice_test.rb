@@ -98,15 +98,15 @@ class TransportInvoiceTest < ActiveSupport::TestCase
     assert_includes html, "合　計（税込）"
   end
 
-  # 代理発行(支払通知書)の税込/税抜は発行者の設定に従う。
-  # 雄太郎(税込)が外注ドライバー(設定は既定=税抜)へ出す支払通知書は税込で計算される
+  # 代理発行(支払明細書)の税込/税抜は発行者の設定に従う。
+  # 雄太郎(税込)が外注ドライバー(設定は既定=税抜)へ出す支払明細書は税込で計算される
   def test_payment_notice_follows_the_issuer_tax_setting
     owner = User.create!(email: "transport_owner_#{SecureRandom.hex(4)}@example.com", password: "password123",
                          display_name: "西野 雄太郎", closing_day: 31, work_categories: [ "transport" ])
     owner.invoice_setting_for("transport").tap { |s| s.tax_included = true; s.save! }
 
     calc = InvoicePdfRenderer.new(@user, year: 2026, month: 9, category: "transport",
-                                  issuer_user_override: owner, title_override: "支払通知書").calculation
+                                  issuer_user_override: owner, title_override: "支払明細書").calculation
 
     assert calc[:tax_included]
     assert_equal 60_000, calc[:total]

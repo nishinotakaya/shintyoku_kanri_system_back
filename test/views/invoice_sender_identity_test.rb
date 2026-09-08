@@ -1,10 +1,10 @@
 require "test_helper"
 require "erb"
 
-# 請求書 / 立替金 / 支払通知書 PDF の「差出人ブロック(名義・住所・登録番号)」と「振込先」が
+# 請求書 / 立替金 / 支払明細書 PDF の「差出人ブロック(名義・住所・登録番号)」と「振込先」が
 # 誰の情報になるかを検証する。
 # - 請求書 / 立替金: 差出人=請求者(対象ユーザー=川村)。admin(西野)が代理発行しても西野にしない。
-# - 支払通知書: 差出人=支払者(西野)、振込先=受領者(川村)。
+# - 支払明細書: 差出人=支払者(西野)、振込先=受領者(川村)。
 # 回帰: 立替金/請求書で差出人ブロックと振込先が発行操作者(西野)になっていたバグ。
 class InvoiceSenderIdentityTest < Minitest::Test
   EXPENSE_TEMPLATE = Rails.root.join("app/views/invoices/expense_invoice.html.erb")
@@ -44,9 +44,9 @@ class InvoiceSenderIdentityTest < Minitest::Test
     refute_includes html, "T1111111111111", "西野の登録番号が出てはいけない"
   end
 
-  # 支払通知書は 差出人=西野(支払者)、振込先=川村(受領者)。
+  # 支払明細書は 差出人=西野(支払者)、振込先=川村(受領者)。
   def test_expense_payment_notice_sender_is_payer_and_bank_is_payee
-    html = render(EXPENSE_TEMPLATE, title_text: "支払通知書")
+    html = render(EXPENSE_TEMPLATE, title_text: "支払明細書")
 
     assert_includes html, "六高台", "差出人住所は支払者(西野)であるべき"
     assert_includes html, "T1111111111111", "差出人登録番号は支払者(西野)であるべき"
