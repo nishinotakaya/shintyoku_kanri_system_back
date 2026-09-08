@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_08_010000) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_08_020001) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -556,6 +556,9 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_08_010000) do
     t.decimal "progress_rate_prev", precision: 5, scale: 2
     t.string "status_prev"
     t.text "memo"
+    t.string "title_prev"
+    t.string "assignee_name_prev"
+    t.decimal "workload_prev", precision: 6, scale: 2
     t.index ["assignee_name"], name: "index_notion_tasks_on_assignee_name"
     t.index ["notion_block_id"], name: "index_notion_tasks_on_notion_block_id", unique: true
     t.index ["start_date", "end_date"], name: "index_notion_tasks_on_start_date_and_end_date"
@@ -911,6 +914,15 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_08_010000) do
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
+  end
+
+  create_table "wbs_excel_templates", force: :cascade do |t|
+    t.string "file_name", null: false
+    t.binary "content", null: false
+    t.integer "uploaded_by_user_id", null: false
+    t.datetime "uploaded_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
   end
 
   create_table "work_report_expense_photos", force: :cascade do |t|

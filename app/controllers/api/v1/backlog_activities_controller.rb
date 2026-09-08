@@ -4,6 +4,7 @@ module Api
     # 対象ユーザーのスコープ: admin=全員 / サブ管理者=managee / 一般=自分のみ。
     class BacklogActivitiesController < BaseController
       before_action :ensure_feature
+      before_action :ensure_wbs_excel_template_admin, only: :upload_wbs_excel_template
       rescue_from ActiveRecord::RecordNotFound do
         render json: { error: "対象が見つかりません" }, status: :not_found
       end
@@ -13,6 +14,12 @@ module Api
       def ensure_feature
         return if current_user.can_use?(:backlog_activities)
         render json: { error: "対応ログの利用権限がありません" }, status: :forbidden
+      end
+
+      # WBS Excel テンプレートの登録は全体共有データを置き換えるため admin/サブ管理者のみに限定する。
+      def ensure_wbs_excel_template_admin
+        return if current_user.admin? || current_user.sub_admin?
+        render json: { error: "管理者のみ実行できます" }, status: :forbidden
       end
 
       # GET /api/v1/backlog_activities/targets  対象に選べるユーザー一覧（Backlog設定があるユーザー）
@@ -76,6 +83,41 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # GET /api/v1/backlog_activities/wbs_excel_template  登録済みの受領Excelテンプレート情報
+      def wbs_excel_template
+        render json: { template: wbs_excel_template_payload }
+      end
+
+      # POST /api/v1/backlog_activities/wbs_excel_template  受領Excel(xlsm)テンプレートを登録
+      def upload_wbs_excel_template
+        uploaded_file = params[:file]
+        return render json: { error: "アップロードするファイルを選択してください" }, status: :unprocessable_entity if uploaded_file.blank?
+
+        content = uploaded_file.read
+        error_message = validate_wbs_excel_template(uploaded_file.original_filename, content)
+        return render json: { error: error_message }, status: :unprocessable_entity if error_message
+
+        WbsExcelTemplate.replace!(file_name: uploaded_file.original_filename, content: content, uploaded_by_user: current_user)
+        render json: { template: wbs_excel_template_payload }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/v1/backlog_activities/wbs_excel_export  Notion(WBS) タスクを受領Excel形式で書き出す
+      def wbs_excel_export
+        template = WbsExcelTemplate.current
+        return render json: { error: "Excel テンプレートが未登録です" }, status: :not_found if template.nil?
+
+        result = NotionWbsExcelUpdater.new(template_bytes: template.content, tasks: NotionTask.all).call
+        response.headers["X-Wbs-Matched"]  = result[:matched_count].to_s
+        response.headers["X-Wbs-Appended"] = result[:appended_count].to_s
+        response.headers["X-Wbs-Skipped"]  = result[:skipped_count].to_s
+        send_data result[:bytes], type: "application/vnd.ms-excel.sheet.macroEnabled.12",
+          filename: "進捗報告書_#{Date.current.strftime('%Y%m%d')}.xlsm", disposition: "attachment"
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       # POST /api/v1/backlog_activities/import?user_id=  スプシのサマリタブから備考/状態を取り込む
       def import
         user = resolve_target_user or return
@@ -119,10 +161,13 @@ module Api
         task = NotionTask.find_by(notion_block_id: params[:notion_block_id])
         return render json: { error: "Notion タスクが見つかりません" }, status: :not_found unless task
 
-        task.start_date_prev    = date_param(params[:start_date_prev])    if params.key?(:start_date_prev)
-        task.end_date_prev      = date_param(params[:end_date_prev])      if params.key?(:end_date_prev)
-        task.progress_rate_prev = rate_param(params[:progress_rate_prev]) if params.key?(:progress_rate_prev)
-        task.status_prev        = params[:status_prev].to_s.strip.presence if params.key?(:status_prev)
+        task.start_date_prev      = date_param(params[:start_date_prev])    if params.key?(:start_date_prev)
+        task.end_date_prev        = date_param(params[:end_date_prev])      if params.key?(:end_date_prev)
+        task.progress_rate_prev   = rate_param(params[:progress_rate_prev]) if params.key?(:progress_rate_prev)
+        task.status_prev          = params[:status_prev].to_s.strip.presence if params.key?(:status_prev)
+        task.title_prev           = params[:title_prev].to_s.strip.presence if params.key?(:title_prev)
+        task.assignee_name_prev   = params[:assignee_name_prev].to_s.strip.presence if params.key?(:assignee_name_prev)
+        task.workload_prev        = params[:workload_prev].presence if params.key?(:workload_prev)
         task.memo               = params[:memo].to_s if params.key?(:memo)
         task.note               = params[:note].to_s if params.key?(:note) # 備考(Notion由来)の画面編集。次回同期でNotion値に戻る点は許容。
         task.save!
@@ -167,13 +212,16 @@ module Api
           {
             notion_block_id: task.notion_block_id,
             assignee_name:   task.assignee_name,
+            assignee_name_prev: task.assignee_name_prev,
             wbs_level:       task.wbs_level,
             title:           task.title,
+            title_prev:      task.title_prev,
             start_date:      task.start_date&.to_s,
             end_date:        task.end_date&.to_s,
             start_date_prev: task.start_date_prev&.to_s,
             end_date_prev:   task.end_date_prev&.to_s,
             workload:        task.workload&.to_f,
+            workload_prev:   task.workload_prev&.to_f,
             progress_rate:   task.progress_rate&.to_f,
             progress_rate_prev: task.progress_rate_prev&.to_f,
             status:          task.status,
@@ -217,6 +265,29 @@ module Api
       end
 
       def user_brief(user) = { id: user.id, display_name: user.display_name, email: user.email }
+
+      def wbs_excel_template_payload
+        template = WbsExcelTemplate.current
+        return nil if template.nil?
+
+        {
+          file_name: template.file_name,
+          uploaded_at: template.uploaded_at,
+          uploaded_by_name: template.uploaded_by_user.display_name
+        }.merge(template.schedule_header)
+      end
+
+      def validate_wbs_excel_template(file_name, content)
+        return "拡張子が .xlsm のファイルを選択してください" unless file_name.to_s.downcase.end_with?(".xlsm")
+
+        document = WbsExcelDocument.new(content)
+        return "Excel ファイルとして読み込めませんでした" unless document.entries.key?("xl/workbook.xml")
+        return "「#{WbsExcelDocument::SHEET_NAME}」シートが見つかりません" if document.sheet_path.nil?
+
+        nil
+      rescue StandardError
+        "Excel ファイルとして読み込めませんでした"
+      end
     end
   end
 end

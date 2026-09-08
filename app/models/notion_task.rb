@@ -28,4 +28,34 @@ class NotionTask < ApplicationRecord
   def clear_reported_diffs!
     update!(start_date_prev: nil, end_date_prev: nil, progress_rate_prev: nil, status_prev: nil)
   end
+
+  # WBS Excel 書き出し(NotionWbsExcelUpdater)向けの実効値。
+  # *_prev(アプリで編集した「修正後」の値)が入っていればそれを、無ければ元の値(Notion 同期値)を返す。
+  def effective_title
+    title_prev.presence || title
+  end
+
+  def effective_assignee_name
+    assignee_name_prev.presence || assignee_name
+  end
+
+  def effective_workload
+    workload_prev.presence || workload
+  end
+
+  def effective_start_date
+    start_date_prev.presence || start_date
+  end
+
+  def effective_end_date
+    end_date_prev.presence || end_date
+  end
+
+  def effective_progress_rate
+    progress_rate_prev.presence || progress_rate
+  end
+
+  def effective_status
+    status_prev.presence || status
+  end
 end
