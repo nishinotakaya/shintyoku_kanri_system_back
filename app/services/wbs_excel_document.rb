@@ -38,6 +38,31 @@ class WbsExcelDocument
     @shared_strings ||= load_shared_strings
   end
 
+  # xl/styles.xml の Nokogiri::XML::Document(遅延読み込み)。style_id_with_fill が書き換える。
+  def styles_document
+    return @styles_document if defined?(@styles_document)
+
+    xml = entries["xl/styles.xml"]
+    @styles_document = xml && self.class.parse_xml(xml)
+  end
+
+  # style_id_with_fill で styles_document に変更が入っていれば true(呼び出し側が entries へ書き戻す判断に使う)。
+  def styles_modified?
+    @styles_modified == true
+  end
+
+  # base_style_id(元セルの s 属性。無い場合は nil) を「rgb で塗り潰す」バリエーションに複製した新しい
+  # スタイル index(文字列)を返す。fills/cellXfs への追加は (base_style_id, rgb) の組ごとに1回だけ行う。
+  def style_id_with_fill(base_style_id, rgb:)
+    @style_id_with_fill_cache ||= {}
+    cache_key = [ base_style_id, rgb ]
+    return @style_id_with_fill_cache[cache_key] if @style_id_with_fill_cache.key?(cache_key)
+
+    fill_id = fill_id_for(rgb)
+    new_style_id = append_cell_xf_with_fill(base_style_id, fill_id).to_s
+    @style_id_with_fill_cache[cache_key] = new_style_id
+  end
+
   # 行ノード内から指定した列(例: "B")のセルノードを探す。
   def find_cell(row_node, column_letter)
     row_node.xpath("main:c", NAMESPACES).find { |cell_node| self.class.column_letters_of(cell_node["r"]) == column_letter }
@@ -106,6 +131,50 @@ class WbsExcelDocument
   end
 
   private
+
+  # rgb の solid fill を xl/styles.xml の <fills> に追加し、その index(0始まり)を返す。
+  # 同じ rgb での呼び出しは追加せず既存の index を再利用する。
+  def fill_id_for(rgb)
+    @fill_id_by_rgb ||= {}
+    return @fill_id_by_rgb[rgb] if @fill_id_by_rgb.key?(rgb)
+
+    fills_node = styles_document.at_xpath("//main:fills", NAMESPACES)
+    new_fill_index = fills_node["count"].to_i
+
+    fill_node = Nokogiri::XML::Node.new("fill", styles_document)
+    pattern_fill_node = Nokogiri::XML::Node.new("patternFill", styles_document)
+    pattern_fill_node["patternType"] = "solid"
+    fg_color_node = Nokogiri::XML::Node.new("fgColor", styles_document)
+    fg_color_node["rgb"] = rgb
+    bg_color_node = Nokogiri::XML::Node.new("bgColor", styles_document)
+    bg_color_node["indexed"] = "64"
+    pattern_fill_node.add_child(fg_color_node)
+    pattern_fill_node.add_child(bg_color_node)
+    fill_node.add_child(pattern_fill_node)
+    fills_node.add_child(fill_node)
+    fills_node["count"] = (new_fill_index + 1).to_s
+
+    @styles_modified = true
+    @fill_id_by_rgb[rgb] = new_fill_index
+  end
+
+  # base_style_id(cellXfs の既存 index、無ければ最小限の xf)を fill_id で塗り潰すよう複製し、
+  # <cellXfs> に追加した新しい index(0始まり)を返す。
+  def append_cell_xf_with_fill(base_style_id, fill_id)
+    cell_xfs_node = styles_document.at_xpath("//main:cellXfs", NAMESPACES)
+    base_xf_node = base_style_id.present? ? cell_xfs_node.xpath("main:xf", NAMESPACES)[base_style_id.to_i] : nil
+
+    new_xf_node = base_xf_node ? base_xf_node.dup : Nokogiri::XML::Node.new("xf", styles_document)
+    new_xf_node["fillId"] = fill_id.to_s
+    new_xf_node["applyFill"] = "1"
+
+    new_xf_index = cell_xfs_node["count"].to_i
+    cell_xfs_node.add_child(new_xf_node)
+    cell_xfs_node["count"] = (new_xf_index + 1).to_s
+
+    @styles_modified = true
+    new_xf_index
+  end
 
   def resolve_sheet_path
     return nil unless entries.key?("xl/workbook.xml") && entries.key?("xl/_rels/workbook.xml.rels")

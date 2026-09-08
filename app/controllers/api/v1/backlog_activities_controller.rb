@@ -109,11 +109,30 @@ module Api
         return render json: { error: "Excel テンプレートが未登録です" }, status: :not_found if template.nil?
 
         result = NotionWbsExcelUpdater.new(template_bytes: template.content, tasks: NotionTask.all).call
-        response.headers["X-Wbs-Matched"]  = result[:matched_count].to_s
-        response.headers["X-Wbs-Appended"] = result[:appended_count].to_s
-        response.headers["X-Wbs-Skipped"]  = result[:skipped_count].to_s
+        response.headers["X-Wbs-Matched"]           = result[:matched_count].to_s
+        response.headers["X-Wbs-Appended"]          = result[:appended_count].to_s
+        response.headers["X-Wbs-Skipped"]           = result[:skipped_count].to_s
+        response.headers["X-Wbs-Changed-Cells"]     = result[:changed_cell_count].to_s
+        response.headers["X-Wbs-Unsubmitted-Cells"] = result[:unsubmitted_cell_count].to_s
         send_data result[:bytes], type: "application/vnd.ms-excel.sheet.macroEnabled.12",
           filename: "進捗報告書_#{Date.current.strftime('%Y%m%d')}.xlsm", disposition: "attachment"
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/backlog_activities/wbs_mark_submitted
+      # 出力した xlsm を提出済にする(=以降の書き出しで背景を赤くしない)。全 NotionTask の
+      # 未提出の「修正後」値をスナップショットとして確定する。
+      def wbs_mark_submitted
+        submitted_tasks = 0
+        NotionTask.transaction do
+          NotionTask.find_each do |task|
+            had_unsubmitted_override = NotionTask::OVERRIDE_FIELDS.any? { |field| task.unsubmitted_override?(field) }
+            task.mark_overrides_submitted!
+            submitted_tasks += 1 if had_unsubmitted_override
+          end
+        end
+        render json: { submitted_tasks: submitted_tasks }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -228,7 +247,8 @@ module Api
             status_prev:     task.status_prev,
             priority:        task.priority,
             note:            task.note.to_s,
-            memo:            task.memo.to_s
+            memo:            task.memo.to_s,
+            wbs_submitted_overrides: task.wbs_submitted_overrides
           }
         end
       end

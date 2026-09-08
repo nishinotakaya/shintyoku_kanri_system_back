@@ -129,6 +129,26 @@ class Api::V1::BacklogActivitiesWbsExcelTest < ActionDispatch::IntegrationTest
     assert_equal "0", response.headers["X-Wbs-Skipped"]
   end
 
+  def test_mark_submitted_snapshots_unsubmitted_overrides_and_returns_count
+    task_with_override = NotionTask.create!(
+      notion_block_id: SecureRandom.uuid, wbs_level: "1.1", title: "元タイトル",
+      assignee_name: "担当A", start_date_prev: Date.new(2026, 9, 20),
+      synced_at: Time.current
+    )
+    task_without_override = NotionTask.create!(
+      notion_block_id: SecureRandom.uuid, wbs_level: "1.2", title: "元タイトルB",
+      assignee_name: "担当B", synced_at: Time.current
+    )
+    @notion_tasks << task_with_override << task_without_override
+
+    post "/api/v1/backlog_activities/wbs_mark_submitted", headers: auth_headers(@admin)
+
+    assert_response :success
+    assert_equal 1, response.parsed_body["submitted_tasks"]
+    refute task_with_override.reload.unsubmitted_override?(:start_date)
+    refute task_without_override.reload.unsubmitted_override?(:title)
+  end
+
   private
 
   def uploaded_template_file

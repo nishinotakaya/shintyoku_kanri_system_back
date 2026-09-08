@@ -16,6 +16,8 @@ class NotionWbsExcelUpdater
   NAMESPACES       = WbsExcelDocument::NAMESPACES
   EXCEL_EPOCH      = Date.new(1899, 12, 30) # Excel のシリアル値起点(1900年うるう年バグ込み)
   ZENKAKU_SPACE    = "　".freeze
+  # 「修正後」の値が未提出(NotionTask#unsubmitted_override?)のセルに塗る背景色。提出済にすると消える。
+  RED_FILL_RGB     = "FFFF9999".freeze
 
   # C〜H 列（B は突合キーなので既存行では上書きしない。新規行では B〜H を書く）
   Column = Struct.new(:letter, :attribute)
@@ -35,16 +37,18 @@ class NotionWbsExcelUpdater
   end
 
   def call
-    document = WbsExcelDocument.new(@template_bytes)
-    raise "「#{SHEET_NAME}」シートが見つかりません" if document.sheet_path.nil?
+    @document = WbsExcelDocument.new(@template_bytes)
+    raise "「#{SHEET_NAME}」シートが見つかりません" if @document.sheet_path.nil?
 
-    entries = document.entries
-    sheet_document = document.sheet_document
-    row_by_wbs_level = index_rows_by_wbs_level(document)
+    entries = @document.entries
+    sheet_document = @document.sheet_document
+    row_by_wbs_level = index_rows_by_wbs_level(@document)
 
     matched_count = 0
     appended_count = 0
     skipped_count = 0
+    @changed_cell_count = 0
+    @unsubmitted_cell_count = 0
     next_append_row = last_filled_row(sheet_document) + 1
 
     sorted_tasks.each do |task|
@@ -70,12 +74,16 @@ class NotionWbsExcelUpdater
       end
     end
 
-    entries[document.sheet_path] = sheet_document.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML)
+    entries[@document.sheet_path] = sheet_document.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML)
+    if @document.styles_modified?
+      entries["xl/styles.xml"] = @document.styles_document.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML)
+    end
     remove_calc_chain!(entries)
     ensure_full_calc_on_load!(entries)
 
     { bytes: WbsExcelDocument.write_zip_entries(entries), matched_count: matched_count,
-      appended_count: appended_count, skipped_count: skipped_count }
+      appended_count: appended_count, skipped_count: skipped_count,
+      changed_cell_count: @changed_cell_count, unsubmitted_cell_count: @unsubmitted_cell_count }
   end
 
   private
@@ -132,16 +140,26 @@ class NotionWbsExcelUpdater
 
   # ---- 既存行の上書き ----
 
-  # 既存行に C〜H のセルが無い場合も、追加行と同じ「列順に生成＋直前データ行のスタイル継承」で補ってから書く。
+  # 既存行は「アプリで修正した項目(*_prev がある項目)」だけを書き、それ以外のセルには一切触れない
+  # (元ファイルと完全に同じ状態を保つ)。書いたセルのうち未提出の変更は背景を赤く塗る。
   def update_matched_row!(sheet_document, row_node, row_number, task)
     reference_row = previous_data_row(sheet_document, row_number)
 
     COLUMNS.each do |column|
       next if column.letter == "B" # 突合キーは変更しない
+      next unless task.override_present?(column.attribute) # 修正されていない項目のセルは触らない
 
       cell_node = find_or_build_cell(sheet_document, row_node, column.letter, row_number, reference_row)
       write_cell!(cell_node, column, task, row_node)
+      apply_unsubmitted_fill!(cell_node) if task.unsubmitted_override?(column.attribute)
     end
+  end
+
+  # 未提出の「修正後」を反映したセルの背景を赤くする。提出済(mark_overrides_submitted!)にすると
+  # unsubmitted_override? が false になり、以降の書き出しでは塗られなくなる。
+  def apply_unsubmitted_fill!(cell_node)
+    cell_node["s"] = @document.style_id_with_fill(cell_node["s"], rgb: RED_FILL_RGB)
+    @unsubmitted_cell_count += 1
   end
 
   # ---- 新規行の追加 ----
@@ -217,6 +235,7 @@ class NotionWbsExcelUpdater
 
   def write_cell!(cell_node, column, task, row_node)
     value = column.attribute == :wbs_level ? task.wbs_level : task.public_send("effective_#{column.attribute}")
+    @changed_cell_count += 1
 
     case column.attribute
     when :wbs_level, :assignee_name

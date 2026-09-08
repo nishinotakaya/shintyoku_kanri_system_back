@@ -2,6 +2,10 @@ class NotionTask < ApplicationRecord
   validates :notion_block_id, presence: true, uniqueness: true
   validates :title, presence: true
 
+  # WBS Excel 書き出し(NotionWbsExcelUpdater)で「修正後」として上書きしうる項目。
+  # *_prev 列がこれに対応する(例: :title → title_prev)。
+  OVERRIDE_FIELDS = %i[title assignee_name workload start_date end_date progress_rate].freeze
+
   scope :for_date, ->(date) {
     where("start_date IS NULL OR start_date <= ?", date)
       .where("end_date IS NULL OR end_date >= ?", date)
@@ -57,5 +61,41 @@ class NotionTask < ApplicationRecord
 
   def effective_status
     status_prev.presence || status
+  end
+
+  # OVERRIDE_FIELDS の1項目について、アプリで編集した「修正後」の値(*_prev)を返す。
+  def override_value(field)
+    public_send("#{field}_prev")
+  end
+
+  # その項目に「修正後」の値が入っているか(数値 0 は上書きとして扱う。nil/空文字だけ不在)。
+  def override_present?(field)
+    override_value(field).present?
+  end
+
+  # wbs_submitted_overrides(提出済スナップショット)と比較するための文字列表現。
+  def serialized_override(field)
+    value = override_value(field)
+    case value
+    when Date
+      value.to_s
+    when Numeric
+      value.to_f.to_s
+    else
+      value.to_s
+    end
+  end
+
+  # 「修正後」の値があり、かつ最後に提出済にした時点のスナップショットと異なる(＝未提出の変更がある)。
+  def unsubmitted_override?(field)
+    override_present?(field) && wbs_submitted_overrides[field.to_s] != serialized_override(field)
+  end
+
+  # 現時点の「修正後」の値をすべて提出済スナップショットとして保存する(=赤塗りを解除する)。
+  def mark_overrides_submitted!
+    update!(
+      wbs_submitted_overrides: OVERRIDE_FIELDS.select { |field| override_present?(field) }
+                                               .to_h { |field| [ field.to_s, serialized_override(field) ] }
+    )
   end
 end

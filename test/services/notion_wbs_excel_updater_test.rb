@@ -19,11 +19,13 @@ class NotionWbsExcelUpdaterTest < Minitest::Test
     @notion_tasks.each(&:destroy)
   end
 
-  # 1.1 に一致する既存行(9行目)を実効値で上書きする(インデント保持)
-  def test_matches_existing_row_by_wbs_level_and_overwrites_effective_values
-    task = create_task(wbs_level: "1.1", title: "更新後タスクA", assignee_name: "担当A2",
-                        workload: 2.5, progress_rate: 0.8,
-                        start_date: Date.new(2026, 9, 2), end_date: Date.new(2026, 9, 12))
+  # 1.1 に一致する既存行(9行目)。C〜H すべてに *_prev(修正後)があれば、その値だけを反映する
+  def test_matches_existing_row_and_writes_all_overridden_columns
+    task = create_task(wbs_level: "1.1", title: "元タイトルA", title_prev: "更新後タスクA",
+                        assignee_name: "担当A", assignee_name_prev: "担当A2",
+                        workload: 1, workload_prev: 2.5, progress_rate: 0, progress_rate_prev: 0.8,
+                        start_date: Date.new(2026, 9, 1), start_date_prev: Date.new(2026, 9, 2),
+                        end_date: Date.new(2026, 9, 10), end_date_prev: Date.new(2026, 9, 12))
 
     result = call_updater([ task ])
     row_9 = row_values(result[:bytes], 9)
@@ -37,10 +39,13 @@ class NotionWbsExcelUpdaterTest < Minitest::Test
     assert_equal "46277", row_9["H"]
     assert_equal 1, result[:matched_count]
     assert_equal 0, result[:appended_count]
+    assert_equal 6, result[:changed_cell_count]
+    assert_equal 6, result[:unsubmitted_cell_count]
   end
 
-  # 2.1.1 に一致する既存行(12行目)。title_prev/assignee_name_prev(修正後)がある場合はそちらを優先する
-  def test_uses_prev_columns_as_effective_values_when_present
+  # 2.1.1 に一致する既存行(12行目)。title_prev/assignee_name_prev(修正後)だけがある場合、
+  # その2列だけを書き換え、他の列(E〜H)のセルは元のまま一切触らない
+  def test_matches_existing_row_and_leaves_non_overridden_columns_untouched
     task = create_task(wbs_level: "2.1.1", title: "元タイトルC", title_prev: "修正後タイトルC",
                         assignee_name: "担当A", assignee_name_prev: "担当A2",
                         workload: 1, progress_rate: 0,
@@ -51,8 +56,71 @@ class NotionWbsExcelUpdaterTest < Minitest::Test
 
     assert_equal "　修正後タイトルC", row_12["C"]
     assert_equal "担当A2", row_12["D"]
-    assert_equal "0", row_12["E"]
+    assert_equal "0", row_12["E"]     # 元の値のまま(progress_rate_prev 無し)
+    assert_equal "1", row_12["F"]     # 元の値のまま(workload_prev 無し)
+    assert_equal "46280", row_12["G"] # 元の値のまま(start_date_prev 無し)
+    assert_equal "46285", row_12["H"] # 元の値のまま(end_date_prev 無し)
     assert_equal 1, result[:matched_count]
+    assert_equal 2, result[:changed_cell_count]
+    assert_equal 2, result[:unsubmitted_cell_count]
+  end
+
+  # override が一つも無い既存行は C〜H を一切書かない(セル単位ではなく行全体が元のバイト列と一致する)
+  def test_matched_row_without_any_override_is_byte_identical_to_the_original
+    task = create_task(wbs_level: "1.1", title: "書き込まれないタイトル", assignee_name: "書き込まれない担当",
+                        workload: 1, progress_rate: 0,
+                        start_date: Date.new(2026, 9, 1), end_date: Date.new(2026, 9, 2))
+
+    result = call_updater([ task ])
+
+    assert_equal raw_row_xml(@template_bytes, 9), raw_row_xml(result[:bytes], 9)
+    assert_equal 1, result[:matched_count]
+    assert_equal 0, result[:changed_cell_count]
+    assert_equal 0, result[:unsubmitted_cell_count]
+  end
+
+  # start_date_prev だけがある既存行は G だけを書き、背景を赤く塗る(未提出の変更)。
+  # styles.xml の fills には赤(FFFF9999)が1回だけ追加される
+  def test_matched_row_with_unsubmitted_override_paints_only_that_cell_red
+    task = create_task(wbs_level: "1.1", title: "任意タイトル", assignee_name: "任意担当",
+                        workload: 1, progress_rate: 0,
+                        start_date: Date.new(2026, 9, 1), start_date_prev: Date.new(2026, 9, 20),
+                        end_date: nil)
+
+    result = call_updater([ task ])
+    row_9 = row_values(result[:bytes], 9)
+    expected_serial = (Date.new(2026, 9, 20) - EXCEL_EPOCH).to_i.to_s
+
+    assert_equal "　ダミータスクA", row_9["C"] # 元のまま
+    assert_equal "担当A", row_9["D"]           # 元のまま
+    assert_equal "0.5", row_9["E"]             # 元のまま
+    assert_equal "2", row_9["F"]               # 元のまま
+    assert_equal expected_serial, row_9["G"]
+    assert_equal "46275", row_9["H"]           # 元のまま
+    assert_equal 1, result[:changed_cell_count]
+    assert_equal 1, result[:unsubmitted_cell_count]
+
+    refute_equal cell_style_id(@template_bytes, "G9"), cell_style_id(result[:bytes], "G9")
+    assert_equal cell_style_id(@template_bytes, "D9"), cell_style_id(result[:bytes], "D9") # 触っていない列のスタイルは変わらない
+    assert_includes styles_fills_xml(result[:bytes]), "FFFF9999"
+  end
+
+  # 提出済(mark_overrides_submitted!)にした後は同じ値を書いても背景を赤くしない(s は元のまま)
+  def test_matched_row_after_marking_submitted_writes_value_without_red_style
+    task = create_task(wbs_level: "1.1", title: "任意タイトル", assignee_name: "任意担当",
+                        workload: 1, progress_rate: 0,
+                        start_date: Date.new(2026, 9, 1), start_date_prev: Date.new(2026, 9, 20),
+                        end_date: nil)
+    task.mark_overrides_submitted!
+
+    result = call_updater([ task ])
+    row_9 = row_values(result[:bytes], 9)
+    expected_serial = (Date.new(2026, 9, 20) - EXCEL_EPOCH).to_i.to_s
+
+    assert_equal expected_serial, row_9["G"] # 値は提出済でも書かれる
+    assert_equal 1, result[:changed_cell_count]
+    assert_equal 0, result[:unsubmitted_cell_count]
+    assert_equal cell_style_id(@template_bytes, "G9"), cell_style_id(result[:bytes], "G9")
   end
 
   # 3.1 は既存行に無いので、最後のデータ行(12行目)の次の空行(13行目)に追加する
@@ -120,7 +188,8 @@ class NotionWbsExcelUpdaterTest < Minitest::Test
   # 既存行に C セルが無くても、追加行と同じ「列順に生成＋直前データ行のスタイル継承」で補って書き込む
   def test_fills_missing_cell_on_matched_row
     template_without_c9 = remove_cell_from_sheet(@template_bytes, "C9")
-    task = create_task(wbs_level: "1.1", title: "セル欠損対応タスク", assignee_name: "担当X",
+    task = create_task(wbs_level: "1.1", title: "元タイトル", title_prev: "セル欠損対応タスク",
+                        assignee_name: "担当X",
                         workload: 1, progress_rate: 0.5,
                         start_date: Date.new(2026, 9, 2), end_date: Date.new(2026, 9, 12))
 
@@ -174,13 +243,16 @@ class NotionWbsExcelUpdaterTest < Minitest::Test
   private
 
   def create_task(wbs_level:, title:, assignee_name:, workload:, progress_rate:, start_date:, end_date:,
-                   title_prev: nil, assignee_name_prev: nil)
+                   title_prev: nil, assignee_name_prev: nil, workload_prev: nil, progress_rate_prev: nil,
+                   start_date_prev: nil, end_date_prev: nil)
     task = NotionTask.create!(
       notion_block_id: SecureRandom.uuid,
       wbs_level: wbs_level, title: title, title_prev: title_prev,
       assignee_name: assignee_name, assignee_name_prev: assignee_name_prev,
-      workload: workload, progress_rate: progress_rate,
-      start_date: start_date, end_date: end_date,
+      workload: workload, workload_prev: workload_prev,
+      progress_rate: progress_rate, progress_rate_prev: progress_rate_prev,
+      start_date: start_date, start_date_prev: start_date_prev,
+      end_date: end_date, end_date_prev: end_date_prev,
       synced_at: Time.current
     )
     @notion_tasks << task
@@ -231,5 +303,24 @@ class NotionWbsExcelUpdaterTest < Minitest::Test
     end
     values["B_raw"] = values["B"]
     values
+  end
+
+  # 検証用に、行全体の生 XML を取り出す(セル単位ではなく行が一切変わっていないことを確認する用)
+  def raw_row_xml(bytes, row_number)
+    entries = read_zip_entries(bytes)
+    entries.fetch("xl/worksheets/sheet2.xml")[/<row r="#{row_number}"[^>]*>.*?<\/row>/m]
+  end
+
+  # 検証用に、指定セルのスタイル(s属性)を取り出す
+  def cell_style_id(bytes, cell_reference)
+    entries = read_zip_entries(bytes)
+    sheet_document = Nokogiri::XML(entries.fetch("xl/worksheets/sheet2.xml"))
+    sheet_document.at_xpath("//xmlns:c[@r='#{cell_reference}']", "xmlns" => MAIN_NS)&.attribute("s")&.value
+  end
+
+  # 検証用に、xl/styles.xml の <fills> 部分の生 XML を取り出す
+  def styles_fills_xml(bytes)
+    entries = read_zip_entries(bytes)
+    entries.fetch("xl/styles.xml")[/<fills[^>]*>.*?<\/fills>/m]
   end
 end

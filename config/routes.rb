@@ -341,6 +341,7 @@ Rails.application.routes.draw do
       get   "backlog_activities/wbs_excel_template", to: "backlog_activities#wbs_excel_template"
       post  "backlog_activities/wbs_excel_template", to: "backlog_activities#upload_wbs_excel_template"
       get   "backlog_activities/wbs_excel_export", to: "backlog_activities#wbs_excel_export"
+      post  "backlog_activities/wbs_mark_submitted", to: "backlog_activities#wbs_mark_submitted"
       post  "backlog_activities/import_doc_hub", to: "backlog_activities#import_doc_hub"
       post  "backlog_activities/import",  to: "backlog_activities#import"
       patch "backlog_activities/note",    to: "backlog_activities#update_note"
