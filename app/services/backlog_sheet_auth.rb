@@ -24,4 +24,18 @@ module BacklogSheetAuth
     end
     raise "このスプレッドシートにアクセスできる Google アカウントが見つかりません（西野さんのアカウントを編集者に）。"
   end
+
+  # URL 末尾の #gid=… / ?gid=… からタブ ID を取り出す（無ければ nil）
+  def extract_gid(url)
+    gid = url.to_s[/[#?&]gid=(\d+)/, 1]
+    gid && gid.to_i
+  end
+
+  # gid が指すタブ名を返す。gid 無し・該当無しは fallback_title（そのタブが存在すればそれ、無ければ nil）。
+  def resolve_tab_title(service, spreadsheet_id, gid:, fallback_title:)
+    sheets = service.get_spreadsheet(spreadsheet_id, fields: "sheets.properties").sheets
+    by_gid = gid && sheets.find { |sheet| sheet.properties.sheet_id == gid }
+    return by_gid.properties.title if by_gid
+    sheets.find { |sheet| sheet.properties.title == fallback_title }&.properties&.title
+  end
 end

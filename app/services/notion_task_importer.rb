@@ -1,6 +1,7 @@
 require "google/apis/sheets_v4"
 
 # Notion(WBS) タブのスプレッドシートを読み、notion_tasks に取り込む（スプシ→アプリ）。
+# タブは URL の gid で指定（無ければタブ名 Notion(WBS)）。
 # WBSレベルで突合し、「修正後」の開始/終了日・工数・進捗率・進捗状況・優先度・備考を更新する。
 #   ・修正前(*_prev) は Notion 同期が管理するので取り込まない。
 #   ・空セルでアプリの値を消さない（present な時だけ set）。
@@ -29,14 +30,17 @@ class NotionTaskImporter
   def initialize(operator:, spreadsheet_url:)
     @operator = operator
     @spreadsheet_id = extract_spreadsheet_id(spreadsheet_url)
+    @gid = extract_gid(spreadsheet_url)
   end
 
   def call
     service = authorized_sheets_service(@spreadsheet_id, @operator)
-    resp = service.get_spreadsheet_values(@spreadsheet_id, "#{TAB}!A1:N1000", value_render_option: "UNFORMATTED_VALUE")
+    tab = resolve_tab_title(service, @spreadsheet_id, gid: @gid, fallback_title: TAB)
+    raise "Notion(WBS) のタブが見つかりません（URL の gid か、タブ名「#{TAB}」を確認してください）。" if tab.nil?
+    resp = service.get_spreadsheet_values(@spreadsheet_id, "#{tab}!A1:O1000", value_render_option: "UNFORMATTED_VALUE")
     rows = resp.values || []
     header_idx = rows.index { |row| Array(row).any? { |cell| cell.to_s.include?("WBS") } }
-    raise "Notion(WBS) シートが見つかりません（先に「Notion出力」してください）。" if header_idx.nil?
+    raise "Notion(WBS) のヘッダ行（WBSレベル）が見つかりません。" if header_idx.nil?
 
     by_wbs = NotionTask.where.not(wbs_level: [ nil, "" ]).index_by { |task| task.wbs_level.to_s.strip }
     updated = 0
@@ -69,7 +73,7 @@ class NotionTaskImporter
       end
     end
 
-    { imported_rows: updated, skipped_rows: skipped, tab: TAB,
+    { imported_rows: updated, skipped_rows: skipped, tab: tab,
       url: "https://docs.google.com/spreadsheets/d/#{@spreadsheet_id}/edit" }
   rescue Google::Apis::ClientError => e
     raise "Notion スプレッドシートからの取り込みに失敗しました（権限を確認してください）: #{e.message}"
