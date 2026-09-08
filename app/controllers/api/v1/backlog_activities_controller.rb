@@ -3,6 +3,9 @@ module Api
     # 川村さん等の Backlog 対応ログ（活動履歴）を月次で表示する管理ビュー。
     # 対象ユーザーのスコープ: admin=全員 / サブ管理者=managee / 一般=自分のみ。
     class BacklogActivitiesController < BaseController
+      # 進捗報告書Excelの取込(wbs_excel_import)で許可する拡張子(テンプレート登録は .xlsm のみ)
+      WBS_EXCEL_IMPORT_EXTENSIONS = %w[.xlsx .xlsm].freeze
+
       before_action :ensure_feature
       before_action :ensure_wbs_excel_template_admin, only: :upload_wbs_excel_template
       rescue_from ActiveRecord::RecordNotFound do
@@ -116,6 +119,24 @@ module Api
         response.headers["X-Wbs-Unsubmitted-Cells"] = result[:unsubmitted_cell_count].to_s
         send_data result[:bytes], type: "application/vnd.ms-excel.sheet.macroEnabled.12",
           filename: "進捗報告書_#{Date.current.strftime('%Y%m%d')}.xlsm", disposition: "attachment"
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/backlog_activities/wbs_excel_import
+      # ISN側(川村さん)が編集した進捗報告書Excel(.xlsx/.xlsm)を取り込み、アプリの元の値と異なる
+      # セルだけを NotionTask の *_prev(修正後)に反映する。
+      def wbs_excel_import
+        uploaded_file = params[:file]
+        return render json: { error: "アップロードするファイルを選択してください" }, status: :unprocessable_entity if uploaded_file.blank?
+
+        content = uploaded_file.read
+        error_message = validate_wbs_excel_file(uploaded_file.original_filename, content,
+          allowed_extensions: WBS_EXCEL_IMPORT_EXTENSIONS)
+        return render json: { error: error_message }, status: :unprocessable_entity if error_message
+
+        result = NotionWbsExcelImporter.new(workbook_bytes: content, tasks: NotionTask.all).call
+        render json: result
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -298,7 +319,14 @@ module Api
       end
 
       def validate_wbs_excel_template(file_name, content)
-        return "拡張子が .xlsm のファイルを選択してください" unless file_name.to_s.downcase.end_with?(".xlsm")
+        validate_wbs_excel_file(file_name, content, allowed_extensions: [ ".xlsm" ])
+      end
+
+      # 拡張子とシート存在を検証する共通処理。テンプレート登録(.xlsm 限定)と取込(.xlsx/.xlsm)で
+      # 許可する拡張子だけが異なるため、拡張子集合を引数で受け取る。
+      def validate_wbs_excel_file(file_name, content, allowed_extensions:)
+        extension = File.extname(file_name.to_s).downcase
+        return "拡張子が #{allowed_extensions.join(' か ')} のファイルを選択してください" unless allowed_extensions.include?(extension)
 
         document = WbsExcelDocument.new(content)
         return "Excel ファイルとして読み込めませんでした" unless document.entries.key?("xl/workbook.xml")

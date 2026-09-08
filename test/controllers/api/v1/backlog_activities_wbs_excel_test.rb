@@ -5,6 +5,7 @@ require "zip"
 #   GET  /backlog_activities/wbs_excel_template  登録状況の確認
 #   POST /backlog_activities/wbs_excel_template  テンプレート登録(全体で1件のみ保持)
 #   GET  /backlog_activities/wbs_excel_export    Notion(WBS) タスクを反映した xlsm を書き出す
+#   POST /backlog_activities/wbs_excel_import    ISN側が編集したExcel(.xlsx/.xlsm)を取り込む
 class Api::V1::BacklogActivitiesWbsExcelTest < ActionDispatch::IntegrationTest
   TEMPLATE_PATH = Rails.root.join("test/fixtures/files/wbs_schedule_template.xlsm")
 
@@ -147,6 +148,38 @@ class Api::V1::BacklogActivitiesWbsExcelTest < ActionDispatch::IntegrationTest
     assert_equal 1, response.parsed_body["submitted_tasks"]
     refute task_with_override.reload.unsubmitted_override?(:start_date)
     refute task_without_override.reload.unsubmitted_override?(:title)
+  end
+
+  def test_import_applies_differing_cells_and_returns_counts
+    @notion_tasks << NotionTask.create!(
+      notion_block_id: SecureRandom.uuid, wbs_level: "1.1", title: "元タイトル", assignee_name: "担当A",
+      progress_rate: 0.5, workload: 2, start_date: Date.new(2026, 9, 5), end_date: Date.new(2026, 9, 10),
+      synced_at: Time.current
+    )
+
+    post "/api/v1/backlog_activities/wbs_excel_import",
+         params: { file: uploaded_template_file },
+         headers: auth_headers(@admin)
+
+    assert_response :success
+    body = response.parsed_body
+    assert_equal 1, body["applied_task_count"]
+    assert_equal 1, body["applied_cell_count"] # start_date がシート(2026-09-01)とタスクの元の値(2026-09-05)で異なる
+    assert_equal 0, body["cleared_cell_count"]
+    assert_equal 2, body["unmatched_row_count"] # 1.2, 2.1.1 に対応するタスクが無い
+    assert_equal 0, body["unchanged_row_count"]
+  end
+
+  def test_import_rejects_unsupported_extension
+    Tempfile.create([ "wbs_report", ".txt" ]) do |file|
+      File.binwrite(file.path, File.binread(TEMPLATE_PATH))
+      post "/api/v1/backlog_activities/wbs_excel_import",
+           params: { file: Rack::Test::UploadedFile.new(file.path, "text/plain") },
+           headers: auth_headers(@admin)
+    end
+
+    assert_response :unprocessable_entity
+    assert_match(/xlsx|xlsm/, response.parsed_body["error"])
   end
 
   private

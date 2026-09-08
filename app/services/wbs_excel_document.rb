@@ -96,6 +96,18 @@ class WbsExcelDocument
     cell_reference.to_s[/\A[A-Z]+/]
   end
 
+  # WBSレベル(B列)の突合キーを揃える(数値セル 1.1 と文字列 "1.1" を同一視する)。
+  # NotionWbsExcelUpdater(書き出し)と NotionWbsExcelImporter(取込)の両方で使う。
+  def self.normalize_wbs_level(text)
+    return nil if text.blank?
+
+    stripped = text.to_s.strip
+    Float(stripped)
+    format("%g", stripped.to_f)
+  rescue ArgumentError, TypeError
+    stripped
+  end
+
   def self.read_zip_entries(bytes)
     entries = {}
     entry_count = 0

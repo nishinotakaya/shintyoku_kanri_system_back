@@ -52,7 +52,7 @@ class NotionWbsExcelUpdater
     next_append_row = last_filled_row(sheet_document) + 1
 
     sorted_tasks.each do |task|
-      wbs_level = normalize_wbs_level(task.wbs_level) # 索引側と同じ正規化で突合する(数値セル 1.1 と文字列 "1.1")
+      wbs_level = WbsExcelDocument.normalize_wbs_level(task.wbs_level) # 索引側と同じ正規化で突合する(数値セル 1.1 と文字列 "1.1")
 
       if wbs_level.blank?
         skipped_count += 1 # WBSレベル未設定は行を増やさずスキップする
@@ -98,7 +98,7 @@ class NotionWbsExcelUpdater
     index = {}
     each_data_row(document.sheet_document) do |row_node, row_number|
       cell_node = document.find_cell(row_node, "B")
-      wbs_level = normalize_wbs_level(document.cell_text_value(cell_node))
+      wbs_level = WbsExcelDocument.normalize_wbs_level(document.cell_text_value(cell_node))
       index[wbs_level] = row_node if wbs_level.present?
     end
     index
@@ -120,16 +120,6 @@ class NotionWbsExcelUpdater
       next unless row_number.between?(DATA_FIRST_ROW, DATA_LAST_ROW)
       yield row_node, row_number
     end
-  end
-
-  def normalize_wbs_level(text)
-    return nil if text.blank?
-
-    stripped = text.to_s.strip
-    Float(stripped)
-    format("%g", stripped.to_f)
-  rescue ArgumentError, TypeError
-    stripped
   end
 
   # ---- セルの検索(行ノード内) ----
