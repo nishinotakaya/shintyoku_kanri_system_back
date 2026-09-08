@@ -54,4 +54,45 @@ class NotionTaskTest < Minitest::Test
 
     assert_equal({ "title" => "修正後タイトル" }, @task.wbs_submitted_overrides)
   end
+
+  # title/assignee_name はテンプレ(E〜H列)に対応するセルが無いため、常に「異なる」扱いになる
+  def test_template_differs_is_always_true_for_fields_not_covered_by_the_template
+    assert @task.template_differs?(:title, { progress_rate: 0, workload: 1 })
+  end
+
+  # red_cell?: テンプレ未登録・該当行なし(template_row が nil)で未提出の修正後があれば赤
+  def test_red_cell_is_true_when_no_template_row_and_unsubmitted
+    @task.update!(start_date_prev: Date.new(2026, 9, 20))
+
+    assert @task.red_cell?(:start_date, nil)
+  end
+
+  # red_cell?: テンプレの値と同じ修正後は赤にしない(出力しても見た目が変わらないため)
+  def test_red_cell_is_false_when_matches_template_value
+    @task.update!(start_date_prev: Date.new(2026, 9, 20))
+
+    refute @task.red_cell?(:start_date, { start_date: Date.new(2026, 9, 20) })
+  end
+
+  # red_cell?: テンプレの値と異なる修正後は赤にする
+  def test_red_cell_is_true_when_differs_from_template_value
+    @task.update!(start_date_prev: Date.new(2026, 9, 20))
+
+    assert @task.red_cell?(:start_date, { start_date: Date.new(2026, 9, 25) })
+  end
+
+  # red_cell?: 提出済にした修正後はテンプレと異なっていても赤にしない
+  def test_red_cell_is_false_when_already_submitted
+    @task.update!(start_date_prev: Date.new(2026, 9, 20))
+    @task.mark_overrides_submitted!
+
+    refute @task.red_cell?(:start_date, { start_date: Date.new(2026, 9, 25) })
+  end
+
+  # red_cell?: 完了扱い(実効進捗率100%以上)のタスクは報告対象外として赤にしない
+  def test_red_cell_is_false_when_effective_progress_rate_is_complete
+    @task.update!(start_date_prev: Date.new(2026, 9, 20), progress_rate: 1.0)
+
+    refute @task.red_cell?(:start_date, { start_date: Date.new(2026, 9, 25) })
+  end
 end

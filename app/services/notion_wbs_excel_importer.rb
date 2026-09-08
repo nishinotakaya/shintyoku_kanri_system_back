@@ -3,13 +3,12 @@
 # NotionTask の *_prev(修正後)へ反映する。アップロードされた Excel を正として扱うため、
 # シートの値がアプリの元の値と同じセルは(既に *_prev があっても)クリアする。
 # 一致・不一致・突合キーの正規化は WbsExcelDocument / NotionWbsExcelUpdater と共有する。
+# セル値のパース・同値判定は WbsScheduleCellParser を WbsTemplateValuesReader と共有する。
 class NotionWbsExcelImporter
-  SHEET_NAME        = WbsExcelDocument::SHEET_NAME
-  DATA_FIRST_ROW    = 8
-  DATA_LAST_ROW     = 183
-  NAMESPACES        = WbsExcelDocument::NAMESPACES
-  EXCEL_EPOCH       = Date.new(1899, 12, 30) # Excel のシリアル値起点(1900年うるう年バグ込み)
-  DATE_TEXT_PATTERN = /\A\d{4}[-\/]\d{1,2}[-\/]\d{1,2}\z/
+  SHEET_NAME     = WbsExcelDocument::SHEET_NAME
+  DATA_FIRST_ROW = 8
+  DATA_LAST_ROW  = 183
+  NAMESPACES     = WbsExcelDocument::NAMESPACES
 
   # 取込対象は進捗率・工数・開始日・終了日の4項目のみ(タスク名・担当者は取り込まない)
   Field = Struct.new(:column, :attribute, :kind)
@@ -95,57 +94,18 @@ class NotionWbsExcelImporter
 
     FIELDS.each do |field|
       cell_text = document.cell_text_value(document.find_cell(row_node, field.column))
-      cell_value = parse_cell_value(field.kind, cell_text)
+      cell_value = WbsScheduleCellParser.parse_cell_value(field.kind, cell_text)
       next if cell_value.nil? # 空セルは「変更なし」として扱う(アプリの値を消さない)
 
       original_value = task.public_send(field.attribute)
-      target_value = values_equal?(field.kind, original_value, cell_value) ? nil : cell_value
+      target_value = WbsScheduleCellParser.values_equal?(field.kind, original_value, cell_value) ? nil : cell_value
       current_prev_value = task.public_send("#{field.attribute}_prev")
-      next if values_equal?(field.kind, current_prev_value, target_value) # 既に同じ状態なら触らない
+      next if WbsScheduleCellParser.values_equal?(field.kind, current_prev_value, target_value) # 既に同じ状態なら触らない
 
       task.public_send("#{field.attribute}_prev=", target_value)
       target_value.nil? ? (cleared += 1) : (applied += 1)
     end
 
     { applied: applied, cleared: cleared }
-  end
-
-  def parse_cell_value(kind, text)
-    case kind
-    when :rate, :number
-      Float(text, exception: false)
-    when :date
-      parse_date_cell(text)
-    end
-  end
-
-  def parse_date_cell(text)
-    return nil if text.blank?
-
-    serial = Float(text, exception: false)
-    return EXCEL_EPOCH + serial.to_i if serial
-
-    stripped = text.to_s.strip
-    return nil unless stripped.match?(DATE_TEXT_PATTERN)
-
-    Date.parse(stripped)
-  rescue ArgumentError
-    nil
-  end
-
-  # kind に応じた同値判定(:rate/:number は to_f 同士。進捗率は小数第4位で丸めて比較。:date は Date 同士)。
-  # nil 同士は「同じ」、片方だけ nil は「異なる」として扱う。
-  def values_equal?(kind, left_value, right_value)
-    return true if left_value.nil? && right_value.nil?
-    return false if left_value.nil? || right_value.nil?
-
-    case kind
-    when :rate
-      left_value.to_f.round(4) == right_value.to_f.round(4)
-    when :number
-      left_value.to_f == right_value.to_f
-    when :date
-      left_value == right_value
-    end
   end
 end

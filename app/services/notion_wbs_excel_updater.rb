@@ -16,7 +16,8 @@ class NotionWbsExcelUpdater
   NAMESPACES       = WbsExcelDocument::NAMESPACES
   EXCEL_EPOCH      = Date.new(1899, 12, 30) # Excel のシリアル値起点(1900年うるう年バグ込み)
   ZENKAKU_SPACE    = "　".freeze
-  # 「修正後」の値が未提出(NotionTask#unsubmitted_override?)のセルに塗る背景色。提出済にすると消える。
+  # 「修正後」の値が未提出、かつ登録済みテンプレの値と異なるセル(NotionTask#red_cell?)に塗る背景色。
+  # 提出済にする、またはテンプレと同じ値に戻すと消える。
   RED_FILL_RGB     = "FFFF9999".freeze
 
   # C〜H 列（B は突合キーなので既存行では上書きしない。新規行では B〜H を書く）
@@ -43,6 +44,7 @@ class NotionWbsExcelUpdater
     entries = @document.entries
     sheet_document = @document.sheet_document
     row_by_wbs_level = index_rows_by_wbs_level(@document)
+    template_values_by_wbs_level = WbsTemplateValuesReader.new(workbook_bytes: @template_bytes).call
 
     matched_count = 0
     appended_count = 0
@@ -62,7 +64,8 @@ class NotionWbsExcelUpdater
       row_node = row_by_wbs_level[wbs_level]
 
       if row_node
-        update_matched_row!(sheet_document, row_node, row_node["r"].to_i, task)
+        template_row = template_values_by_wbs_level[wbs_level]
+        update_matched_row!(sheet_document, row_node, row_node["r"].to_i, task, template_row)
         matched_count += 1
       elsif next_append_row > DATA_LAST_ROW
         skipped_count += 1
@@ -131,8 +134,9 @@ class NotionWbsExcelUpdater
   # ---- 既存行の上書き ----
 
   # 既存行は「アプリで修正した項目(*_prev がある項目)」だけを書き、それ以外のセルには一切触れない
-  # (元ファイルと完全に同じ状態を保つ)。書いたセルのうち未提出の変更は背景を赤く塗る。
-  def update_matched_row!(sheet_document, row_node, row_number, task)
+  # (元ファイルと完全に同じ状態を保つ)。書いたセルのうち NotionTask#red_cell?(未提出、かつ
+  # 登録済みテンプレの値と異なる)なものだけ背景を赤く塗る。
+  def update_matched_row!(sheet_document, row_node, row_number, task, template_row)
     reference_row = previous_data_row(sheet_document, row_number)
 
     COLUMNS.each do |column|
@@ -141,12 +145,12 @@ class NotionWbsExcelUpdater
 
       cell_node = find_or_build_cell(sheet_document, row_node, column.letter, row_number, reference_row)
       write_cell!(cell_node, column, task, row_node)
-      apply_unsubmitted_fill!(cell_node) if task.unsubmitted_override?(column.attribute)
+      apply_unsubmitted_fill!(cell_node) if task.red_cell?(column.attribute, template_row)
     end
   end
 
-  # 未提出の「修正後」を反映したセルの背景を赤くする。提出済(mark_overrides_submitted!)にすると
-  # unsubmitted_override? が false になり、以降の書き出しでは塗られなくなる。
+  # 未提出かつテンプレと異なる「修正後」を反映したセルの背景を赤くする(NotionTask#red_cell?)。
+  # 提出済(mark_overrides_submitted!)にする、またはテンプレと同じ値に戻すと塗られなくなる。
   def apply_unsubmitted_fill!(cell_node)
     cell_node["s"] = @document.style_id_with_fill(cell_node["s"], rgb: RED_FILL_RGB)
     @unsubmitted_cell_count += 1

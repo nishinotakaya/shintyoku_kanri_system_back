@@ -123,6 +123,24 @@ class NotionWbsExcelUpdaterTest < Minitest::Test
     assert_equal cell_style_id(@template_bytes, "G9"), cell_style_id(result[:bytes], "G9")
   end
 
+  # 修正後の値が登録済みテンプレ(元のG9=2026-09-01)と同じ場合は、未提出でも背景を赤くしない
+  # (テンプレと同じ値を出力しても見た目が変わらないため)
+  def test_matched_row_with_override_equal_to_template_value_is_not_painted_red
+    task = create_task(wbs_level: "1.1", title: "任意タイトル", assignee_name: "任意担当",
+                        workload: 1, progress_rate: 0,
+                        start_date: Date.new(2026, 8, 1), start_date_prev: Date.new(2026, 9, 1),
+                        end_date: nil)
+
+    result = call_updater([ task ])
+    row_9 = row_values(result[:bytes], 9)
+    expected_serial = (Date.new(2026, 9, 1) - EXCEL_EPOCH).to_i.to_s
+
+    assert_equal expected_serial, row_9["G"]
+    assert_equal 1, result[:changed_cell_count]
+    assert_equal 0, result[:unsubmitted_cell_count]
+    assert_equal cell_style_id(@template_bytes, "G9"), cell_style_id(result[:bytes], "G9")
+  end
+
   # 3.1 は既存行に無いので、最後のデータ行(12行目)の次の空行(13行目)に追加する
   def test_appends_unmatched_task_to_the_next_empty_row
     task = create_task(wbs_level: "3.1", title: "新規タスクD", assignee_name: "担当D",

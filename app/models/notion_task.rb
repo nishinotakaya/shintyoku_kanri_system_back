@@ -6,6 +6,15 @@ class NotionTask < ApplicationRecord
   # *_prev 列がこれに対応する(例: :title → title_prev)。
   OVERRIDE_FIELDS = %i[title assignee_name workload start_date end_date progress_rate].freeze
 
+  # NotionWbsExcelUpdater の赤塗り判定で「テンプレと比較できる項目→WbsScheduleCellParser の kind」の対応。
+  # title/assignee_name はテンプレ側(E〜H列のみ)に対応するセルが無いため比較対象外(常に「異なる」扱い)。
+  TEMPLATE_COMPARABLE_FIELD_KINDS = {
+    progress_rate: :rate,
+    workload: :number,
+    start_date: :date,
+    end_date: :date
+  }.freeze
+
   scope :for_date, ->(date) {
     where("start_date IS NULL OR start_date <= ?", date)
       .where("end_date IS NULL OR end_date >= ?", date)
@@ -89,6 +98,27 @@ class NotionTask < ApplicationRecord
   # 「修正後」の値があり、かつ最後に提出済にした時点のスナップショットと異なる(＝未提出の変更がある)。
   def unsubmitted_override?(field)
     override_present?(field) && wbs_submitted_overrides[field.to_s] != serialized_override(field)
+  end
+
+  # その項目の「修正後」の値が、登録済みテンプレ(WbsTemplateValuesReader が読んだ元の値。
+  # template_row は { progress_rate:, workload:, start_date:, end_date: } の Hash)と異なるか。
+  # テンプレ未登録・該当WBS行がテンプレに無い場合(template_row が nil)や、比較対象外の項目は
+  # 常に true(＝異なる扱い)を返す。
+  def template_differs?(field, template_row)
+    kind = TEMPLATE_COMPARABLE_FIELD_KINDS[field]
+    return true if kind.nil? || template_row.nil?
+
+    !WbsScheduleCellParser.values_equal?(kind, override_value(field), template_row[field])
+  end
+
+  # WBS Excel 書き出し(NotionWbsExcelUpdater)でそのセルの背景を赤く塗るか。
+  # 「未提出の修正後があり」かつ「テンプレの値と異なる」場合だけ赤くする(テンプレと同じ値なら
+  # 出力しても見た目が変わらないため塗らない)。ただし完了扱い(進捗率100%以上)のタスクは
+  # 報告対象外として赤塗りしない(値の書き込み自体は行う)。
+  def red_cell?(field, template_row)
+    return false if effective_progress_rate.to_f >= 1.0
+
+    unsubmitted_override?(field) && template_differs?(field, template_row)
   end
 
   # 現時点の「修正後」の値をすべて提出済スナップショットとして保存する(=赤塗りを解除する)。

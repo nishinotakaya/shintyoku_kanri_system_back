@@ -170,6 +170,42 @@ class Api::V1::BacklogActivitiesWbsExcelTest < ActionDispatch::IntegrationTest
     assert_equal 0, body["unchanged_row_count"]
   end
 
+  # notion_task_options(index の notion_tasks)に、登録済みテンプレの該当WBS行の値が入る
+  def test_index_includes_wbs_template_values_for_matching_task
+    WbsExcelTemplate.replace!(
+      file_name: "wbs_schedule_template.xlsm",
+      content: File.binread(TEMPLATE_PATH),
+      uploaded_by_user: @admin
+    )
+    @notion_tasks << NotionTask.create!(
+      notion_block_id: SecureRandom.uuid, wbs_level: "1.1", title: "タイトル", assignee_name: "担当A",
+      synced_at: Time.current
+    )
+
+    get "/api/v1/backlog_activities", params: { user_id: @admin.id }, headers: auth_headers(@admin)
+
+    assert_response :success
+    notion_task = response.parsed_body["notion_tasks"].find { |task| task["wbs_level"] == "1.1" }
+    assert_equal(
+      { "progress_rate" => 0.5, "workload" => 2.0, "start_date" => "2026-09-01", "end_date" => "2026-09-10" },
+      notion_task["wbs_template_values"]
+    )
+  end
+
+  # テンプレ未登録なら wbs_template_values は nil
+  def test_index_wbs_template_values_is_nil_when_template_is_not_registered
+    @notion_tasks << NotionTask.create!(
+      notion_block_id: SecureRandom.uuid, wbs_level: "1.1", title: "タイトル", assignee_name: "担当A",
+      synced_at: Time.current
+    )
+
+    get "/api/v1/backlog_activities", params: { user_id: @admin.id }, headers: auth_headers(@admin)
+
+    assert_response :success
+    notion_task = response.parsed_body["notion_tasks"].find { |task| task["wbs_level"] == "1.1" }
+    assert_nil notion_task["wbs_template_values"]
+  end
+
   def test_import_rejects_unsupported_extension
     Tempfile.create([ "wbs_report", ".txt" ]) do |file|
       File.binwrite(file.path, File.binread(TEMPLATE_PATH))

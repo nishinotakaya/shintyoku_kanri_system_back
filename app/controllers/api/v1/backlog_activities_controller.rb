@@ -247,8 +247,14 @@ module Api
 
       # サマリ各行の「Notion」セレクト用の選択肢（西野・川村の WBS タスク）。
       # 紐付けると 開始日/完了予定日(予定) や 工数・進捗などを上司報告に取り込める。
+      # wbs_template_values は登録済みテンプレ(xlsm)の該当WBS行の値(NotionTask#template_differs? が
+      # 参照する「元の値」)。テンプレ未登録・該当行なしなら nil。テンプレの読み取りはリクエスト内で1回だけ行う。
       def notion_task_options
+        template = WbsExcelTemplate.current
+        template_values_by_wbs_level = template ? WbsTemplateValuesReader.new(workbook_bytes: template.content).call : {}
+
         NotionTask.order(:assignee_name, :wbs_level).map do |task|
+          template_row = template_values_by_wbs_level[WbsExcelDocument.normalize_wbs_level(task.wbs_level)]
           {
             notion_block_id: task.notion_block_id,
             assignee_name:   task.assignee_name,
@@ -269,7 +275,13 @@ module Api
             priority:        task.priority,
             note:            task.note.to_s,
             memo:            task.memo.to_s,
-            wbs_submitted_overrides: task.wbs_submitted_overrides
+            wbs_submitted_overrides: task.wbs_submitted_overrides,
+            wbs_template_values: template_row && {
+              progress_rate: template_row[:progress_rate],
+              workload:      template_row[:workload],
+              start_date:    template_row[:start_date]&.to_s,
+              end_date:      template_row[:end_date]&.to_s
+            }
           }
         end
       end
