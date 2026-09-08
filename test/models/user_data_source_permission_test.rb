@@ -4,7 +4,7 @@ require "test_helper"
 # Backlog は認証情報だけを貸し元から借り、担当者フィルタ等の個人設定は自分のものを使う。
 class UserDataSourcePermissionTest < ActiveSupport::TestCase
   def setup
-    @admin = User.create!(email: "admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @member = User.create!(email: "member_#{SecureRandom.hex(4)}@example.com",
                            password: "password123", display_name: "川村 卓也", closing_day: 25)

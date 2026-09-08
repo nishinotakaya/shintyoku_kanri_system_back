@@ -55,6 +55,7 @@ class User < ApplicationRecord
   serialize :work_categories, coder: JSON
 
   validate :work_categories_must_be_known_categories
+  validate :display_name_must_not_impersonate_admin
 
   # 別アカウントを admin の同一人物としてリンク。
   # 例: wing西野 鷹也 (taka-nishino@tamahome.jp) を admin 西野 鷹也 (takaya314boxing@gmail.com) にリンク
@@ -84,13 +85,15 @@ class User < ApplicationRecord
     monthly_settings.find_by(year: year, month: month)&.application_date || Date.new(year.to_i, month.to_i, -1)
   end
 
-  # 管理者判定: 表示名が「西野 鷹也」本人、または email が ADMIN_EMAILS に含まれる。
-  # 以前は苗字「西野」を含むだけで管理者にしていたため、同姓のユーザー(西野 雄太郎)を
-  # 追加した時点で全データが見える管理者になってしまう穴があった。
+  # 管理者判定: email が ADMIN_EMAILS に含まれるかどうかのみで判定する。
+  # 表示名では判定しない。表示名は本人が自由に変更できるため(公開サインアップ、
+  # PATCH /api/v1/me)、名前一致を許すと誰でも表示名を「西野 鷹也」にするだけで
+  # 管理者になれてしまう権限昇格の穴になる。ADMIN_DISPLAY_NAME は宛名表示・
+  # primary_admin のフォールバック検索など「表示目的」の用途にのみ残す。
   ADMIN_EMAILS = %w[takaya314boxing@gmail.com taka-nishino@tamahome.jp].freeze
   ADMIN_DISPLAY_NAME = "西野 鷹也".freeze
   def admin?
-    display_name.to_s.include?(ADMIN_DISPLAY_NAME) || ADMIN_EMAILS.include?(email.to_s.downcase)
+    ADMIN_EMAILS.include?(email.to_s.downcase)
   end
 
   # 統合帳票(請求書/立替金)の「主体」を決める並び替え。admin(西野) を必ず先頭にする。
@@ -432,5 +435,13 @@ class User < ApplicationRecord
     unknown = Array(work_categories) - WorkReport::CATEGORIES
     return if unknown.empty?
     errors.add(:work_categories, "に不正なカテゴリが含まれています: #{unknown.join(', ')}")
+  end
+
+  # 表示名の乗っ取り防止。admin(西野 鷹也)本人以外が表示名に「西野 鷹也」を含めることを禁止する。
+  # admin? はメール判定のみなので、ここで通れば本人確認済み。
+  def display_name_must_not_impersonate_admin
+    return if display_name.to_s.exclude?(ADMIN_DISPLAY_NAME)
+    return if admin?
+    errors.add(:display_name, "この表示名は使用できません")
   end
 end

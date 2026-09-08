@@ -7,7 +7,7 @@ require "test_helper"
 class MergedInvoiceItemsTest < Minitest::Test
   def setup
     @user = User.create!(
-      email: "merged_items_#{SecureRandom.hex(4)}@example.com",
+      email: User::ADMIN_EMAILS.first,
       password: "password123", display_name: "西野 鷹也", closing_day: 25
     )
   end

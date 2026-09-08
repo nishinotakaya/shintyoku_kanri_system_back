@@ -9,7 +9,7 @@ class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
     @original_sheet_sync = LineReportSheetSync.method(:sync)
     LineReportSheetSync.define_singleton_method(:sync) { |operator:, month:| { sheet: "stub", rows: 0 } }
     suffix = SecureRandom.hex(4)
-    @admin = User.create!(email: "notion_admin_#{suffix}@example.com", password: "password123",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first, password: "password123",
                           display_name: "西野 鷹也", closing_day: 25)
     @plain_user = User.create!(email: "notion_plain_#{suffix}@example.com", password: "password123",
                                display_name: "権限なし 太郎", closing_day: 25)

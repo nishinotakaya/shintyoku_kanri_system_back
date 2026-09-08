@@ -4,7 +4,7 @@ require "test_helper"
 # 最重要: 他アカウントの帳票が絶対に混ざらないこと（admin であっても）。
 class MyDocumentManifestTest < Minitest::Test
   def setup
-    @owner = create_user("owner", display_name: "西野 鷹也")
+    @owner = create_user("owner", display_name: "西野 鷹也", email: User::ADMIN_EMAILS.first)
     @other = create_user("other", display_name: "川村 卓也")
   end
 
@@ -18,9 +18,8 @@ class MyDocumentManifestTest < Minitest::Test
     end
   end
 
-  def create_user(prefix, display_name:)
-    User.create!(email: "#{prefix}_#{SecureRandom.hex(4)}@example.com",
-                 password: "password123", display_name: display_name, closing_day: 25)
+  def create_user(prefix, display_name:, email: "#{prefix}_#{SecureRandom.hex(4)}@example.com")
+    User.create!(email: email, password: "password123", display_name: display_name, closing_day: 25)
   end
 
   def approved_invoice(user, month: 7, category: "wings", kind: "invoice")

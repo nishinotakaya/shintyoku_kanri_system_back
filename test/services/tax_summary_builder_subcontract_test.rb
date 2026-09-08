@@ -5,7 +5,7 @@ require "test_helper"
 class TaxSummaryBuilderSubcontractTest < Minitest::Test
   def setup
     @admin = User.create!(
-      email: "admin_#{SecureRandom.hex(4)}@example.com",
+      email: User::ADMIN_EMAILS.first,
       password: "password123",
       display_name: "西野 鷹也"
     )

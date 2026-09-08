@@ -8,7 +8,7 @@ require "test_helper"
 class Api::V1::Admin::UsersControllerTest < ActionDispatch::IntegrationTest
   def setup
     suffix = SecureRandom.hex(4)
-    @admin = User.create!(email: "users_admin_#{suffix}@example.com", password: "password123",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first, password: "password123",
                           display_name: "西野 鷹也", closing_day: 25)
     @owner = User.create!(email: "users_owner_#{suffix}@example.com", password: "password123",
                           display_name: "西野 雄太郎", closing_day: 31,

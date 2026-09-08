@@ -5,7 +5,7 @@ require "test_helper"
 # 「川村さんは Wing とリビングだけ、テックリーダーズは西野さんだけ」を回帰テストとして固定する。
 class DataSourceAuthorizationTest < ActionDispatch::IntegrationTest
   def setup
-    @admin = User.create!(email: "admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @kawamura = User.create!(email: "kawamura_#{SecureRandom.hex(4)}@example.com",
                              password: "password123", display_name: "川村 卓也", closing_day: 25)

@@ -5,7 +5,9 @@ require "test_helper"
 # 回帰: メール添付だけ並び替えが抜けていて、統合立替金に川村さんのハンコが押されていた。
 class UserAdminFirstTest < Minitest::Test
   def setup
-    @admin = User.create!(email: "admin_#{SecureRandom.hex(4)}@example.com",
+    # admin? は email(ADMIN_EMAILS) でのみ判定するため、テスト用の admin も
+    # ADMIN_EMAILS のメールで作成する(表示名は判定に使わない)。
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @member = User.create!(email: "member_#{SecureRandom.hex(4)}@example.com",
                            password: "password123", display_name: "川村 卓也", closing_day: 25)

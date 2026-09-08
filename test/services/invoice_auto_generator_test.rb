@@ -5,7 +5,7 @@ require "test_helper"
 # 締め日は25日 → 8/26〜9/25 が「2026年9月分」。
 class InvoiceAutoGeneratorTest < Minitest::Test
   def setup
-    @admin = User.create!(email: "autogen_admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @partner = User.create!(email: "autogen_partner_#{SecureRandom.hex(4)}@example.com",
                             password: "password123", display_name: "川村 卓也", closing_day: 25)

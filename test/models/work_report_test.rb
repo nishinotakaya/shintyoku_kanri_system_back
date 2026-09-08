@@ -5,7 +5,7 @@ class WorkReportTest < ActiveSupport::TestCase
   def setup
     @user = User.create!(email: "work_report_owner_#{SecureRandom.hex(4)}@example.com",
                          password: "password123", display_name: "運送 太郎", closing_day: 25)
-    @admin = User.create!(email: "work_report_admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
   end
 

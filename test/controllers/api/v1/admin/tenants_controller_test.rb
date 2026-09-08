@@ -7,7 +7,7 @@ require "test_helper"
 # サフィックスを付けて一意にし、作成したレコードは teardown で必ず destroy する。
 class Api::V1::Admin::TenantsControllerTest < ActionDispatch::IntegrationTest
   def setup
-    @admin = User.create!(email: "tenants_admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @non_admin = User.create!(email: "tenants_nonadmin_#{SecureRandom.hex(4)}@example.com",
                               password: "password123", display_name: "一般 太郎", closing_day: 25)

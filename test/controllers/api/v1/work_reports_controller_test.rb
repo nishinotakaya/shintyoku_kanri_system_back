@@ -7,7 +7,7 @@ class Api::V1::WorkReportsControllerTest < ActionDispatch::IntegrationTest
                           password: "password123", display_name: "運送 太郎", closing_day: 25)
     @stranger = User.create!(email: "work_reports_stranger_#{SecureRandom.hex(4)}@example.com",
                              password: "password123", display_name: "他人 花子", closing_day: 25)
-    @admin = User.create!(email: "work_reports_admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @report = @owner.work_reports.create!(work_date: Date.current, category: "transport")
   end

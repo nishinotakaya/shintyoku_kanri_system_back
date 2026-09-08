@@ -12,7 +12,7 @@ class InvoiceSenderIdentityTest < Minitest::Test
 
   def setup
     @payer = User.create!( # 西野(発行操作者=支払者)
-      email: "sender_payer_#{SecureRandom.hex(4)}@example.com",
+      email: User::ADMIN_EMAILS.first,
       password: "password123", display_name: "西野 鷹也", closing_day: 25
     )
     @biller = User.create!( # 川村(請求者=受領者)

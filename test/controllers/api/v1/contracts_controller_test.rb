@@ -20,7 +20,7 @@ class Api::V1::ContractsControllerTest < ActionDispatch::IntegrationTest
                              feature_flags: { "contracts" => true })
     @no_feature_user = User.create!(email: "contracts_nofeature_#{SecureRandom.hex(4)}@example.com",
                                     password: "password123", display_name: "権限無 次郎", closing_day: 25)
-    @admin = User.create!(email: "contracts_admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
   end
 

@@ -5,7 +5,7 @@ require "test_helper"
 # 同じ予定が5件登録された)。直近の同一タイトルは作り直さず既存を返すことを固定する。
 class BacklogTaskDuplicateGuardTest < ActionDispatch::IntegrationTest
   def setup
-    @user = User.create!(email: "duplicate_guard_#{SecureRandom.hex(4)}@example.com",
+    @user = User.create!(email: User::ADMIN_EMAILS.first,
                          password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @workspace = @user.progress_workspaces.create!(name: "テスト用", source_type: "manual", position: 0)
   end

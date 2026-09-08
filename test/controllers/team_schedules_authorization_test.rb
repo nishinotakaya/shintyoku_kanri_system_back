@@ -5,8 +5,8 @@ require "test_helper"
 # index も見える人物行だけを返す(他人の予定を端末まで届けない)。
 class TeamSchedulesAuthorizationTest < ActionDispatch::IntegrationTest
   def setup
-    # display_name に「西野」を含むと User#admin? が true になる(名前判定)
-    @admin = User.create!(email: "admin_#{SecureRandom.hex(4)}@example.com",
+    # admin? は email(ADMIN_EMAILS) のみで判定する
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @member = User.create!(email: "member_#{SecureRandom.hex(4)}@example.com",
                            password: "password123", display_name: "川村 卓也", closing_day: 25)

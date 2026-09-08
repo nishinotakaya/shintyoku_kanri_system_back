@@ -20,7 +20,10 @@ class InvoiceSealOwnerTest < Minitest::Test
   end
 
   def create_user(display_name)
-    user = User.create!(email: "seal_#{SecureRandom.hex(4)}@example.com", password: "password123",
+    # 印鑑は氏名の完全一致で選ぶ「表示目的」の判定であり admin? には依存しないが、
+    # display_name に「西野 鷹也」を含めるには本人(ADMIN_EMAILS)である必要がある。
+    email = display_name == "西野 鷹也" ? User::ADMIN_EMAILS.first : "seal_#{SecureRandom.hex(4)}@example.com"
+    user = User.create!(email: email, password: "password123",
                         display_name: display_name, closing_day: 25)
     user.invoice_setting_for("wings").update!(issuer_name: display_name, bank_info: "テスト銀行 普通 0000000")
     @users << user

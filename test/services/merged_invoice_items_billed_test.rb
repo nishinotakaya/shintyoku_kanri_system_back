@@ -6,7 +6,7 @@ require "test_helper"
 # 例: 川村さん wings は支払 2,875円/h だが請求は 3,500円/h。
 class MergedInvoiceItemsBilledTest < Minitest::Test
   def setup
-    @admin = User.create!(email: "billed_admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @partner = User.create!(email: "billed_partner_#{SecureRandom.hex(4)}@example.com",
                             password: "password123", display_name: "川村 卓也", closing_day: 25)

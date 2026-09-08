@@ -3,7 +3,7 @@ require "test_helper"
 # 新規月シート作成時の日付スケルトン([日, 曜, 空ステータス] × 31行)の生成。
 class TeamScheduleExporterMonthSheetTest < ActiveSupport::TestCase
   def setup
-    @admin = User.create!(email: "admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @exporter = TeamScheduleExporter.new(user: @admin, year: 2027, month: 1)
   end

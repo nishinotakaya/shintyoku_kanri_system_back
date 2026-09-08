@@ -3,7 +3,7 @@ require "test_helper"
 # GET /api/v1/exports/my_documents の doc_types パース（カンマ区切り）と本人限定スコープ。
 class ExportsMyDocumentsTest < ActionDispatch::IntegrationTest
   def setup
-    @owner = User.create!(email: "owner_#{SecureRandom.hex(4)}@example.com",
+    @owner = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @other = User.create!(email: "other_#{SecureRandom.hex(4)}@example.com",
                           password: "password123", display_name: "川村 卓也", closing_day: 25)

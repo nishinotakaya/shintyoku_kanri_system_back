@@ -3,8 +3,8 @@ require "test_helper"
 # PATCH /api/v1/interview_mindmaps/:id の filmed(撮影済フラグ)更新と payload 反映。
 class InterviewMindmapsFilmedTest < ActionDispatch::IntegrationTest
   def setup
-    # display_name に「西野」を含むと User#admin? が true になる(名前判定)。youtube モードは admin 素通り
-    @admin = User.create!(email: "admin_#{SecureRandom.hex(4)}@example.com",
+    # admin? は email(ADMIN_EMAILS) のみで判定する。youtube モードは admin 素通り
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @member = User.create!(email: "member_#{SecureRandom.hex(4)}@example.com",
                            password: "password123", display_name: "一般 太郎", closing_day: 25)

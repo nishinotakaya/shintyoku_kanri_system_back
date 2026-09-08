@@ -5,8 +5,11 @@ require "test_helper"
 # 西野さん・川村さんは全員分、それ以外は自分の予定だけ」。
 class VisibleCalendarPersonsTest < ActiveSupport::TestCase
   def create_user(display_name)
-    User.create!(email: "calendar_#{SecureRandom.hex(4)}@example.com",
-                 password: "password123", display_name: display_name, closing_day: 25)
+    # 「西野 鷹也」を display_name にできるのは本人(ADMIN_EMAILS)だけ。ここでの
+    # sees_whole_team_calendar? 等の判定自体は admin? ではなく own_calendar_person の
+    # 名前一致によるものだが、display_name のバリデーションを満たす必要がある。
+    email = display_name == "西野 鷹也" ? User::ADMIN_EMAILS.first : "calendar_#{SecureRandom.hex(4)}@example.com"
+    User.create!(email: email, password: "password123", display_name: display_name, closing_day: 25)
   end
 
   def test_西野さんは未設定なら既定メンバー全員が見える

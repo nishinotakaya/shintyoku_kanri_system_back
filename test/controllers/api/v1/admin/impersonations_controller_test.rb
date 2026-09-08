@@ -7,7 +7,7 @@ require "test_helper"
 # email はランダムサフィックスで一意にし、teardown で必ず destroy する。
 class Api::V1::Admin::ImpersonationsControllerTest < ActionDispatch::IntegrationTest
   def setup
-    @admin = User.create!(email: "imp_admin_#{SecureRandom.hex(4)}@example.com",
+    @admin = User.create!(email: User::ADMIN_EMAILS.first,
                           password: "password123", display_name: "西野 鷹也", closing_day: 25)
     @target = User.create!(email: "imp_target_#{SecureRandom.hex(4)}@example.com",
                            password: "password123", display_name: "運送外注 太郎", closing_day: 31)
