@@ -4,7 +4,8 @@ require "bigdecimal"
 #
 # openpyxl 等で保存し直すと条件付き書式の拡張(x14)・図形・calcChain が消えることを実測済みのため、
 # zip 内のシート XML の「値セル」だけを Nokogiri で書き換える方式にする（VBA・条件付き書式・
-# 定義名・他シートには一切触れない）。
+# 定義名・他シートには一切触れない）。例外はガント上のイナズマ線(図形)で、これは VBA と同じ
+# ロジックで WbsInazumaLineDrawer が引き直す。
 # zip/XML の読み取りは WbsExcelDocument を共有する。
 class NotionWbsExcelUpdater
   SHEET_NAME       = WbsExcelDocument::SHEET_NAME
@@ -77,6 +78,10 @@ class NotionWbsExcelUpdater
       end
     end
 
+    # 値を書き換えた後のシートを元に、ガント上のイナズマ線をマクロと同じロジックで引き直す
+    # (マクロがブロックされた状態で開いても、表と線がずれない)。
+    inazuma_segment_count = WbsInazumaLineDrawer.new(document: @document, base_date: Time.zone.today).call
+
     entries[@document.sheet_path] = sheet_document.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML)
     if @document.styles_modified?
       entries["xl/styles.xml"] = @document.styles_document.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML)
@@ -86,7 +91,8 @@ class NotionWbsExcelUpdater
 
     { bytes: WbsExcelDocument.write_zip_entries(entries), matched_count: matched_count,
       appended_count: appended_count, skipped_count: skipped_count,
-      changed_cell_count: @changed_cell_count, unsubmitted_cell_count: @unsubmitted_cell_count }
+      changed_cell_count: @changed_cell_count, unsubmitted_cell_count: @unsubmitted_cell_count,
+      inazuma_segment_count: inazuma_segment_count }
   end
 
   private
