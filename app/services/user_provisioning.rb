@@ -85,8 +85,7 @@ module UserProvisioning
       下記URLからパスワードを設定して、登録を完了してください（リンクの有効期限: 14日間）。
       #{invite_url}
 
-      ※ Googleアカウント（このメールアドレス: #{invitee.email}）をお持ちの場合は、
-         #{frontend_url}/sign_in の「Googleでログイン」からもそのまま利用を開始できます。
+      登録後は #{frontend_url}/sign_in から、このメールアドレスと設定したパスワードでログインできます。
       #{manual_section}
       ご不明点があれば #{inviter.email} までご連絡ください。
 
