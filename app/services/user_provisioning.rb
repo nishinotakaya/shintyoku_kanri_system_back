@@ -1,3 +1,5 @@
+require "net/http"
+
 # ユーザーの新規登録(招待)まわりの共通処理。
 # 管理画面(admin/users)からの作成・招待メール再送と、契約書署名後の乙の自動登録の両方から使う。
 module UserProvisioning
@@ -28,8 +30,37 @@ module UserProvisioning
   # 招待リンク(署名付きトークン)の有効期限
   INVITATION_EXPIRY = 14.days
 
+  # テナントごとの「招待される人(メンバー)向け」操作手順書。
+  # 実体は frontend の public/manuals/ 配下(docs/manuals/build_web.py が生成)。
+  # 招待メールに PDF を添付し、スマホで読める Web 版のリンクも載せる。
+  MEMBER_MANUALS = {
+    "HAUKUR運送" => {
+      label: "操作手順書（ドライバー用）",
+      web_path: "/manuals/haukur_driver.html",
+      pdf_path: "/manuals/haukur_driver.pdf",
+      pdf_filename: "操作手順書_ドライバー様向け.pdf"
+    }
+  }.freeze
+
   def frontend_url
     ENV["FRONTEND_URL"].presence || "https://react-frontend-beige.vercel.app"
+  end
+
+  # 手順書PDFを frontend から取ってくる。取得できなくても招待メール自体は止めない
+  # (リンクは本文に残るので、添付が無くても手順書には辿り着ける)。
+  def fetch_manual_pdf(manual)
+    uri = URI("#{frontend_url}#{manual[:pdf_path]}")
+    response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: 5, read_timeout: 20) do |http|
+      http.get(uri.request_uri)
+    end
+    unless response.is_a?(Net::HTTPSuccess)
+      Rails.logger.warn("[UserProvisioning] 手順書PDFの取得に失敗: #{response.code} #{uri}")
+      return nil
+    end
+    { filename: manual[:pdf_filename], content_type: "application/pdf", body: response.body }
+  rescue StandardError => e
+    Rails.logger.warn("[UserProvisioning] 手順書PDFの取得に失敗: #{e.class} #{e.message}")
+    nil
   end
 
   # 登録URL付きの招待メール。リンク先(/invite/:token)でパスワードを設定すると登録が完了する。
@@ -38,6 +69,13 @@ module UserProvisioning
     invite_token = invitee.signed_id(purpose: :invitation, expires_in: INVITATION_EXPIRY)
     invite_url = "#{frontend_url}/invite/#{invite_token}"
     tenant_name = inviter.owned_tenants.first&.name
+    manual = MEMBER_MANUALS[tenant_name]
+    manual_section = manual ? <<~SECTION : ""
+
+      ▼ #{manual[:label]}（このメールにPDFを添付しています）
+      スマホでそのまま読める Web 版はこちら:
+      #{frontend_url}#{manual[:web_path]}
+    SECTION
     subject = "【勤怠アプリ】#{inviter.display_name}さんから招待が届きました"
     body = <<~BODY
       #{invitee.display_name} 様
@@ -49,7 +87,7 @@ module UserProvisioning
 
       ※ Googleアカウント（このメールアドレス: #{invitee.email}）をお持ちの場合は、
          #{frontend_url}/sign_in の「Googleでログイン」からもそのまま利用を開始できます。
-
+      #{manual_section}
       ご不明点があれば #{inviter.email} までご連絡ください。
 
       ---
@@ -60,6 +98,7 @@ module UserProvisioning
       to: invitee.email,
       subject: subject,
       body: body,
+      attachments: [ manual && fetch_manual_pdf(manual) ].compact,
       from_name: inviter.display_name
     )
   end
