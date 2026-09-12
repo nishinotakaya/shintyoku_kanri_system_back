@@ -1,5 +1,7 @@
 class Expense < ApplicationRecord
   belongs_to :user
+  # カレンダーの実費レシートから自動作成された立替金はここが埋まる(手入力分は nil)
+  belongs_to :work_report_expense_photo, optional: true
 
   TRANSPORT_TYPES = %w[train bus taxi shinkansen flight].freeze
   CATEGORIES = %w[wings living].freeze

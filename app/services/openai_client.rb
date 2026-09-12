@@ -10,8 +10,17 @@ class OpenaiClient
     new(api_key_for(user)).client
   end
 
+  # 個別キーを持たないユーザー(ドライバー等)は、サーバー共通キー → 管理者が設定したキー の順に借りる。
+  # 各自に OpenAI のキーを取らせないための仕組み。
   def self.api_key_for(user)
-    user&.openai_api_key.presence || ENV["OPENAI_API_KEY"] || Rails.application.credentials.dig(:openai, :api_key)
+    user&.openai_api_key.presence ||
+      ENV["OPENAI_API_KEY"].presence ||
+      Rails.application.credentials.dig(:openai, :api_key).presence ||
+      admin_openai_api_key
+  end
+
+  def self.admin_openai_api_key
+    User.where(email: User::ADMIN_EMAILS).map(&:openai_api_key).find(&:present?)
   end
 
   # 後方互換

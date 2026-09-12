@@ -308,22 +308,34 @@ module Api
         render json: { error: "検印を押す権限がありません" }, status: :forbidden
       end
 
-      # 乗車区間・交通費 → 立替金に自動同期（report の所属ユーザーで連動）
+      # 日報 → 立替金の自動同期（report の所属ユーザーで連動）
+      #   ・乗車区間つきの交通費 … 1日1件の立替金に反映（従来どおり）
+      #   ・実費レシート（運送） … レシート1枚 = 立替金1件
+      # どちらも「自動で作った行」だけを更新・削除する。手入力の立替金には触れない。
       def sync_expense_from_report(report)
-        cat = report.category || "wings"
+        category = report.category || "wings"
         owner = report.user
 
         # リビング案件は乗車区間・交通費を持たない仕様 → 同期スキップ
-        return if cat == "living"
+        return if category == "living"
 
+        ActiveRecord::Base.transaction do
+          sync_transit_expense_from_report(report, owner: owner, category: category)
+          sync_receipt_expenses_from_report(report, owner: owner, category: category) if category == "transport"
+        end
+      end
+
+      # 乗車区間・交通費 → その日の立替金1件
+      def sync_transit_expense_from_report(report, owner:, category:)
         if report.transit_section.present? && report.transit_fee.to_i > 0
           parts = report.transit_section.split(/\s*[~～〜\-\s]+/)
           from = parts[0].to_s.strip
           to = parts[1].to_s.strip
 
-          expense = owner.expenses.find_or_initialize_by(
-            expense_date: report.work_date, category: cat
-          )
+          # 自動作成済みの交通費行(=乗車区間が入っている行)だけを更新する。
+          # 同じ日に手入力した立替金(区間なし)を拾って上書きしてしまわないようにする。
+          expense = auto_transit_expenses(owner, report: report, category: category).first ||
+                    owner.expenses.new(expense_date: report.work_date, category: category)
           expense.from_station = from
           expense.to_station = to
           expense.purpose ||= "顧客先出張"
@@ -334,9 +346,47 @@ module Api
           expense.payee_or_line ||= owner.default_transit_line
           expense.save!
         else
-          # 乗車区間が空になったら立替金も削除
-          owner.expenses.where(expense_date: report.work_date, category: cat).destroy_all
+          # 乗車区間が空になったら、そこから自動作成した交通費の立替金だけを削除する。
+          # 用途を手入力した立替金（ガソリン代など・区間なし）やレシート由来の行は残す。
+          auto_transit_expenses(owner, report: report, category: category).destroy_all
         end
+      end
+
+      # その日・そのカテゴリの立替金のうち「乗車区間の同期で作られた行」
+      def auto_transit_expenses(owner, report:, category:)
+        owner.expenses
+             .where(expense_date: report.work_date, category: category, work_report_expense_photo_id: nil)
+             .where.not(from_station: [ nil, "" ])
+             .where.not(to_station: [ nil, "" ])
+      end
+
+      # 実費レシート → 立替金（レシート1枚 = 1件）。金額が未入力のレシートは立替金を作らない。
+      def sync_receipt_expenses_from_report(report, owner:, category:)
+        kept_expense_ids = []
+
+        report.expense_photos.reload.each do |photo|
+          if photo.amount.to_i <= 0
+            owner.expenses.where(work_report_expense_photo_id: photo.id).destroy_all
+            next
+          end
+
+          expense = owner.expenses.find_or_initialize_by(work_report_expense_photo_id: photo.id)
+          expense.expense_date = report.work_date
+          expense.category = category
+          expense.purpose = photo.label.presence || "実費"
+          expense.amount = photo.amount
+          expense.receipt_no = "有"
+          expense.round_trip = false if expense.round_trip.nil?
+          expense.save!
+          kept_expense_ids << expense.id
+        end
+
+        # レシートを消した分の立替金を片付ける
+        orphaned = owner.expenses
+                        .where(expense_date: report.work_date, category: category)
+                        .where.not(work_report_expense_photo_id: nil)
+        orphaned = orphaned.where.not(id: kept_expense_ids) if kept_expense_ids.any?
+        orphaned.destroy_all
       end
 
       # メーター写真の保存/削除。値は data URL(data:image/jpeg;base64,...) で受け取る。
@@ -361,6 +411,15 @@ module Api
       def apply_expense_photo_params(report)
         Array(params[:remove_expense_photo_ids]).each do |photo_id|
           report.expense_photos.find_by(id: photo_id)&.destroy!
+        end
+        # 保存済みレシートの金額・品目の手直しを反映する（AI 読取値の修正）
+        Array(params[:expense_photos_update]).each do |photo_params|
+          photo = report.expense_photos.find_by(id: photo_params[:id])
+          next if photo.blank?
+          photo.update!(
+            amount: photo_params[:amount].presence&.to_i,
+            label: photo_params[:label].to_s.strip.presence
+          )
         end
         Array(params[:expense_photos_add]).each do |photo_params|
           data_value = photo_params[:data_base64].presence

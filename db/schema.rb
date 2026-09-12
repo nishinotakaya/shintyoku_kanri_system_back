@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_08_030000) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_12_120000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -214,8 +214,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_08_030000) do
     t.boolean "company_burden", default: true, null: false
     t.boolean "excel_excluded", default: false, null: false
     t.string "billing_month"
+    t.integer "work_report_expense_photo_id"
     t.index ["billing_month"], name: "index_expenses_on_billing_month"
     t.index ["user_id"], name: "index_expenses_on_user_id"
+    t.index ["work_report_expense_photo_id"], name: "index_expenses_on_work_report_expense_photo_id", unique: true, where: "work_report_expense_photo_id IS NOT NULL"
   end
 
   create_table "fixed_assets", force: :cascade do |t|

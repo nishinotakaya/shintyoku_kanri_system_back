@@ -85,7 +85,8 @@ module Api
           to_station: e.to_station, round_trip: e.round_trip,
           receipt_no: e.receipt_no, amount: e.amount, payee_or_line: e.payee_or_line,
           category: e.category, company_burden: e.company_burden,
-          excel_excluded: e.excel_excluded, billing_month: e.billing_month
+          excel_excluded: e.excel_excluded, billing_month: e.billing_month,
+          work_report_expense_photo_id: e.work_report_expense_photo_id
         }
       end
     end

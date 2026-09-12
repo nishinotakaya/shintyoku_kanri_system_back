@@ -6,6 +6,8 @@ class WorkReportExpensePhoto < ApplicationRecord
   ALLOWED_CONTENT_TYPES = %w[image/jpeg image/png image/webp image/heic image/heif].freeze
 
   belongs_to :work_report
+  # レシートを消したら、そこから作られた立替金も消す
+  has_one :expense, dependent: :destroy
 
   validates :amount, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
 end
