@@ -55,7 +55,6 @@ class User < ApplicationRecord
   serialize :work_categories, coder: JSON
 
   validate :work_categories_must_be_known_categories
-  validate :display_name_must_not_impersonate_admin
 
   # 別アカウントを admin の同一人物としてリンク。
   # 例: wing西野 鷹也 (taka-nishino@tamahome.jp) を admin 西野 鷹也 (takaya314boxing@gmail.com) にリンク
@@ -104,11 +103,12 @@ class User < ApplicationRecord
     users.to_a.uniq.partition(&:admin?).flatten
   end
 
-  # 通知の宛先や請求書の宛名に使う主管理者(西野 鷹也)。苗字 LIKE で探すと同姓の別人(西野 雄太郎)も
-  # 拾うので、管理者メール → 氏名の順で決める。
+  # 通知の宛先や請求書の宛名に使う主管理者(西野 鷹也)。管理者メールだけで決める。
+  # 表示名 LIKE のフォールバックは持たない。同姓の別人(西野 雄太郎)や、本人が
+  # 自分用に作ったサブアカウント(例: 西野 鷹也(ドライバー))を拾ってしまうため。
+  # 呼び出し側は nil を許容している(宛名は ADMIN_DISPLAY_NAME にフォールバック)。
   def self.primary_admin
-    by_email = ADMIN_EMAILS.filter_map { |email| find_by(email: email) }.first
-    by_email || where("display_name LIKE ?", "%#{ADMIN_DISPLAY_NAME}%").order(:id).first
+    ADMIN_EMAILS.filter_map { |email| find_by(email: email) }.first
   end
 
   # 機能を使えるか。admin は明示的に false にされた機能以外は使える、フラグ ON のユーザーも true。
@@ -435,13 +435,5 @@ class User < ApplicationRecord
     unknown = Array(work_categories) - WorkReport::CATEGORIES
     return if unknown.empty?
     errors.add(:work_categories, "に不正なカテゴリが含まれています: #{unknown.join(', ')}")
-  end
-
-  # 表示名の乗っ取り防止。admin(西野 鷹也)本人以外が表示名に「西野 鷹也」を含めることを禁止する。
-  # admin? はメール判定のみなので、ここで通れば本人確認済み。
-  def display_name_must_not_impersonate_admin
-    return if display_name.to_s.exclude?(ADMIN_DISPLAY_NAME)
-    return if admin?
-    errors.add(:display_name, "この表示名は使用できません")
   end
 end

@@ -118,6 +118,9 @@ module Api
             id: user.id, email: user.email, display_name: user.display_name, admin: user.admin?,
             invite_sent: invite_sent, invite_error: invite_error
           }, status: :created
+        rescue ActiveRecord::RecordInvalid => e
+          # 何がダメだったのか画面で分かるように、項目ごとの理由をそのまま返す
+          render json: { error: e.record.errors.full_messages.join(" / ") }, status: :unprocessable_entity
         rescue => e
           render json: { error: e.message }, status: :unprocessable_entity
         end

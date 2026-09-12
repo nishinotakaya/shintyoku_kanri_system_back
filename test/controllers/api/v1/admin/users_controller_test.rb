@@ -32,6 +32,41 @@ class Api::V1::Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     { "Authorization" => "Bearer #{token}" }
   end
 
+  # 既定ロケールが :ja なのに日本語辞書が無く、保存失敗が
+  # 「Translation missing: ja.activerecord.errors.messages.record_invalid」として
+  # 画面に出ていた。何がダメだったのかがそのまま返ることを担保する。
+  def test_create_returns_japanese_validation_reason
+    post "/api/v1/admin/users",
+         params: { email: "not-an-email", display_name: "テスト", send_invite: false },
+         headers: auth_headers(@owner)
+
+    assert_response :unprocessable_entity
+    error = response.parsed_body["error"]
+    assert_not_includes error.to_s, "Translation missing"
+    assert_equal "メールアドレス は不正な値です", error
+  end
+
+  # 西野さんが自分用のドライバーアカウントを作れる(表示名に管理者名を含んでよい)。
+  # 管理者になるかどうかはメールだけで決まるので、この行が admin になることはない。
+  def test_create_allows_display_name_containing_admin_name
+    post "/api/v1/admin/users",
+         params: { email: "takaya_driver_#{SecureRandom.hex(4)}@example.com",
+                   display_name: "#{User::ADMIN_DISPLAY_NAME}(ドライバー)", send_invite: false },
+         headers: auth_headers(@owner)
+
+    assert_response :created
+    body = response.parsed_body
+    @created = User.find(body["id"])
+    assert_equal "#{User::ADMIN_DISPLAY_NAME}(ドライバー)", body["display_name"]
+    refute body["admin"]
+  end
+
+  def test_japanese_locale_has_common_validation_messages
+    assert_equal "を入力してください", I18n.t("errors.messages.blank")
+    assert_equal "はすでに使われています", I18n.t("errors.messages.taken")
+    assert_not_includes I18n.t("activerecord.errors.messages.record_invalid", errors: "x"), "translation missing"
+  end
+
   def test_tenant_owner_lists_only_own_members_and_self
     get "/api/v1/admin/users", headers: auth_headers(@owner)
 

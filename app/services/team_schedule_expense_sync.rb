@@ -85,8 +85,10 @@ class TeamScheduleExpenseSync
   # TeamSchedule.person ("川村" 等) から実ユーザを引く。
   # wing-prefix の別アカウントは除外し、admin 本体に当たるレコードを優先。
   def self.user_for(person_name)
+    # 同じ名前を含むユーザーが複数居ても取り違えないよう、必ず古い(本体の)アカウントを選ぶ。
+    # 例: 「西野 鷹也」と、本人が後から作った「西野 鷹也(ドライバー)」。
     User.where("display_name LIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(person_name.to_s)}%")
-        .find_each
+        .find_each # find_each は id 昇順なので、古い(本体の)アカウントから見ていく
         .reject { |u| u.display_name.to_s.start_with?("wing") }
         .first
   end

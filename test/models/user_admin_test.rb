@@ -34,12 +34,13 @@ class UserAdminTest < Minitest::Test
     refute build(display_name: "川村 卓也").admin?
   end
 
-  # 一般ユーザーが表示名を「西野 鷹也」に更新して管理者になりすますことはできない
-  def test_general_user_cannot_impersonate_admin_display_name
+  # 表示名に「西野 鷹也」を含めても管理者にはならない(判定はメールのみ)。
+  # 本人が自分用のサブアカウント(例: 西野 鷹也(ドライバー))を作れるよう、表示名は制限しない。
+  def test_admin_display_name_does_not_grant_admin
     user = build(display_name: "山田 太郎")
-    user.display_name = "西野 鷹也"
-    refute user.valid?
-    assert_includes user.errors[:display_name], "この表示名は使用できません"
+    user.display_name = "#{User::ADMIN_DISPLAY_NAME}(ドライバー)"
+    assert user.valid?, user.errors.full_messages.join(" / ")
+    refute user.admin?
   end
 
   # ADMIN_EMAILS のユーザーは自分の本名として「西野 鷹也」を名乗れる
@@ -48,11 +49,13 @@ class UserAdminTest < Minitest::Test
     assert admin_user.valid?
   end
 
-  # 通知宛先・請求書宛名に使う主管理者は、同姓の別人が先に登録されていても西野 鷹也本人
+  # 通知宛先・請求書宛名に使う主管理者は、同姓の別人や本人のサブアカウントが居ても西野 鷹也本人
   def test_primary_admin_prefers_takaya_over_same_surname_user
     created = []
     created << User.create!(email: "yutaro_#{SecureRandom.hex(4)}@example.com", password: "password123",
                             display_name: "西野 雄太郎", closing_day: 25)
+    created << User.create!(email: "takaya_driver_#{SecureRandom.hex(4)}@example.com", password: "password123",
+                            display_name: "#{User::ADMIN_DISPLAY_NAME}(ドライバー)", closing_day: 25)
     takaya = User.find_by(email: User::ADMIN_EMAILS.first) ||
       User.create!(email: User::ADMIN_EMAILS.first, password: "password123",
                    display_name: "西野 鷹也", closing_day: 25).tap { |user| created << user }

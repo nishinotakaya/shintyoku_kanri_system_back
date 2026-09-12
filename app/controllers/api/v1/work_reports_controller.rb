@@ -287,7 +287,9 @@ module Api
         return current_user if target_assignee.blank?
         surname = current_user.display_name.to_s.split(/[\s　]/).first.to_s
         return current_user if target_assignee.to_s.include?(surname) || surname.include?(target_assignee.to_s)
-        User.where("display_name LIKE ?", "%#{target_assignee}%").first || current_user
+        # 同じ名前を含むユーザーが複数居ても取り違えないよう、必ず古い(本体の)アカウントを選ぶ。
+        # 例: 「西野 鷹也」と、本人が後から作った「西野 鷹也(ドライバー)」。
+        User.where("display_name LIKE ?", "%#{target_assignee}%").order(:id).first || current_user
       end
 
       def format_hours(h)
