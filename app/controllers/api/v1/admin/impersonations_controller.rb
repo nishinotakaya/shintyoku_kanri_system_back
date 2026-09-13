@@ -39,11 +39,15 @@ module Api
 
         # DELETE /api/v1/admin/impersonations
         # 提示されたなりすましトークンだけを根拠に、管理者アカウントのトークンを再発行する。
+        # 使い終わったなりすましトークンはここで失効させる(使い回し防止)。フロントに別途 sign_out を
+        # 呼ばせると、その時点で差し替わっている管理者トークンの方を失効させてしまう事故があった。
         def destroy
           return render(json: { error: "なりすまし中ではありません" }, status: :unprocessable_entity) if impersonator.nil?
 
           Rails.logger.warn("[impersonation] stop admin=#{impersonator.id} <- user=#{current_user.id}")
-          render json: { token: impersonator.issue_jwt, user: user_json(impersonator) }
+          admin_token = impersonator.issue_jwt
+          JwtDenylist.revoke_jwt(jwt_claims, current_user)
+          render json: { token: admin_token, user: user_json(impersonator) }
         end
 
         private

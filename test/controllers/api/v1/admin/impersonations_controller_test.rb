@@ -102,6 +102,23 @@ class Api::V1::Admin::ImpersonationsControllerTest < ActionDispatch::Integration
     assert_equal @admin.id, JSON.parse(response.body)["id"]
   end
 
+  # 管理者に戻ったら、使い終わったなりすましトークンは失効し、返ってきた管理者トークンは生きている。
+  # (フロントが別途 sign_out を呼んで管理者トークンの方を失効させ、ログアウトに飛ばされる事故の再発防止)
+  def test_delete_revokes_the_impersonation_token_but_keeps_the_admin_token_alive
+    impersonation_headers = impersonation_headers_for(@target)
+
+    delete "/api/v1/admin/impersonations", headers: impersonation_headers
+    assert_response :success
+    admin_token = JSON.parse(response.body)["token"]
+
+    get "/api/v1/me", headers: impersonation_headers
+    assert_response :unauthorized
+
+    get "/api/v1/me", headers: { "Authorization" => "Bearer #{admin_token}" }
+    assert_response :success
+    assert_equal @admin.id, JSON.parse(response.body)["id"]
+  end
+
   def test_delete_is_rejected_when_not_impersonating
     delete "/api/v1/admin/impersonations", headers: auth_headers(@admin)
 

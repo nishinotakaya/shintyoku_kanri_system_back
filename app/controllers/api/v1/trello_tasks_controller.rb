@@ -17,7 +17,8 @@ module Api
         count = TrelloSyncService.call(current_user)
         render json: { synced: count, at: Time.current.iso8601 }
       rescue TrelloClient::AuthError => e
-        render json: { error: e.message }, status: :unauthorized
+        # 外部サービス側の認証エラーは 401 で返さない(フロントは 401 をログイン切れ扱いにする)
+        render json: { error: e.message }, status: :unprocessable_entity
       rescue TrelloClient::ApiError => e
         render json: { error: e.message }, status: :bad_gateway
       end

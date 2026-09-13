@@ -62,7 +62,9 @@ module Api
         synced = TrelloTaskSyncService.new(current_user).call
         render json: { synced: synced }
       rescue TrelloClient::AuthError => e
-        render json: { error: e.message }, status: :unauthorized
+        # 外部サービス側の認証エラーは 401 で返さない(フロントは 401 をこのアプリのログイン切れと
+        # 見なしてサインイン画面/管理者アカウントへ戻すため、設定ミスでログアウトされてしまう)
+        render json: { error: e.message }, status: :unprocessable_entity
       rescue TrelloClient::ApiError => e
         render json: { error: e.message }, status: :bad_gateway
       rescue ActiveRecord::RecordNotFound
