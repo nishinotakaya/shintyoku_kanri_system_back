@@ -2,7 +2,8 @@ require "test_helper"
 
 # Api::V1::NotionTasksController#line_report(_preview):
 # リビング(Notion)タスクの進捗を LINE で報告する。notion の view 権限が必要。
-# 送信後は *_prev(変更差分)がクリアされる。実際の LINE 送信はスタブし、テストから外部送信しない。
+# 送信後は前回同期値(*_before_sync)がクリアされ、WBS の「修正後」(*_prev)は残る。
+# 実際の LINE 送信はスタブし、テストから外部送信しない。
 class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
   def setup
     # シート同期(Google Sheets)はテストから外部送信しない
@@ -15,8 +16,11 @@ class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
                                display_name: "権限なし 太郎", closing_day: 25)
     @task = NotionTask.create!(notion_block_id: SecureRandom.uuid, title: "LINE報告テスト_#{suffix}",
                                wbs_level: "1.2.3", start_date: Date.new(2026, 9, 15),
-                               start_date_prev: Date.new(2026, 9, 10),
-                               progress_rate: 0.9, progress_rate_prev: 0.7, synced_at: Time.current)
+                               start_date_before_sync: Date.new(2026, 9, 10),
+                               progress_rate: 0.9, progress_rate_before_sync: 0.7,
+                               # WBS 画面で直した「修正後」。LINE 送信で消えてはいけない
+                               end_date_prev: Date.new(2026, 9, 29),
+                               synced_at: Time.current)
     @issue_key = "N-#{@task.notion_block_id.delete('-')}"
   end
 
@@ -52,7 +56,7 @@ class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
     assert_includes body["message"], "開始日: 2026/09/10 → 9/15"
     assert_includes body["message"], "進捗率: 70% → 90%"
     # プレビューでは差分はクリアされない
-    assert_equal Date.new(2026, 9, 10), @task.reload.start_date_prev
+    assert_equal Date.new(2026, 9, 10), @task.reload.start_date_before_sync
   end
 
   def test_line_report_sends_and_clears_the_diffs
@@ -67,9 +71,11 @@ class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, sent_texts.size
     assert_includes sent_texts.first, "進捗率: 70% → 90%"
     @task.reload
-    assert_nil @task.start_date_prev
-    assert_nil @task.progress_rate_prev
+    assert_nil @task.start_date_before_sync
+    assert_nil @task.progress_rate_before_sync
     assert_equal Date.new(2026, 9, 15), @task.start_date
+    # WBS の「修正後」は報告とは無関係なので残る
+    assert_equal Date.new(2026, 9, 29), @task.end_date_prev
   end
 
   def test_line_report_uses_the_edited_message_when_given
@@ -92,7 +98,7 @@ class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :bad_gateway
-    assert_equal Date.new(2026, 9, 10), @task.reload.start_date_prev
+    assert_equal Date.new(2026, 9, 10), @task.reload.start_date_before_sync
   end
 
   def test_unknown_issue_keys_are_rejected

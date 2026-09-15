@@ -36,11 +36,14 @@ class NotionSyncService
     new_end      = extract_date(properties[NotionClient::PROPERTY_IDS[:end_date]])
     new_progress = extract_text(properties[NotionClient::PROPERTY_IDS[:progress_rate]])&.presence&.to_f
     new_status   = extract_text(properties[NotionClient::PROPERTY_IDS[:status]])
-    # 修正前(前回同期値)の退避: 既存レコードで値が変わったときだけ、変更前の値を *_prev に保存する。
-    task.start_date_prev    = task.start_date    if task.persisted? && task.start_date != new_start
-    task.end_date_prev      = task.end_date      if task.persisted? && task.end_date != new_end
-    task.progress_rate_prev = task.progress_rate if task.persisted? && task.progress_rate.to_f != new_progress.to_f
-    task.status_prev        = task.status        if task.persisted? && task.status != new_status
+    # 前回同期値の退避(LINE 報告の「修正前 → 修正後」用): 既存レコードで値が変わったときだけ、
+    # 変更前の Notion 値を *_before_sync に保存する。
+    # *_prev には触らない。あちらは WBS 画面で人が編集した「修正後」の置き場で、ここで上書きすると
+    # 編集内容が消えて古い Notion 値が「修正後」として居座る(見積書の開始日が 7/7 に戻った事故)。
+    task.start_date_before_sync    = task.start_date    if task.persisted? && task.start_date != new_start
+    task.end_date_before_sync      = task.end_date      if task.persisted? && task.end_date != new_end
+    task.progress_rate_before_sync = task.progress_rate if task.persisted? && task.progress_rate.to_f != new_progress.to_f
+    task.status_before_sync        = task.status        if task.persisted? && task.status != new_status
 
     task.title              = strip_indent(extract_text(properties[NotionClient::PROPERTY_IDS[:title]]) || "(無題)")
     task.wbs_level          = extract_text(properties[NotionClient::PROPERTY_IDS[:wbs_level]])

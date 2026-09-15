@@ -81,9 +81,12 @@ class NotionTaskImporterTest < Minitest::Test
     assert_includes error.message, "Notion(WBS)"
   end
 
-  # 4. 修正後の値（開始日/終了日/進捗率/進捗状況/備考/メモ）が *_prev / note / memo に反映される
+  # 4. 修正後の値（開始日/終了日/進捗率/進捗状況/備考/メモ）が *_prev / note / memo に反映される。
+  #    「修正前」列は Notion 値の写しなので、Notion 同期が管理する start_date などを巻き戻さない。
   def test_imports_prev_values_from_after_correction_columns
-    task = create_notion_task(wbs_level: "1.1", title: "設計タスク")
+    task = create_notion_task(wbs_level: "1.1", title: "設計タスク",
+                              start_date: Date.new(2026, 9, 1), end_date: Date.new(2026, 9, 29),
+                              progress_rate: 0.5, status: "進行中")
 
     row = Array.new(15)
     row[0]  = "山田"
@@ -120,6 +123,11 @@ class NotionTaskImporterTest < Minitest::Test
     assert_equal "未着手", task.status_prev
     assert_equal "備考文", task.note
     assert_equal "メモ文", task.memo
+    # 「修正前」列(46200=2026-07-07, 2026-09-10, 60%, 進行中)で Notion 値が上書きされていない
+    assert_equal Date.new(2026, 9, 1), task.start_date
+    assert_equal Date.new(2026, 9, 29), task.end_date
+    assert_in_delta 0.5, task.progress_rate, 0.001
+    assert_equal "進行中", task.status
   end
 
   # 5. 空セルはアプリ値を消さない。ただしメモだけは空文字で上書きされる

@@ -1,7 +1,7 @@
 require "test_helper"
 
 # Api::V1::LineReportsController: 組み立て済み文面の LINE 送信(汎用)。
-# notion_issue_keys 付きなら送信後に NotionTask の変更差分(*_prev)をクリアする。
+# notion_issue_keys 付きなら送信後に NotionTask の前回同期値(*_before_sync)をクリアする(WBS の修正後 *_prev は残す)。
 # 実際の LINE 送信はスタブし、テストから外部送信しない。
 class Api::V1::LineReportsControllerTest < ActionDispatch::IntegrationTest
   def setup
@@ -14,7 +14,8 @@ class Api::V1::LineReportsControllerTest < ActionDispatch::IntegrationTest
     @plain_user = User.create!(email: "line_plain_#{suffix}@example.com", password: "password123",
                                display_name: "権限なし 太郎", closing_day: 25)
     @task = NotionTask.create!(notion_block_id: SecureRandom.uuid, title: "汎用LINEテスト_#{suffix}",
-                               start_date: Date.new(2026, 9, 15), start_date_prev: Date.new(2026, 9, 10),
+                               start_date: Date.new(2026, 9, 15), start_date_before_sync: Date.new(2026, 9, 10),
+                               end_date_prev: Date.new(2026, 9, 29), # WBS 画面の「修正後」
                                synced_at: Time.current)
     @issue_key = "N-#{@task.notion_block_id.delete('-')}"
   end
@@ -78,7 +79,9 @@ class Api::V1::LineReportsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_nil @task.reload.start_date_prev
+    @task.reload
+    assert_nil @task.start_date_before_sync
+    assert_equal Date.new(2026, 9, 29), @task.end_date_prev, "WBS の修正後は LINE 送信で消えてはいけない"
   end
 
   def test_does_not_clear_notion_diffs_without_notion_permission
@@ -88,7 +91,7 @@ class Api::V1::LineReportsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_equal Date.new(2026, 9, 10), @task.reload.start_date_prev
+    assert_equal Date.new(2026, 9, 10), @task.reload.start_date_before_sync
   end
 
   def test_failure_returns_bad_gateway

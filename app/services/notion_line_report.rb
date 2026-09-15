@@ -1,5 +1,6 @@
 # リビング(Notion WBS)タスクの進捗を LINE で報告するメッセージを組み立てる。
-# 変更があった項目は「修正前 → 修正後」(修正前=前回同期値 *_prev)、変更が無ければ現在値だけを出す。
+# 変更があった項目は「修正前 → 修正後」(修正前=前回同期値 *_before_sync、修正後=今の Notion 値)、
+# 変更が無ければ現在値だけを出す。WBS 画面の「修正後」(*_prev)はこの報告では使わない。
 # 例:
 #   タスク: 見積書 2.2.7.3.5
 #   開始日: 2026/09/10 → 9/15
@@ -22,10 +23,10 @@ class NotionLineReport
 
   def task_section(task)
     lines = [ "タスク: #{[ task.title, task.wbs_level.presence ].compact.join(' ')}" ]
-    lines << "開始日: #{date_line(task.start_date_prev, task.start_date)}"
-    lines << "終了日: #{date_line(task.end_date_prev, task.end_date)}"
-    lines << "進捗率: #{rate_line(task.progress_rate_prev, task.progress_rate)}"
-    lines << "ステータス: #{text_line(task.status_prev, task.status)}" if task.status.present?
+    lines << "開始日: #{date_line(task.start_date_before_sync, task.start_date)}"
+    lines << "終了日: #{date_line(task.end_date_before_sync, task.end_date)}"
+    lines << "進捗率: #{rate_line(task.progress_rate_before_sync, task.progress_rate)}"
+    lines << "ステータス: #{text_line(task.status_before_sync, task.status)}" if task.status.present?
     lines << "備考(遅れた理由など): #{task.note}" if task.note.present?
     lines << "リンク"
     lines << task.url

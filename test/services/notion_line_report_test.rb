@@ -20,7 +20,7 @@ class NotionLineReportTest < ActiveSupport::TestCase
   end
 
   def test_changed_fields_show_before_and_after
-    task = build_task(start_date_prev: Date.new(2026, 9, 10), progress_rate_prev: 0.7)
+    task = build_task(start_date_before_sync: Date.new(2026, 9, 10), progress_rate_before_sync: 0.7)
 
     message = NotionLineReport.new([ task ], reporter: "川村卓也").message
 
@@ -44,8 +44,19 @@ class NotionLineReportTest < ActiveSupport::TestCase
     refute_includes message, "→"
   end
 
+  # WBS 画面の「修正後」(*_prev)は LINE 報告の差分には使わない(前回同期値 *_before_sync だけを見る)
+  def test_wbs_overrides_do_not_appear_as_changes
+    task = build_task(start_date_prev: Date.new(2026, 9, 1), progress_rate_prev: 1.0)
+
+    message = NotionLineReport.new([ task ]).message
+
+    assert_includes message, "開始日: 2026/09/15"
+    assert_includes message, "進捗率: 90%"
+    refute_includes message, "→"
+  end
+
   def test_status_and_note_lines_appear_only_when_present
-    task = build_task(status: "完了", status_prev: "進行中", note: "先行手配済み")
+    task = build_task(status: "完了", status_before_sync: "進行中", note: "先行手配済み")
 
     message = NotionLineReport.new([ task ]).message
 

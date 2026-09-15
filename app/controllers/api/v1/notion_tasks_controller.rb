@@ -33,7 +33,7 @@ module Api
 
       # POST /api/v1/notion_tasks/line_report  { issue_keys: ["N-..."], message?: string }
       # 文面(編集済みならその内容)を西野さんの LINE (LINE_PUSH_TO) に送信する。
-      # 送信後は *_prev(前回同期からの変更差分)をクリアし、次回の報告では変更なし扱いにする。
+      # 送信後は前回同期値(*_before_sync)をクリアし、次回の報告では変更なし扱いにする。
       def line_report
         tasks = NotionTask.for_kanban_issue_keys(params[:issue_keys]).order(:wbs_level, :start_date)
         return render(json: { error: "対象タスクが見つかりません" }, status: :unprocessable_entity) if tasks.empty?
@@ -79,11 +79,12 @@ module Api
           note: task.note,
           memo: task.memo,
           url: task.url,
-          # 前回同期からの変更差分(修正前の値)。LINE 報告の「修正前 → 修正後」表示に使う
-          start_date_prev: task.start_date_prev,
-          end_date_prev: task.end_date_prev,
-          progress_rate_prev: task.progress_rate_prev&.to_f,
-          status_prev: task.status_prev,
+          # 前回同期からの変更前の値。LINE 報告の「修正前 → 修正後」表示に使う
+          # (WBS 画面の「修正後」*_prev とは別物。あちらは /backlog_activities が返す)
+          start_date_before_sync: task.start_date_before_sync,
+          end_date_before_sync: task.end_date_before_sync,
+          progress_rate_before_sync: task.progress_rate_before_sync&.to_f,
+          status_before_sync: task.status_before_sync,
           synced_at: task.synced_at
         }
       end

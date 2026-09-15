@@ -2,26 +2,28 @@ require "google/apis/sheets_v4"
 
 # Notion(WBS) タブのスプレッドシートを読み、notion_tasks に取り込む（スプシ→アプリ）。
 # タブは URL の gid で指定（無ければタブ名 Notion(WBS)）。
-# WBSレベルで突合し、「修正後」の開始/終了日・工数・進捗率・進捗状況・優先度・備考を更新する。
-#   ・修正前(*_prev) は Notion 同期が管理するので取り込まない。
+# WBSレベルで突合し、「修正後」の開始/終了日・進捗率・進捗状況(*_prev)と、工数・優先度・備考・メモを更新する。
+#   ・「修正前」列(開始日/終了日/進捗率/進捗状況)は取り込まない。あれは書き出し時点の Notion 値の写しで、
+#     Notion 同期が管理する start_date などをシートの古い値で巻き戻してしまう
+#     (Notion 同期→シート取込の連続実行で 9/1 が 7/7 に戻った事故)。
 #   ・空セルでアプリの値を消さない（present な時だけ set）。
 #   ・シートに無い WBS 行はスキップ（新規作成はしない）。
-# 注意: 次の Notion 同期で start_date/end_date/各値は Notion 側の値に上書きされる（手修正は一時的）。
+# 注意: 工数・優先度・備考は Notion 同期で Notion 側の値に上書きされる（手修正は一時的）。
 class NotionTaskImporter
   include BacklogSheetAuth
   TAB = NotionTaskExporter::TAB
 
-  # 列インデックス（Exporter と同じ並び）
+  # 列インデックス（Exporter と同じ並び）。*_NOW(修正前)列は読み飛ばす
   COL_ASSIGNEE = 0
   COL_WBS      = 1
-  COL_START_NOW  = 3  # 開始日(修正前)=現在値 → start_date
-  COL_START_PREV = 4  # 開始日(修正後)=前回値 → start_date_prev
-  COL_END_NOW    = 5  # 終了日(修正前)=現在値 → end_date
-  COL_END_PREV   = 6  # 終了日(修正後)=前回値 → end_date_prev
+  COL_START_NOW  = 3  # 開始日(修正前)=Notion 値の写し(取り込まない)
+  COL_START_PREV = 4  # 開始日(修正後) → start_date_prev
+  COL_END_NOW    = 5  # 終了日(修正前)=Notion 値の写し(取り込まない)
+  COL_END_PREV   = 6  # 終了日(修正後) → end_date_prev
   COL_WORKLOAD   = 7
-  COL_PROGRESS_NOW  = 8  # 進捗率(修正前) → progress_rate
+  COL_PROGRESS_NOW  = 8  # 進捗率(修正前)=Notion 値の写し(取り込まない)
   COL_PROGRESS_PREV = 9  # 進捗率(修正後) → progress_rate_prev
-  COL_STATUS_NOW    = 10 # 進捗状況(修正前) → status
+  COL_STATUS_NOW    = 10 # 進捗状況(修正前)=Notion 値の写し(取り込まない)
   COL_STATUS_PREV   = 11 # 進捗状況(修正後) → status_prev
   COL_PRIORITY = 12
   COL_NOTE     = 13
@@ -55,15 +57,11 @@ class NotionTaskImporter
         skipped += 1
         next
       end
-      task.start_date      = to_date(row[COL_START_NOW])  if filled?(row[COL_START_NOW])
-      task.start_date_prev = to_date(row[COL_START_PREV]) if filled?(row[COL_START_PREV])
-      task.end_date        = to_date(row[COL_END_NOW])    if filled?(row[COL_END_NOW])
-      task.end_date_prev   = to_date(row[COL_END_PREV])   if filled?(row[COL_END_PREV])
-      task.workload           = row[COL_WORKLOAD].to_f         if filled?(row[COL_WORKLOAD])
-      task.progress_rate      = to_rate(row[COL_PROGRESS_NOW]) if filled?(row[COL_PROGRESS_NOW])
+      task.start_date_prev    = to_date(row[COL_START_PREV])    if filled?(row[COL_START_PREV])
+      task.end_date_prev      = to_date(row[COL_END_PREV])      if filled?(row[COL_END_PREV])
+      task.workload           = row[COL_WORKLOAD].to_f          if filled?(row[COL_WORKLOAD])
       task.progress_rate_prev = to_rate(row[COL_PROGRESS_PREV]) if filled?(row[COL_PROGRESS_PREV])
-      task.status        = text(row[COL_STATUS_NOW])  if filled?(row[COL_STATUS_NOW])
-      task.status_prev   = text(row[COL_STATUS_PREV]) if filled?(row[COL_STATUS_PREV])
+      task.status_prev        = text(row[COL_STATUS_PREV])      if filled?(row[COL_STATUS_PREV])
       task.priority      = text(row[COL_PRIORITY])    if filled?(row[COL_PRIORITY])
       task.note          = text(row[COL_NOTE])        if filled?(row[COL_NOTE])
       task.memo          = row[COL_MEMO].to_s          if row[COL_MEMO] # メモは空文字も反映(消去も取り込む)

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_12_120000) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_15_090000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -562,6 +562,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_12_120000) do
     t.string "assignee_name_prev"
     t.decimal "workload_prev", precision: 6, scale: 2
     t.json "wbs_submitted_overrides", default: {}, null: false
+    t.date "start_date_before_sync"
+    t.date "end_date_before_sync"
+    t.decimal "progress_rate_before_sync", precision: 5, scale: 2
+    t.string "status_before_sync"
     t.index ["assignee_name"], name: "index_notion_tasks_on_assignee_name"
     t.index ["notion_block_id"], name: "index_notion_tasks_on_notion_block_id", unique: true
     t.index ["start_date", "end_date"], name: "index_notion_tasks_on_start_date_and_end_date"

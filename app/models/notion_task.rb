@@ -1,3 +1,9 @@
+# Notion の WBS を同期したタスク。列は 3 系統あり、混ぜてはいけない:
+#   - 無印(start_date など)        : Notion の現在値。NotionSyncService だけが書く。
+#   - *_prev(start_date_prev など) : WBS 画面・Excel・シートで人が直した「修正後」。表示と Excel 出力は
+#                                    effective_*(= *_prev || 無印)を使う。
+#   - *_before_sync                : 直前の同期で Notion 側の値が変わったときの「変更前の値」。
+#                                    LINE 進捗報告の「修正前 → 修正後」にだけ使い、報告後に消す。
 class NotionTask < ApplicationRecord
   validates :notion_block_id, presence: true, uniqueness: true
   validates :title, presence: true
@@ -5,6 +11,9 @@ class NotionTask < ApplicationRecord
   # WBS Excel 書き出し(NotionWbsExcelUpdater)で「修正後」として上書きしうる項目。
   # *_prev 列がこれに対応する(例: :title → title_prev)。
   OVERRIDE_FIELDS = %i[title assignee_name workload start_date end_date progress_rate].freeze
+
+  # LINE 報告の差分に使う前回同期値の列(NotionSyncService が書き、報告後に clear_reported_diffs! で消す)。
+  BEFORE_SYNC_FIELDS = %i[start_date end_date progress_rate status].freeze
 
   # NotionWbsExcelUpdater の赤塗り判定で「テンプレと比較できる項目→WbsScheduleCellParser の kind」の対応。
   # title/assignee_name はテンプレ側(E〜H列のみ)に対応するセルが無いため比較対象外(常に「異なる」扱い)。
@@ -36,10 +45,10 @@ class NotionTask < ApplicationRecord
     "https://www.notion.so/#{NotionClient::PAGE_ID.delete('-')}?v=#{NotionClient::COLLECTION_VIEW_ID.delete('-')}&p=#{notion_block_id.to_s.delete('-')}&pm=s"
   end
 
-  # LINE 報告済みの変更差分(*_prev)をクリアする。次回の報告では「変更なし」として現在値だけが出る。
-  # 注意: シート書き出し(NotionTaskExporter)の「修正前」列も未報告の変更だけが載るようになる。
+  # LINE 報告済みの前回同期値(*_before_sync)をクリアする。次回の報告では「変更なし」として現在値だけが出る。
+  # WBS の「修正後」(*_prev)は報告とは無関係なので消さない。
   def clear_reported_diffs!
-    update!(start_date_prev: nil, end_date_prev: nil, progress_rate_prev: nil, status_prev: nil)
+    update!(BEFORE_SYNC_FIELDS.to_h { |field| [ :"#{field}_before_sync", nil ] })
   end
 
   # WBS Excel 書き出し(NotionWbsExcelUpdater)向けの実効値。
