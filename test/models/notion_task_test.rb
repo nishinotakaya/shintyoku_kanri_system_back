@@ -89,10 +89,17 @@ class NotionTaskTest < Minitest::Test
     refute @task.red_cell?(:start_date, { start_date: Date.new(2026, 9, 25) })
   end
 
-  # red_cell?: 完了扱い(実効進捗率100%以上)のタスクは報告対象外として赤にしない
-  def test_red_cell_is_false_when_effective_progress_rate_is_complete
+  # red_cell?: 進捗率が 100% のタスクでも、未提出でテンプレと異なる修正後は赤にする
+  def test_red_cell_stays_true_when_effective_progress_rate_is_complete
     @task.update!(start_date_prev: Date.new(2026, 9, 20), progress_rate: 1.0)
 
-    refute @task.red_cell?(:start_date, { start_date: Date.new(2026, 9, 25) })
+    assert @task.red_cell?(:start_date, { start_date: Date.new(2026, 9, 25) })
+  end
+
+  # red_cell?: 「進捗率を 100% にした」という修正後そのものも赤にする
+  def test_red_cell_is_true_for_progress_rate_changed_to_complete
+    @task.update!(progress_rate: 0.8, progress_rate_prev: 1.0)
+
+    assert @task.red_cell?(:progress_rate, { progress_rate: 0.8 })
   end
 end

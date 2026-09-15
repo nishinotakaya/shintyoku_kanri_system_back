@@ -121,12 +121,10 @@ class NotionTask < ApplicationRecord
   end
 
   # WBS Excel 書き出し(NotionWbsExcelUpdater)でそのセルの背景を赤く塗るか。
-  # 「未提出の修正後があり」かつ「テンプレの値と異なる」場合だけ赤くする(テンプレと同じ値なら
-  # 出力しても見た目が変わらないため塗らない)。ただし完了扱い(進捗率100%以上)のタスクは
-  # 報告対象外として赤塗りしない(値の書き込み自体は行う)。
+  # 「未提出の修正後があり」かつ「テンプレの値と異なる」場合に赤くする(テンプレと同じ値なら
+  # 出力しても見た目が変わらないため塗らない)。進捗率が 100% になった変更も他の変更と同じく赤にする
+  # (以前は完了タスクを報告対象外として塗らなかったが、「100% にした」ことも報告したい変更なので撤廃)。
   def red_cell?(field, template_row)
-    return false if effective_progress_rate.to_f >= 1.0
-
     unsubmitted_override?(field) && template_differs?(field, template_row)
   end
 
