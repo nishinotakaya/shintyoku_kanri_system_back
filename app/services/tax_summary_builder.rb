@@ -2,6 +2,14 @@
 # 売上=承認済みの本人請求書(invoice_submissions) / 経費=business_expenses(家事按分後) / 減価償却=fixed_assets(定額法)。
 # TaxReportsController(JSON/CSV) と TaxReturnPdfRenderer(決算書PDF) の両方から使う。
 class TaxSummaryBuilder
+  # 免税事業者（インボイス未登録）からの課税仕入れに係る経過措置。
+  # 仕入税額相当額のうち控除できる割合: 2023/10〜2026/9=80% / 2026/10〜2029/9=50% / 2029/10〜=控除なし
+  # https://www.nta.go.jp/taxes/shiraberu/zeimokubetsu/shohi/keigenzeiritsu/invoice-review/index.htm
+  EXEMPT_SUPPLIER_DEDUCTION_SCHEDULE = [
+    [ Date.new(2026, 9, 30), 0.8 ],
+    [ Date.new(2029, 9, 30), 0.5 ]
+  ].freeze
+
   def self.call(user, year)
     new(user, year).call
   end
@@ -82,6 +90,26 @@ class TaxSummaryBuilder
     }
   end
 
+  # 免税事業者からの課税仕入れについて、指定の年月時点で適用される控除割合。
+  # 経過措置はインボイス制度開始(2023/10)からなので、それ以前の年月は呼び出し前提外（最初の帯の80%が返る）。
+  def exempt_supplier_deduction_rate(year, month)
+    period_start = Date.new(year, month, 1)
+    EXEMPT_SUPPLIER_DEDUCTION_SCHEDULE.find { |until_date, _rate| period_start <= until_date }&.last || 0.0
+  end
+
+  # @year の1〜12月を控除率ごとに連続区間へまとめたもの(画面表示用)。
+  # 例: 2026年 → [{ from_month: 1, to_month: 9, percent: 80 }, { from_month: 10, to_month: 12, percent: 50 }]
+  def exempt_supplier_deduction_bands
+    (1..12).chunk_while { |month_a, month_b| exempt_supplier_deduction_rate(@year, month_a) == exempt_supplier_deduction_rate(@year, month_b) }
+      .map do |months|
+        {
+          from_month: months.first,
+          to_month: months.last,
+          percent: (exempt_supplier_deduction_rate(@year, months.first) * 100).round
+        }
+      end
+  end
+
   private
 
   # 承認済み請求を admin の売上に合算 & 外注工賃で控除する対象パートナー。
@@ -118,16 +146,20 @@ class TaxSummaryBuilder
   # - special20: 2割特例/3割特例の納税見込み(売上税額×特例割合・百円未満切捨て)
   # - general_estimate: 一般課税の概算(売上税額 − 仕入税額控除)
   #   ※外注費の仕入税額控除は、パートナーの users.invoice_registered で判定:
-  #     登録済み(課税事業者)=100%控除 / 免税事業者=経過措置80%(〜2026/9)
+  #     登録済み(課税事業者)=100%控除 / 免税事業者=経過措置(〜2026/9=80% / 2026/10〜2029/9=50% / 以降=控除なし、請求月で判定)
   def consumption_tax_block(income_total, expenses)
     sales_tax = (income_total * 10 / 110.0).floor
     taxable_expenses = expenses.select { |e| e.tax_rate.to_i.positive? }.sum(&:deductible_amount)
     expense_tax = (taxable_expenses * 10 / 110.0).floor
 
-    # 外注費の税額はパートナーごとにインボイス登録の有無で控除率を分ける
+    # 外注費の税額はパートナーごとにインボイス登録の有無で控除率を分ける(免税事業者は請求月の経過措置控除率を適用)。
+    # subcontract_incomes は year: @year で絞っているので、submission の年は @year と一致する前提。
     subcontract_tax = subcontract_incomes.group_by(&:user).sum do |partner, submissions|
-      tax = (submissions.sum { |s| s.total_override.to_i } * 10 / 110.0).floor
-      partner.invoice_registered? ? tax : (tax * 0.8).floor
+      submissions.sum do |submission|
+        tax = (submission.total_override.to_i * 10 / 110.0).floor
+        next tax if partner.invoice_registered?
+        (tax * exempt_supplier_deduction_rate(@year, submission.month)).floor
+      end
     end
 
     purchase_tax = expense_tax + subcontract_tax
@@ -153,6 +185,7 @@ class TaxSummaryBuilder
       general_estimate: general_estimate,
       recommended: special20 <= general_estimate ? "special20" : "general",
       partner_invoice_registered: subcontract_incomes.map(&:user).uniq.all?(&:invoice_registered?),
+      exempt_supplier_deduction_bands: exempt_supplier_deduction_bands,
       # 消費税申告書(2割特例)の記載値
       breakdown: {
         taxable_base_raw: taxable_base_raw,
