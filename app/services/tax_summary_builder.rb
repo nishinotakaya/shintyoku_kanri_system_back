@@ -3,11 +3,14 @@
 # TaxReportsController(JSON/CSV) と TaxReturnPdfRenderer(決算書PDF) の両方から使う。
 class TaxSummaryBuilder
   # 免税事業者（インボイス未登録）からの課税仕入れに係る経過措置。
-  # 仕入税額相当額のうち控除できる割合: 2023/10〜2026/9=80% / 2026/10〜2029/9=50% / 2029/10〜=控除なし
+  # 仕入税額相当額のうち控除できる割合(令和8年度税制改正で 50% への引き下げが緩和・段階化された):
+  #   2023/10〜2026/9=80% / 2026/10〜2028/9=70% / 2028/10〜2030/9=50% / 2030/10〜2031/9=30% / 2031/10〜=控除なし
   # https://www.nta.go.jp/taxes/shiraberu/zeimokubetsu/shohi/keigenzeiritsu/invoice-review/index.htm
   EXEMPT_SUPPLIER_DEDUCTION_SCHEDULE = [
     [ Date.new(2026, 9, 30), 0.8 ],
-    [ Date.new(2029, 9, 30), 0.5 ]
+    [ Date.new(2028, 9, 30), 0.7 ],
+    [ Date.new(2030, 9, 30), 0.5 ],
+    [ Date.new(2031, 9, 30), 0.3 ]
   ].freeze
 
   def self.call(user, year)
@@ -98,7 +101,7 @@ class TaxSummaryBuilder
   end
 
   # @year の1〜12月を控除率ごとに連続区間へまとめたもの(画面表示用)。
-  # 例: 2026年 → [{ from_month: 1, to_month: 9, percent: 80 }, { from_month: 10, to_month: 12, percent: 50 }]
+  # 例: 2026年 → [{ from_month: 1, to_month: 9, percent: 80 }, { from_month: 10, to_month: 12, percent: 70 }]
   def exempt_supplier_deduction_bands
     (1..12).chunk_while { |month_a, month_b| exempt_supplier_deduction_rate(@year, month_a) == exempt_supplier_deduction_rate(@year, month_b) }
       .map do |months|
