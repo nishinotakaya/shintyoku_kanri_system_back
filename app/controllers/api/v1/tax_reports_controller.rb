@@ -21,20 +21,18 @@ module Api
         year = target_year
         deduction = params[:deduction].presence&.to_i || 650_000
         renderer = OfficialTaxFormRenderer.new(current_user, year: year, deduction: deduction)
+        # 個人番号を含む PDF はサーバのディスクに残さない(レンダラーがメモリ上でバイト列を返す)
         case params[:doc]
         when "shinkokusho"
-          path = renderer.render_shinkokusho
+          pdf_bytes = renderer.render_shinkokusho
           filename = "確定申告書第一表_#{year}年分.pdf"
         when "shohi"
-          path = renderer.render_shohi
+          pdf_bytes = renderer.render_shohi
           filename = "消費税申告書_#{year}年分.pdf"
         else
-          path = renderer.render_kessansho
+          pdf_bytes = renderer.render_kessansho
           filename = "青色申告決算書_#{year}年分.pdf"
         end
-        # 個人番号を含む PDF をサーバの tmp に残さないため、送信バイト列を読み込んだら即削除する
-        pdf_bytes = File.binread(path)
-        File.delete(path) if File.exist?(path)
         send_data pdf_bytes, type: "application/pdf", filename: filename, disposition: "attachment"
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity

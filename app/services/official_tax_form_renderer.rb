@@ -52,7 +52,8 @@ class OfficialTaxFormRenderer
 
   private
 
-  # 各ページの {tlfキー => {項目id => 値}} を Thinreports で1つのPDFにまとめる
+  # 各ページの {tlfキー => {項目id => 値}} を Thinreports で1つのPDFにまとめ、PDF のバイト列を返す。
+  # 個人番号を含むため、ファイルには書かずメモリ上で生成する(filename を渡さない generate は PDF 文字列を返す)。
   def render_pdf(pages, title:)
     report = Thinreports::Report.new
     pages.each do |layout_key, values|
@@ -62,11 +63,7 @@ class OfficialTaxFormRenderer
         end
       end
     end
-    out_dir = Rails.root.join("tmp/exports")
-    FileUtils.mkdir_p(out_dir)
-    pdf_path = out_dir.join("taxform_#{@user.id}_#{SecureRandom.hex(4)}.pdf").to_s
-    report.generate(filename: pdf_path, title: title)
-    pdf_path
+    report.generate(title: title)
   end
 
   def fmt(n) = n.to_i.zero? ? "" : n.to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
