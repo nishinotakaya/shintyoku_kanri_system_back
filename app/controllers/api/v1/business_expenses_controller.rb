@@ -9,7 +9,7 @@ module Api
 
       # GET /api/v1/business_expenses?month=YYYY-MM&account_category=
       def index
-        scope = current_user.business_expenses.order(expense_date: :desc, id: :desc)
+        scope = current_user.business_expenses.without_receipt_data.order(expense_date: :desc, id: :desc)
         scope = scope.in_month(params[:month])
         scope = scope.where(account_category: params[:account_category]) if params[:account_category].present?
         scope = scope.where(status: params[:status]) if params[:status].present?
@@ -242,7 +242,7 @@ module Api
           status: r.status,
           excluded_reason: r.excluded_reason,
           ai_confidence: r.ai_confidence,
-          has_receipt: r.receipt_data.present?,
+          has_receipt: r.receipt_attached?,
           payment_source: r.payment_source,
           payment_method: r.payment_method,
           freee_synced: r.freee_synced,

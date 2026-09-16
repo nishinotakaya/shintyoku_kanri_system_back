@@ -70,7 +70,7 @@ module Api
       end
 
       def year_expenses(year)
-        current_user.business_expenses.where(expense_date: Date.new(year, 1, 1)..Date.new(year, 12, 31))
+        current_user.business_expenses.without_receipt_data.where(expense_date: Date.new(year, 1, 1)..Date.new(year, 12, 31))
       end
 
       def build_summary(year)

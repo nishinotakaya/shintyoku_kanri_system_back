@@ -24,6 +24,14 @@ class BusinessExpense < ApplicationRecord
   # 集計(確定申告・月次サマリー・CSV)に含める経費 = 対象外を除いたもの
   scope :counted, -> { where.not(status: "excluded") }
 
+  # レシート画像(receipt_data)は 1 行で数 MB になるため、一覧・集計では BLOB 本体を読まない。
+  # 添付の有無だけを SQL で受け取り、画像本体は receipt アクションで 1 件ずつ読む。
+  # (全列で読むと 1 年分の集計で数百 MB を確保し、本番 1GB マシンが OOM で再起動した: 2026-09-16)
+  scope :without_receipt_data, -> {
+    select(column_names - [ "receipt_data" ])
+      .select("(receipt_data IS NOT NULL AND length(receipt_data) > 0) AS receipt_attached")
+  }
+
   scope :in_month, ->(year_month) {
     return all if year_month.blank?
     from = Date.strptime(year_month, "%Y-%m")
@@ -31,6 +39,15 @@ class BusinessExpense < ApplicationRecord
   }
 
   def excluded? = status == "excluded"
+
+  # without_receipt_data で読んだ行は SQL の判定結果(0/1)を、全列で読んだ行は BLOB の有無を返す
+  def receipt_attached?
+    if has_attribute?(:receipt_attached)
+      ActiveModel::Type::Boolean.new.cast(read_attribute(:receipt_attached))
+    else
+      receipt_data.present?
+    end
+  end
 
   # 経費計上額 = 税込金額 × 家事按分。対象外は 0 円
   def deductible_amount

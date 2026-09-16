@@ -27,7 +27,8 @@ class TaxSummaryBuilder
   # 開始月以降の承認済み請求は「西野の売上」に合算し、同額を「外注工賃」として経費計上する。
 
   def call
-    expenses = @user.business_expenses.counted.where(expense_date: Date.new(@year, 1, 1)..Date.new(@year, 12, 31)).to_a
+    expenses = @user.business_expenses.without_receipt_data.counted
+                    .where(expense_date: Date.new(@year, 1, 1)..Date.new(@year, 12, 31)).to_a
     incomes = InvoiceSubmission.where(user_id: @user.id, kind: "invoice", status: "approved", year: @year).to_a
     subcontract = subcontract_incomes
     assets = @user.fixed_assets.to_a
