@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_15_090000) do
+ActiveRecord::Schema[8.0].define(version: 2026_09_15_121000) do
   create_table "backlog_activities", force: :cascade do |t|
     t.integer "user_id", null: false
     t.bigint "activity_id", null: false
@@ -150,6 +150,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_15_090000) do
     t.string "payment_method"
     t.boolean "freee_synced", default: false, null: false
     t.integer "freee_deal_id"
+    t.string "excluded_reason"
     t.index ["user_id", "expense_date"], name: "index_business_expenses_on_user_id_and_expense_date"
     t.index ["user_id", "import_hash"], name: "index_business_expenses_on_user_id_and_import_hash"
   end
@@ -917,6 +918,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_15_090000) do
     t.string "name_kana"
     t.text "work_categories"
     t.datetime "invitation_accepted_at"
+    t.text "my_number"
+    t.date "birth_date"
     t.index ["canva_oauth_state"], name: "index_users_on_canva_oauth_state"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["linked_user_id"], name: "index_users_on_linked_user_id"

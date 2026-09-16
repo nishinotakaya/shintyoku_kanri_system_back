@@ -13,6 +13,7 @@ Rails.application.routes.draw do
       get   "me", to: "me#show"
       patch "me", to: "me#update"
       post  "me/import_schedule", to: "me#import_schedule"
+      post  "me/my_number_card/read", to: "me#read_my_number_card" # マイナンバーカード画像→AI読取(保存はしない)
       get   "users/pickable", to: "me#pickable_users"
 
       # admin: ユーザー一覧 + 新規作成 + 招待メール + 権限/管理割当の更新

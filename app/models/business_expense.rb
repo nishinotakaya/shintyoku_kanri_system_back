@@ -12,12 +12,17 @@ class BusinessExpense < ApplicationRecord
     "車両費", "雑費"
   ].freeze
 
-  STATUSES = %w[needs_review confirmed].freeze
+  # needs_review=AI読取直後の要確認 / confirmed=確定 / excluded=対象外(事業関連性が薄いなど、行は残して集計から外す)。
+  # excluded は削除の代わり。freee 取込は import_hash で重複判定するため、削除すると次回取込で復活してしまう。
+  STATUSES = %w[needs_review confirmed excluded].freeze
 
   validates :status, inclusion: { in: STATUSES }
   validates :tax_rate, inclusion: { in: [ 0, 8, 10 ] }
   validates :business_ratio, numericality: { only_integer: true, in: 1..100 }
   validates :account_category, inclusion: { in: ACCOUNT_CATEGORIES }, allow_nil: true
+
+  # 集計(確定申告・月次サマリー・CSV)に含める経費 = 対象外を除いたもの
+  scope :counted, -> { where.not(status: "excluded") }
 
   scope :in_month, ->(year_month) {
     return all if year_month.blank?
@@ -25,8 +30,11 @@ class BusinessExpense < ApplicationRecord
     where(expense_date: from..from.end_of_month)
   }
 
-  # 経費計上額 = 税込金額 × 家事按分
+  def excluded? = status == "excluded"
+
+  # 経費計上額 = 税込金額 × 家事按分。対象外は 0 円
   def deductible_amount
+    return 0 if excluded?
     (amount.to_i * business_ratio / 100.0).round
   end
 end

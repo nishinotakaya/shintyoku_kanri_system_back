@@ -85,14 +85,14 @@
       "display": true,
       "description": "",
       "x": 285.7,
-      "y": 240.9,
+      "y": 238.4,
       "width": 142.9,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -117,14 +117,14 @@
       "display": true,
       "description": "",
       "x": 437.5,
-      "y": 240.9,
+      "y": 238.4,
       "width": 114.3,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -149,14 +149,14 @@
       "display": true,
       "description": "",
       "x": 285.7,
-      "y": 282.7,
+      "y": 280.2,
       "width": 142.9,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -181,14 +181,14 @@
       "display": true,
       "description": "",
       "x": 437.5,
-      "y": 282.7,
+      "y": 280.2,
       "width": 114.3,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -213,14 +213,14 @@
       "display": true,
       "description": "",
       "x": 285.7,
-      "y": 334.5,
+      "y": 332.1,
       "width": 142.9,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -245,14 +245,14 @@
       "display": true,
       "description": "",
       "x": 437.5,
-      "y": 334.5,
+      "y": 332.1,
       "width": 114.3,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -277,14 +277,14 @@
       "display": true,
       "description": "",
       "x": 285.7,
-      "y": 478.1,
+      "y": 475.6,
       "width": 142.9,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -309,14 +309,14 @@
       "display": true,
       "description": "",
       "x": 437.5,
-      "y": 478.1,
+      "y": 475.6,
       "width": 114.3,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -341,14 +341,14 @@
       "display": true,
       "description": "",
       "x": 285.7,
-      "y": 578.4,
+      "y": 575.9,
       "width": 142.9,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",
@@ -373,14 +373,14 @@
       "display": true,
       "description": "",
       "x": 437.5,
-      "y": 578.4,
+      "y": 575.9,
       "width": 114.3,
-      "height": 12.0,
+      "height": 16.4,
       "style": {
         "font-family": [
           "Helvetica"
         ],
-        "font-size": 8.3,
+        "font-size": 11.3,
         "color": "#000000",
         "text-align": "right",
         "vertical-align": "top",

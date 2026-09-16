@@ -32,7 +32,10 @@ module Api
           path = renderer.render_kessansho
           filename = "青色申告決算書_#{year}年分.pdf"
         end
-        send_file path, type: "application/pdf", filename: filename, disposition: "attachment"
+        # 個人番号を含む PDF をサーバの tmp に残さないため、送信バイト列を読み込んだら即削除する
+        pdf_bytes = File.binread(path)
+        File.delete(path) if File.exist?(path)
+        send_data pdf_bytes, type: "application/pdf", filename: filename, disposition: "attachment"
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -98,10 +101,12 @@ module Api
       # 経費明細CSV: 日付/科目/店名/金額/按分/計上額/税率/取込元
       def details_csv(year)
         CSV.generate do |csv|
-          csv << [ "日付", "勘定科目", "店名・支払先", "税込金額", "事業割合(%)", "計上額", "税率(%)", "メモ", "取込元" ]
+          # 対象外(excluded)の行も根拠として残す(計上額は 0、状態列に「対象外: 理由」)
+          csv << [ "日付", "勘定科目", "店名・支払先", "税込金額", "事業割合(%)", "計上額", "税率(%)", "メモ", "取込元", "状態" ]
           year_expenses(year).order(:expense_date).each do |e|
             csv << [ e.expense_date, e.account_category || "未分類", e.store_name, e.amount, e.business_ratio,
-                     e.deductible_amount, e.tax_rate, e.memo, e.source == "csv" ? "明細CSV" : "レシート" ]
+                     e.deductible_amount, e.tax_rate, e.memo, e.source == "csv" ? "明細CSV" : "レシート",
+                     e.excluded? ? "対象外: #{e.excluded_reason}" : "" ]
           end
         end
       end

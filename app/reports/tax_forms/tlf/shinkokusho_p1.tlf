@@ -1136,6 +1136,614 @@
       }
     },
     {
+      "id": "my_number_d0",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 394.2,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d1",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 379.9,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d2",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 365.6,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d3",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 351.2,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d4",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 336.9,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d5",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 322.6,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d6",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 308.2,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d7",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 293.9,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d8",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 279.6,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d9",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 265.2,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d10",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 250.9,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "my_number_d11",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 236.6,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "birth_era_d0",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 433.9,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "birth_year_d0",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 469.1,
+      "y": 57.9,
+      "width": 14.4,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "birth_year_d1",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 454.7,
+      "y": 57.9,
+      "width": 14.4,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "birth_month_d0",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 504.9,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "birth_month_d1",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 490.6,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "birth_day_d0",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 540.9,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
+      "id": "birth_day_d1",
+      "type": "text-block",
+      "display": true,
+      "description": "",
+      "x": 526.6,
+      "y": 57.9,
+      "width": 14.3,
+      "height": 17.4,
+      "style": {
+        "font-family": [
+          "Helvetica"
+        ],
+        "font-size": 12.0,
+        "color": "#000000",
+        "text-align": "center",
+        "vertical-align": "top",
+        "line-height": "",
+        "line-height-ratio": "",
+        "letter-spacing": "",
+        "font-style": [],
+        "overflow": "truncate",
+        "word-wrap": "none"
+      },
+      "reference-id": "",
+      "value": "",
+      "multiple-line": false,
+      "format": {
+        "base": "",
+        "type": ""
+      }
+    },
+    {
       "id": "income_total_d0",
       "type": "text-block",
       "display": true,

@@ -158,6 +158,13 @@ module TaxFormTlfLayouts
     combs << { id: :wareki, x_right: 34.27, pitch: 2.401, cells: 2, size: 22, y: 5.035 } # 「令和[ ][ ]年分」(背景PNGの07は消去済み)
     combs << { id: :zip_a, x_right: 21.73, pitch: 2.401, cells: 3, size: 17, y: 7.36 } # 〒上3桁
     combs << { id: :zip_b, x_right: 32.57, pitch: 2.401, cells: 4, size: 17, y: 7.36 } # 〒下4桁
+    # 個人番号(12マス)と生年月日(元号コード1マス・年2・月2・日2)。〒と同じ行(枠 y 6.60〜8.33%)、
+    # マス境界はオレンジ枠の縦線走査値(39.82〜68.54% / 73.01〜93.13%)から中心を算出
+    combs << { id: :my_number,   x_right: 67.43, pitch: 2.408, cells: 12, size: 16, y: 7.42 }
+    combs << { id: :birth_era,   x_right: 74.09, pitch: 2.40,  cells: 1,  size: 16, y: 7.42 } # 明治1/大正2/昭和3/平成4/令和5
+    combs << { id: :birth_year,  x_right: 80.01, pitch: 2.42,  cells: 2,  size: 16, y: 7.42 }
+    combs << { id: :birth_month, x_right: 86.01, pitch: 2.40,  cells: 2,  size: 16, y: 7.42 }
+    combs << { id: :birth_day,   x_right: 92.06, pitch: 2.40,  cells: 2,  size: 16, y: 7.42 }
     combs << left_grid.merge(id: :income_total,        y: 20.26)          # (ア)営業等収入
     combs << left_grid.merge(id: :business_income,     y: 42.52)          # ①事業所得
     combs << left_grid.merge(id: :total_income,        y: 64.78)          # ⑫合計
@@ -191,7 +198,7 @@ module TaxFormTlfLayouts
     f << { id: :year_to,   x: 13.7, y: 29.9, w: 3.0, size: 13 }
     # 十兆〜一円の14マス。e-Tax印字と同じ大きさ(15.5)・位置
     grid = { x_right: 55.20, pitch: 2.468, cells: 14, size: 16.7 }
-    combs = []
+    combs = [ { id: :my_number, x_right: 46.67, pitch: 2.457, cells: 12, size: 16, y: 18.40 } ] # 個人番号(屋号と氏名の間)
     {
       taxable_base: 36.92, national_tax: 39.00, deduction: 43.44, deduction_sum: 49.94,
       national_payment_9: 54.35, national_payment_11: 58.68, local_base_18: 76.08,
@@ -207,8 +214,9 @@ module TaxFormTlfLayouts
     f << { id: :tel_a, x: 31.26, y: 11.79, w: 4.5, size: 10.5, align: :center }
     f << { id: :tel_b, x: 38.11, y: 11.79, w: 4.5, size: 10.5, align: :center }
     f << { id: :tel_c, x: 45.69, y: 11.79, w: 4.5, size: 10.5, align: :center }
-    f << { id: :name_kana, x: 14.8, y: 16.68, w: 25.0, size: 9.5, ja: true } # 氏名の(フリガナ)点線上
-    f << { id: :name,  x: 14.76, y: 18.85, w: 30.0, size: 14, ja: true }
+    # 氏名行は 17.3〜22.2%。フリガナは行内上部(「(フリガナ)」ラベルの高さ)、氏名はその下
+    f << { id: :name_kana, x: 14.8, y: 17.60, w: 25.0, size: 9.5, ja: true }
+    f << { id: :name,  x: 14.76, y: 19.75, w: 30.0, size: 14, ja: true }
     f << { id: :year_from, x: 14.2, y: 25.3, w: 3.0, size: 13 }
     f << { id: :year_to,   x: 14.2, y: 29.7, w: 3.0, size: 13 }
     grid = { x_right: 90.85, pitch: 2.468, cells: 14, size: 16.7 }
@@ -226,10 +234,11 @@ module TaxFormTlfLayouts
     f = []
     f << { id: :period, x: 33.8, y: 13.0, w: 25.0, size: 11, ja: true }
     f << { id: :name, x: 56.45, y: 12.98, w: 25.0, size: 14, ja: true }
-    # 各セルとも e-Tax 印字の位置(セル下部・右寄せ)に合わせている
-    { raw_1: 28.44, base_2: 33.40, tax_3: 39.56, basis_6: 56.61, special_deduction_7: 68.52 }.each do |id, y|
-      f << { id: :"#{id}_b", x: 48.0, y: y, w: 24.0, size: 11, align: :right }
-      f << { id: :"#{id}_c", x: 73.5, y: y, w: 19.2, size: 11, align: :right }
+    # 各セルとも e-Tax 印字の位置(セル下部・右寄せ)に合わせている。
+    # e-Tax 印字(size 11 相当)は読みづらいので 15 に拡大し、下端が変わらないよう上端を 0.36% 上げた
+    { raw_1: 28.08, base_2: 33.04, tax_3: 39.20, basis_6: 56.25, special_deduction_7: 68.16 }.each do |id, y|
+      f << { id: :"#{id}_b", x: 48.0, y: y, w: 24.0, size: 15, align: :right }
+      f << { id: :"#{id}_c", x: 73.5, y: y, w: 19.2, size: 15, align: :right }
     end
     pages[:shohi_p3] = { image: "shohi_p3.png", orientation: "portrait", fields: f, combs: [] }
 

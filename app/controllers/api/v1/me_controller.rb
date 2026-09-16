@@ -14,8 +14,36 @@ module Api
       end
 
       def update
+        # 個人番号(my_number)/生年月日(birth_date)は、確定申告PDF(admin=西野専用)にしか使わない。
+        # 他ユーザーの個人番号をサーバに保管しないため、admin 以外からの登録は丸ごと拒否する
+        # (キーだけ無視して残りを更新すると「送ったのに保存されない」事故になるため 403 で止める)。
+        if my_number_fields_requested? && !current_user.admin?
+          return render(json: { error: "個人番号の登録は管理者(本人)のみ利用できます" }, status: :forbidden)
+        end
+
         current_user.update!(me_params)
         render json: payload
+      end
+
+      # POST /api/v1/me/my_number_card/read (multipart: files[]=マイナンバーカード表裏。file 単体も可)
+      # 保存はしない(保存は update の my_number / birth_date params で行う)。
+      # 確定申告PDF(admin専用)にしか使わないため、admin 以外は利用不可(他ユーザーの個人番号を扱わない)。
+      def read_my_number_card
+        unless current_user.admin?
+          return render(json: { error: "個人番号の登録は管理者(本人)のみ利用できます" }, status: :forbidden)
+        end
+
+        files = Array(params[:files]).presence || Array(params[:file])
+        files = files.select { |file| file.respond_to?(:read) }
+        return render(json: { error: "マイナンバーカードの画像を添付してください" }, status: :unprocessable_entity) if files.blank?
+
+        images = files.map { |file| { bytes: file.read, content_type: file.respond_to?(:content_type) ? file.content_type : "image/jpeg" } }
+        result = MyNumberCardReader.call(images)
+        return render(json: { error: result[:error] }, status: :unprocessable_entity) if result[:error]
+
+        render json: result
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       def import_schedule
@@ -29,13 +57,25 @@ module Api
 
       private
 
+      # params[:user] に my_number / birth_date のキー自体が含まれているか(値の有無は問わない)。
+      # 空文字での「消去」リクエストも admin 以外からは弾く。
+      def my_number_fields_requested?
+        raw = params[:user]
+        return false unless raw.respond_to?(:key?)
+        raw.key?(:my_number) || raw.key?(:birth_date)
+      end
+
       def me_params
-        params.require(:user).permit(:display_name, :company_name, :openai_api_key, :heygen_api_key,
+        permitted = params.require(:user).permit(:display_name, :company_name, :openai_api_key, :heygen_api_key,
           :trello_api_key, :trello_api_token, :trello_board_id, :video_script_context, :closing_day,
           :default_transit_from, :default_transit_to, :default_transit_fee, :default_transit_line,
           :postal_code, :address, :tax_office, :name_kana, :attendance_schedule_url, :progress_sheet_url, :local_save_dir, :dev_language, :gender,
+          :my_number, :birth_date,
           custom_off_days: [], commute_days: [],
           transit_routes: [ :from, :to, :fee, :line ])
+        # date型に空文字を渡すと invalid date エラーになるため、明示的に nil にする(my_number は normalizes 側で処理)
+        permitted[:birth_date] = nil if permitted.key?(:birth_date) && permitted[:birth_date].blank?
+        permitted
       end
 
       def payload
@@ -64,6 +104,11 @@ module Api
           address: current_user.address,
           tax_office: current_user.tax_office,
           name_kana: current_user.try(:name_kana), # migrate前でも落ちないようtry
+          # 個人番号そのものは返さない。登録有無と末尾4桁だけ。admin以外は他ユーザーの個人番号を
+          # サーバに保管しない方針のため、そもそも常に未登録(nil/false)として返す
+          my_number_registered: current_user.admin? && current_user.my_number.present?,
+          my_number_last4: current_user.admin? ? current_user.my_number_last4 : nil,
+          birth_date: current_user.admin? ? current_user.birth_date&.iso8601 : nil,
 
           attendance_schedule_url: current_user.attendance_schedule_url,
           progress_sheet_url: current_user.progress_sheet_url,

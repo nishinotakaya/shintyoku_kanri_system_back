@@ -47,6 +47,13 @@ class User < ApplicationRecord
   has_many :managees, through: :manager_assignments, source: :managee
   has_many :managed_by_assignments, class_name: "ManagerAssignment", foreign_key: :managee_id, dependent: :destroy
 
+  # マイナンバーカード撮影→AI読取で取得した個人番号。他の連携キーと同様に暗号化して保存する。
+  encrypts :my_number
+  # 保存前に全角数字→半角・数字以外除去まで揃える(表記ゆれのまま保存しない)。
+  normalizes :my_number, with: ->(raw) { MyNumber.normalize(raw) }
+  validate :my_number_must_be_valid
+  validate :birth_date_must_be_in_the_past
+
   # 機能フラグ (例: {"skill_sheet" => true})。SQLite なので text + serialize JSON。
   serialize :feature_flags, coder: JSON, type: Hash
   # カレンダーで予定行を出す人物名。空 = 既定メンバー
@@ -427,6 +434,12 @@ class User < ApplicationRecord
     user
   end
 
+  # 個人番号の末尾4桁(API レスポンス・画面表示用)。個人番号全体は返さない。
+  def my_number_last4
+    return nil if my_number.blank?
+    MyNumber.last4(my_number)
+  end
+
   private
 
   # work_categories の各要素が WorkReport::CATEGORIES に含まれるか。nil/空配列は許容(=従来どおり全カテゴリ)。
@@ -435,5 +448,17 @@ class User < ApplicationRecord
     unknown = Array(work_categories) - WorkReport::CATEGORIES
     return if unknown.empty?
     errors.add(:work_categories, "に不正なカテゴリが含まれています: #{unknown.join(', ')}")
+  end
+
+  def my_number_must_be_valid
+    return if my_number.blank?
+    return if MyNumber.valid?(my_number)
+    errors.add(:my_number, "個人番号の桁数またはチェックデジットが正しくありません")
+  end
+
+  def birth_date_must_be_in_the_past
+    return if birth_date.blank?
+    return if birth_date <= Date.current
+    errors.add(:birth_date, "は未来の日付を指定できません")
   end
 end

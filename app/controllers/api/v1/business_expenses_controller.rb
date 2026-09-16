@@ -49,8 +49,11 @@ module Api
 
       # PATCH /api/v1/business_expenses/:id
       def update
-        attrs = params.permit(:expense_date, :store_name, :amount, :tax_rate, :account_category, :memo, :business_ratio, :status)
-        @record.update!(attrs.to_h.compact_blank.merge(params[:memo] ? { memo: params[:memo].to_s } : {}))
+        attrs = params.permit(:expense_date, :store_name, :amount, :tax_rate, :account_category, :memo, :business_ratio, :status, :excluded_reason)
+        updates = attrs.to_h.compact_blank.merge(params[:memo] ? { memo: params[:memo].to_s } : {})
+        # 対象外を解除(confirmed 等に戻す)したら理由も消す
+        updates[:excluded_reason] = nil if updates[:status].present? && updates[:status] != "excluded"
+        @record.update!(updates)
         render json: serialize(@record)
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -208,15 +211,19 @@ module Api
         @record = current_user.business_expenses.find(params[:id])
       end
 
+      # 一覧には対象外(excluded)も返すが、金額の集計からは外す
       def summarize(records)
-        by_category = records.group_by(&:account_category).map do |category, rows|
+        counted_records = records.reject(&:excluded?)
+        by_category = counted_records.group_by(&:account_category).map do |category, rows|
           { category: category || "未分類", total: rows.sum(&:deductible_amount), count: rows.size }
         end.sort_by { |row| -row[:total] }
         {
-          total: records.sum { |r| r.amount.to_i },
-          deductible_total: records.sum(&:deductible_amount),
-          count: records.size,
-          needs_review_count: records.count { |r| r.status == "needs_review" },
+          total: counted_records.sum { |r| r.amount.to_i },
+          deductible_total: counted_records.sum(&:deductible_amount),
+          count: counted_records.size,
+          needs_review_count: counted_records.count { |r| r.status == "needs_review" },
+          excluded_count: records.count(&:excluded?),
+          excluded_total: records.select(&:excluded?).sum { |r| r.amount.to_i },
           by_category: by_category
         }
       end
@@ -233,6 +240,7 @@ module Api
           business_ratio: r.business_ratio,
           deductible_amount: r.deductible_amount,
           status: r.status,
+          excluded_reason: r.excluded_reason,
           ai_confidence: r.ai_confidence,
           has_receipt: r.receipt_data.present?,
           payment_source: r.payment_source,

@@ -30,18 +30,19 @@ class OfficialTaxFormRenderer
     @setting = user.invoice_setting_for("wings")
   end
 
+  # title は PDF の Title メタデータ。ブラウザのタブ名・保存時のファイル名候補になる(既定だと .tlf 名の "shohi_p1" が出ていた)
   def render_kessansho
-    render_pdf(kessansho_p1: kessansho_p1_values,
-               kessansho_p2: kessansho_p2_values,
-               kessansho_p3: kessansho_p3_values)
+    render_pdf({ kessansho_p1: kessansho_p1_values,
+                 kessansho_p2: kessansho_p2_values,
+                 kessansho_p3: kessansho_p3_values }, title: "青色申告決算書_#{@year}年分")
   end
 
   def render_shinkokusho
-    render_pdf(shinkokusho_p1: shinkokusho_values)
+    render_pdf({ shinkokusho_p1: shinkokusho_values }, title: "確定申告書 第一表_#{@year}年分")
   end
 
   def render_shohi
-    render_pdf(shohi_p1: shohi_p1_values, shohi_p2: shohi_p2_values, shohi_p3: shohi_p3_values)
+    render_pdf({ shohi_p1: shohi_p1_values, shohi_p2: shohi_p2_values, shohi_p3: shohi_p3_values }, title: "消費税申告書_#{@year}年分")
   end
 
   # === 集計値 ===
@@ -52,7 +53,7 @@ class OfficialTaxFormRenderer
   private
 
   # 各ページの {tlfキー => {項目id => 値}} を Thinreports で1つのPDFにまとめる
-  def render_pdf(pages)
+  def render_pdf(pages, title:)
     report = Thinreports::Report.new
     pages.each do |layout_key, values|
       report.start_new_page(layout: TLF_DIR.join("#{layout_key}.tlf").to_s) do |page|
@@ -64,7 +65,7 @@ class OfficialTaxFormRenderer
     out_dir = Rails.root.join("tmp/exports")
     FileUtils.mkdir_p(out_dir)
     pdf_path = out_dir.join("taxform_#{@user.id}_#{SecureRandom.hex(4)}.pdf").to_s
-    report.generate(filename: pdf_path)
+    report.generate(filename: pdf_path, title: title)
     pdf_path
   end
 
@@ -165,6 +166,34 @@ class OfficialTaxFormRenderer
     end
   end
 
+  # 個人番号(12桁)を1マス1桁で。未登録なら空欄のまま(users.my_number は暗号化保存・admin 本人のみ)
+  def my_number_combs(page_key)
+    digits = @user.try(:my_number).to_s
+    return {} unless digits.match?(/\A\d{12}\z/)
+    comb(page_key, :my_number, digits)
+  end
+
+  # 第一表の生年月日マス: 元号コード(明治1/大正2/昭和3/平成4/令和5)1マス + 年2 + 月2 + 日2(ゼロ埋め)
+  JAPANESE_ERAS = [
+    [ Date.new(2019, 5, 1), 5, 2019 ], # 令和
+    [ Date.new(1989, 1, 8), 4, 1989 ], # 平成
+    [ Date.new(1926, 12, 25), 3, 1926 ], # 昭和
+    [ Date.new(1912, 7, 30), 2, 1912 ], # 大正
+    [ Date.new(1868, 1, 25), 1, 1868 ]  # 明治
+  ].freeze
+
+  def birth_date_combs
+    birth_date = @user.try(:birth_date)
+    return {} if birth_date.blank?
+    era = JAPANESE_ERAS.find { |starts_on, _code, _first_year| birth_date >= starts_on }
+    return {} unless era
+    _starts_on, era_code, era_first_year = era
+    comb(:shinkokusho_p1, :birth_era, era_code.to_s)
+      .merge(comb(:shinkokusho_p1, :birth_year, format("%02d", birth_date.year - era_first_year + 1)))
+      .merge(comb(:shinkokusho_p1, :birth_month, format("%02d", birth_date.month)))
+      .merge(comb(:shinkokusho_p1, :birth_day, format("%02d", birth_date.day)))
+  end
+
   # 郵便番号を第一表の〒マス(3桁+4桁)へ。7桁が取れない場合は空欄のまま
   def postal_code_combs
     digits = (@user.postal_code.presence || @setting&.postal_code).to_s.delete("^0-9")
@@ -247,6 +276,8 @@ class OfficialTaxFormRenderer
       .merge(tel_values)
       .merge(postal_code_combs)
       .merge(name_kana_cells)
+      .merge(my_number_combs(:shinkokusho_p1))
+      .merge(birth_date_combs)
       .merge(
       comb(:shinkokusho_p1, :wareki, format("%02d", wareki)),
       comb(:shinkokusho_p1, :income_total, @summary[:income_total]),
@@ -275,6 +306,7 @@ class OfficialTaxFormRenderer
       submit_year: today.year - 2018, submit_month: today.month, submit_day: today.day,
       tax_office: @user.tax_office, address: taxpayer_address, name: @user.display_name, name_kana: user_name_kana }
       .merge(tel_values)
+      .merge(my_number_combs(:shohi_p1))
       .merge(
       comb(:shohi_p1, :taxable_base, ct[:taxable_base]),
       comb(:shohi_p1, :national_tax, ct[:national_tax]),
