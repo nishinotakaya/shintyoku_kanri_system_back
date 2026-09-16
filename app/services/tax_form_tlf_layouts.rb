@@ -59,8 +59,8 @@ module TaxFormTlfLayouts
     f = []
     f << { id: :address, x: 38.92, y: 12.89, w: 18.5, size: 11, ja: true, lines: 2 }
     f << { id: :doujou,  x: 38.92, y: 18.37, w: 8.0,  size: 11, ja: true }  # 事業所所在地「同上」
-    f << { id: :name_kana, x: 62.4, y: 13.4, w: 12.0, size: 9, ja: true }   # 氏名欄上部のフリガナ
-    f << { id: :name,    x: 62.05, y: 14.69, w: 14.5, size: 14, ja: true }
+    f << { id: :name_kana, x: 62.9, y: 13.4, w: 12.0, size: 9, ja: true }   # 氏名欄上部のフリガナ
+    f << { id: :name,    x: 62.55, y: 14.69, w: 14.5, size: 14, ja: true }   # 罫線ぎわに寄らないよう 0.5% 内側
     f << { id: :job,     x: 38.90, y: 23.15, w: 7.4, size: 5.5, ja: true, fit: true } # 業種名(屋号欄に食み出さないよう幅=セル幅・縮小フィット)
     f << { id: :tel,     x: 66.10, y: 17.12, w: 9.0, size: 11 }
     # 提出日「令和[ ]年[ ]月[ ]日」(損益計算書タイトル左)
@@ -72,9 +72,11 @@ module TaxFormTlfLayouts
     f << { id: :from_day,   x: 58.19, y: 30.99, w: 3.0, size: 19, align: :center }
     f << { id: :to_month,   x: 64.17, y: 30.99, w: 3.0, size: 19, align: :center }
     f << { id: :to_day,     x: 69.13, y: 30.99, w: 3.0, size: 19, align: :center }
-    left_grid  = { x_right: 35.04, pitch: 1.635, cells: 7, size: 16.2, overflow: { x: 22.74, w: 3.13 } }
-    mid_grid   = { x_right: 63.22, pitch: 1.630, cells: 7, size: 16.2, overflow: { x: 50.71, w: 2.85 } }
-    right_grid = { x_right: 91.40, pitch: 1.624, cells: 7, size: 16.2, overflow: { x: 79.09, w: 3.13 } }
+    # x_right / pitch は背景PNGのマス内側(白)の中心と、描画した数字インクの重心が一致するよう再採寸(2026-09-16)。
+    # 描画インクはテキスト枠中心より約 1.5px 左に出るため、枠中心はマス中心の +1.5px に置いている
+    left_grid  = { x_right: 34.93, pitch: 1.654, cells: 7, size: 16.2, overflow: { x: 22.74, w: 3.13 } }
+    mid_grid   = { x_right: 63.11, pitch: 1.660, cells: 7, size: 16.2, overflow: { x: 50.71, w: 2.85 } }
+    right_grid = { x_right: 91.29, pitch: 1.652, cells: 7, size: 16.2, overflow: { x: 79.09, w: 3.13 } }
     combs = [ { id: :wareki, x_right: 41.82, pitch: 1.652, cells: 2, size: 22, y: 9.56 } ] # 令和[0][8]
     KESSANSHO_LEFT_ROWS.each { |id, y| combs << left_grid.merge(id: id, y: y) }
     KESSANSHO_MID_ROWS.each  { |id, y| combs << mid_grid.merge(id: id, y: y) }
