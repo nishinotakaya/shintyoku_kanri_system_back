@@ -150,7 +150,7 @@ class TaxSummaryBuilder
   # - special20: 2割特例/3割特例の納税見込み(売上税額×特例割合・百円未満切捨て)
   # - general_estimate: 一般課税の概算(売上税額 − 仕入税額控除)
   #   ※外注費の仕入税額控除は、パートナーの users.invoice_registered で判定:
-  #     登録済み(課税事業者)=100%控除 / 免税事業者=経過措置(〜2026/9=80% / 2026/10〜2029/9=50% / 以降=控除なし、請求月で判定)
+  #     登録済み(課税事業者)=100%控除 / 免税事業者=EXEMPT_SUPPLIER_DEDUCTION_SCHEDULE の経過措置(請求月で判定)
   def consumption_tax_block(income_total, expenses)
     sales_tax = (income_total * 10 / 110.0).floor
     taxable_expenses = expenses.select { |e| e.tax_rate.to_i.positive? }.sum(&:deductible_amount)
