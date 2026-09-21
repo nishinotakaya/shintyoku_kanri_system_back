@@ -30,17 +30,35 @@ module UserProvisioning
   # 招待リンク(署名付きトークン)の有効期限
   INVITATION_EXPIRY = 14.days
 
-  # テナントごとの「招待される人(メンバー)向け」操作手順書。
+  # テナントごとの「招待される人(メンバー)向け」冊子(操作手順書・トラブル別対応)。
   # 実体は frontend の public/manuals/ 配下(docs/manuals/build_web.py が生成)。
-  # 招待メールに PDF を添付し、スマホで読める Web 版のリンクも載せる。
+  # 招待メールに全冊の PDF を添付し、スマホで読める Web 版のリンクも冊子ごとに載せる。
   MEMBER_MANUALS = {
-    "HAUKUR運送" => {
-      label: "操作手順書（ドライバー用）",
-      web_path: "/manuals/haukur_driver.html",
-      pdf_path: "/manuals/haukur_driver.pdf",
-      pdf_filename: "操作手順書_ドライバー様向け.pdf"
-    }
+    "HAUKUR運送" => [
+      {
+        label: "操作手順書（ドライバー用）",
+        web_path: "/manuals/haukur_driver.html",
+        pdf_path: "/manuals/haukur_driver.pdf",
+        pdf_filename: "操作手順書_ドライバー様向け.pdf"
+      },
+      {
+        label: "トラブル別対応",
+        web_path: "/manuals/haukur_trouble.html",
+        pdf_path: "/manuals/haukur_trouble.pdf",
+        pdf_filename: "トラブル別対応_ドライバー様向け.pdf"
+      }
+    ]
   }.freeze
+
+  # 招待メール本文に載せる、冊子ごとの案内(添付の説明 + Web 版リンク)
+  def manual_section(manual)
+    <<~SECTION
+
+      ▼ #{manual[:label]}（このメールにPDFを添付しています）
+      スマホでそのまま読める Web 版はこちら:
+      #{frontend_url}#{manual[:web_path]}
+    SECTION
+  end
 
   def frontend_url
     ENV["FRONTEND_URL"].presence || "https://react-frontend-beige.vercel.app"
@@ -69,13 +87,8 @@ module UserProvisioning
     invite_token = invitee.signed_id(purpose: :invitation, expires_in: INVITATION_EXPIRY)
     invite_url = "#{frontend_url}/invite/#{invite_token}"
     tenant_name = inviter.owned_tenants.first&.name
-    manual = MEMBER_MANUALS[tenant_name]
-    manual_section = manual ? <<~SECTION : ""
-
-      ▼ #{manual[:label]}（このメールにPDFを添付しています）
-      スマホでそのまま読める Web 版はこちら:
-      #{frontend_url}#{manual[:web_path]}
-    SECTION
+    manuals = MEMBER_MANUALS.fetch(tenant_name, [])
+    manual_section = manuals.map { |manual| manual_section(manual) }.join
     subject = "【勤怠アプリ】#{inviter.display_name}さんから招待が届きました"
     body = <<~BODY
       #{invitee.display_name} 様
@@ -97,7 +110,7 @@ module UserProvisioning
       to: invitee.email,
       subject: subject,
       body: body,
-      attachments: [ manual && fetch_manual_pdf(manual) ].compact,
+      attachments: manuals.map { |manual| fetch_manual_pdf(manual) }.compact,
       from_name: inviter.display_name
     )
   end
