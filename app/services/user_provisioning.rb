@@ -39,13 +39,13 @@ module UserProvisioning
         label: "操作手順書（ドライバー用）",
         web_path: "/manuals/haukur_driver.html",
         pdf_path: "/manuals/haukur_driver.pdf",
-        pdf_filename: "操作手順書_ドライバー様向け.pdf"
+        pdf_filename: "HAUKUR運送_操作手順書_ドライバー様用.pdf"
       },
       {
         label: "トラブル別対応",
         web_path: "/manuals/haukur_trouble.html",
         pdf_path: "/manuals/haukur_trouble.pdf",
-        pdf_filename: "トラブル別対応_ドライバー様向け.pdf"
+        pdf_filename: "HAUKUR運送_トラブル別対応_ドライバー様用.pdf"
       }
     ]
   }.freeze

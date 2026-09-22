@@ -29,7 +29,7 @@ class UserProvisioningInviteTest < ActiveSupport::TestCase
     end
 
     assert_equal [ "/manuals/haukur_driver.pdf", "/manuals/haukur_trouble.pdf" ], fetched_pdf_paths
-    assert_equal [ "操作手順書_ドライバー様向け.pdf", "トラブル別対応_ドライバー様向け.pdf" ],
+    assert_equal [ "HAUKUR運送_操作手順書_ドライバー様用.pdf", "HAUKUR運送_トラブル別対応_ドライバー様用.pdf" ],
                  sent_mail[:attachments].map { |attachment| attachment[:filename] }
     assert_includes sent_mail[:body], "▼ 操作手順書（ドライバー用）（このメールにPDFを添付しています）"
     assert_includes sent_mail[:body], "▼ トラブル別対応（このメールにPDFを添付しています）"
