@@ -53,13 +53,16 @@ module Api
           return render json: { registered: true, business_expense_id: existing.id, message: "既に登録済み" }
         end
 
-        # 科目の決め方: ①画面で選んだ値 ②摘要(店名)からの判定 ③freeeの推奨科目。
-        # ②を③より先に見るのは、freee の推奨が Peatix/LINE/Amazon を「交際費」にするなど
-        # 当てにならず、海外SaaS(Anthropic/OpenAI等)ではそもそも空だから。
-        category = params[:account_category].to_s.presence
-        category ||= MerchantCategoryGuesser.call(txn.description)
-        category ||= Freee::ExpenseImporter::ACCOUNT_ALIASES[txn.suggested_account_item] || txn.suggested_account_item
-        category = nil unless BusinessExpense::ACCOUNT_CATEGORIES.include?(category)
+        # 科目の決め方: ①画面で明示的に選んだ値 ②摘要ルール→AI→freee推奨(ExpenseCategoryDecider)。
+        # 画面から何も指定されなければ AI が初期値を決める。確信度が低い判定は要確認で残す。
+        chosen = known_category(params[:account_category])
+        decision = chosen ? nil : ExpenseCategoryDecider.call([ {
+          date: txn.txn_date&.iso8601,
+          description: txn.description,
+          amount: txn.amount,
+          fallback_category: Freee::ExpenseImporter::ACCOUNT_ALIASES[txn.suggested_account_item] || txn.suggested_account_item
+        } ]).first
+        category = chosen || decision&.account_category
 
         expense = current_user.business_expenses.create!(
           expense_date: txn.txn_date || Date.current,
@@ -69,7 +72,9 @@ module Api
           account_category: category,
           memo: [ txn.walletable_name, "freee明細" ].compact.join(" / "),
           business_ratio: (params[:business_ratio].presence || 100).to_i,
-          status: category ? "confirmed" : "needs_review",
+          status: (chosen || !decision.needs_review?) ? "confirmed" : "needs_review",
+          ai_extracted_at: (Time.current if decision&.by_ai?),
+          ai_confidence: (decision.confidence if decision&.by_ai?),
           source: "freee",
           import_hash: hash,
           payment_source: txn.walletable_name,
@@ -100,6 +105,11 @@ module Api
 
       def require_keihi
         render(json: { error: "経費計上の利用権限がありません" }, status: :forbidden) unless current_user.can_use?(:keihi)
+      end
+
+      # ACCOUNT_CATEGORIES に無い名前(freee 独自の科目名・空文字)は採用しない
+      def known_category(name)
+        BusinessExpense::ACCOUNT_CATEGORIES.include?(name.to_s) ? name.to_s : nil
       end
 
       def tax_rate_from(code)

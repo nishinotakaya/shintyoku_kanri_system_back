@@ -7,6 +7,9 @@ module Api
       before_action :require_admin
       before_action :set_record, only: [ :update, :destroy, :receipt ]
 
+      # 1回の AI 仕訳で扱う上限。まとめて投げすぎないための歯止め
+      CLASSIFY_LIMIT = 200
+
       # GET /api/v1/business_expenses?month=YYYY-MM&account_category=
       def index
         scope = current_user.business_expenses.without_receipt_data.order(expense_date: :desc, id: :desc)
@@ -155,8 +158,9 @@ module Api
       end
 
       # GET /api/v1/business_expenses/freee_wallet_txns?start_date=&end_date=
-      # freeeの「自動で経理」相当: 銀行/カードの未処理明細に推奨科目を付けて返す(保存はしない)。
-      # フロントで科目を選び import_commit で確定する。
+      # freeeの「自動で経理」相当: 銀行/カードの未処理明細に科目を付けて返す(保存はしない)。
+      # 科目の初期値は AI(摘要ルール→AI)が決め、freee の推奨科目は予備に回す。
+      # フロントで科目を確認・変更し import_commit で確定する。
       def freee_wallet_txns
         conn = current_user.freee_connection
         return render(json: { error: "freee 未接続。設定から接続してください。" }, status: :bad_request) unless conn&.identity
@@ -164,10 +168,10 @@ module Api
         importer = Freee::ExpenseImporter.new(connection: conn, user: current_user)
         return render(json: { error: "freee 再ログインに失敗しました" }, status: :bad_request) unless importer.refresh_session!
 
-        rows = importer.unreconciled_txns(
+        rows = decide_categories(importer.unreconciled_txns(
           start_date: params[:start_date].presence || 3.months.ago.to_date.to_s,
           end_date: params[:end_date].presence || Date.current.to_s
-        )
+        ))
         render json: { rows: rows, count: rows.size, duplicate_count: rows.count { |r| r[:duplicate] } }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -185,6 +189,37 @@ module Api
 
         result = Freee::BulkExpenseReporter.new(user: current_user, connection: conn).call(ids)
         render json: { succeeded: result.succeeded, skipped: result.skipped, failed: result.failed }
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/business_expenses/classify_uncategorized  { ids?: [], month?: "YYYY-MM" }
+      # 「未分類」で登録されてしまった経費を、後から AI(摘要ルール→AI)でまとめて仕訳する。
+      # 既に科目が入っている行と対象外(excluded)は触らない。
+      # 確信度が低い判定は科目を入れた上で要確認に落とし、人の目に掛ける。
+      def classify_uncategorized
+        scope = current_user.business_expenses.without_receipt_data
+                            .where(account_category: nil).where.not(status: "excluded")
+        ids = Array(params[:ids]).map(&:to_i).reject(&:zero?)
+        scope = ids.any? ? scope.where(id: ids) : scope.in_month(params[:month])
+        records = scope.order(expense_date: :desc, id: :desc).limit(CLASSIFY_LIMIT).to_a
+        return render json: { updated: 0, skipped: 0, total: 0 } if records.empty?
+
+        decisions = ExpenseCategoryDecider.call(records.map { |record|
+          { date: record.expense_date&.iso8601, description: record.store_name.presence || record.memo, amount: record.amount }
+        })
+        updated = 0
+        records.zip(decisions).each do |record, decision|
+          next unless decision.decided?
+          record.update!(
+            account_category: decision.account_category,
+            status: decision.needs_review? ? "needs_review" : record.status,
+            ai_extracted_at: decision.by_ai? ? Time.current : record.ai_extracted_at,
+            ai_confidence: decision.by_ai? ? decision.confidence : record.ai_confidence
+          )
+          updated += 1
+        end
+        render json: { updated: updated, skipped: records.size - updated, total: records.size }
       rescue => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -209,6 +244,22 @@ module Api
 
       def set_record
         @record = current_user.business_expenses.find(params[:id])
+      end
+
+      # 未処理明細の科目の初期値を AI に決めさせる。freee の推奨科目は予備(fallback)に回す。
+      # 取込済み(duplicate)の行は画面で選べないので AI には投げない。
+      def decide_categories(rows)
+        targets = rows.reject { |row| row[:duplicate] }
+        return rows if targets.empty?
+
+        decisions = ExpenseCategoryDecider.call(targets.map { |row|
+          { date: row[:date], description: row[:description], amount: row[:amount], fallback_category: row[:account_category] }
+        })
+        by_hash = targets.each_with_index.to_h { |row, index| [ row[:import_hash], decisions[index] ] }
+        rows.map do |row|
+          decision = by_hash[row[:import_hash]]
+          decision ? row.merge(account_category: decision.account_category, confidence: decision.confidence) : row
+        end
       end
 
       # 一覧には対象外(excluded)も返すが、金額の集計からは外す
