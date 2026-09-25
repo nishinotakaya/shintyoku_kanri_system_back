@@ -11,11 +11,19 @@ class ExpenseCategoryDecider
   # AI の確信度がこれ未満なら、科目は入れるが「要確認」にして人の目に掛ける
   CONFIDENT_THRESHOLD = 70
 
-  Decision = Struct.new(:account_category, :confidence, :source, keyword_init: true) do
+  # 別のロジックで計上する科目は AI に選ばせない(選ばせると二重計上になる)。
+  #   外注工賃  … 承認済み請求から TaxSummaryBuilder が合算して計上する
+  #   減価償却費 … 固定資産台帳(fixed_assets)から計上する
+  AI_EXCLUDED_CATEGORIES = %w[外注工賃 減価償却費].freeze
+
+  Decision = Struct.new(:account_category, :confidence, :source, :private_suspected, keyword_init: true) do
     def decided? = account_category.present?
 
-    # 科目が決まらなかった / 決め手が弱かった行は要確認に回す
-    def needs_review? = !decided? || confidence.to_i < CONFIDENT_THRESHOLD
+    # 科目が決まらなかった / 決め手が弱かった / 私的支出の疑いがある行は要確認に回す。
+    # 私的支出(美容室・ゴルフ・通院など)を黙って経費に確定させると過大計上になる。
+    def needs_review? = !decided? || private_suspected? || confidence.to_i < CONFIDENT_THRESHOLD
+
+    def private_suspected? = !!private_suspected
 
     def by_ai? = source == "ai"
   end
@@ -52,8 +60,12 @@ class ExpenseCategoryDecider
     pending.each_with_index do |index, position|
       result = results[position] || {}
       category = known_category(result[:account_category])
-      next if category.nil?
-      decisions[index] = Decision.new(account_category: category, confidence: result[:confidence].to_i, source: "ai")
+      next if category.nil? || AI_EXCLUDED_CATEGORIES.include?(category)
+      # AI が私的支出(business=false)と見た行と、私的支出の疑いがある店は確定させない
+      private_suspected = result[:business] == false ||
+                          MerchantCategoryGuesser.private_suspect?(@rows[index][:description])
+      decisions[index] = Decision.new(account_category: category, confidence: result[:confidence].to_i,
+                                      source: "ai", private_suspected: private_suspected)
     end
   rescue => e
     Rails.logger.warn("[ExpenseCategoryDecider] AI分類に失敗したため要確認で残します: #{e.class}: #{e.message}")

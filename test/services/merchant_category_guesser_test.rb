@@ -43,6 +43,16 @@ class MerchantCategoryGuesserTest < Minitest::Test
     end
   end
 
+  # 私的支出の疑いがある先は、科目を自動確定させないために印を付ける
+  def test_private_suspect_merchants
+    [ "スマートゴルフ", "ワンストツプビヨウサロン  ミダシー", "六実駅前整骨院", "柏のほぐし  西口店" ].each do |description|
+      assert MerchantCategoryGuesser.private_suspect?(description), description
+    end
+    [ "ＡＮＴＨＲＯＰＩＣ 11.73 USD", "ＡＭＡＺＯＮ．ＣＯ．ＪＰ", "" ].each do |description|
+      refute MerchantCategoryGuesser.private_suspect?(description), description
+    end
+  end
+
   def test_returns_only_known_categories
     MerchantCategoryGuesser::RULES.each do |_, category|
       assert_includes BusinessExpense::ACCOUNT_CATEGORIES, category

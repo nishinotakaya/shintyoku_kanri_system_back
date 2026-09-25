@@ -27,6 +27,11 @@ class MerchantCategoryGuesser
     [ /電力|東京ガス|大阪ガス|水道局/, "水道光熱費" ]
   ].freeze
 
+  # 私的支出の可能性が高い先。ここに当たる摘要は AI が科目を決めても確定させず、必ず人に確認させる。
+  # (接待ゴルフ・福利厚生の可能性もあるので科目自体は出す。status だけ要確認に落とす)
+  PRIVATE_SUSPECT = /ゴルフ|GOLF|美容室|ビヨウサロン|ビューティ|ヘアサロン|BEAUTY|整骨院|接骨院|整体|鍼灸|
+                     マッサージ|ほぐし|クリニック|歯科|医院|病院|薬局|パチンコ|競馬|宝くじ/x.freeze
+
   # description から勘定科目名を返す。判定できなければ nil。
   # ACCOUNT_CATEGORIES に無い名前は返さない。
   def self.call(description)
@@ -37,6 +42,12 @@ class MerchantCategoryGuesser
     return nil if category.nil?
 
     BusinessExpense::ACCOUNT_CATEGORIES.include?(category) ? category : nil
+  end
+
+  # 私的支出の疑いがある先か(ゴルフ・美容室・整骨院など)。科目を自動確定させないための判定。
+  def self.private_suspect?(description)
+    text = normalize(description)
+    text.present? && PRIVATE_SUSPECT.match?(text)
   end
 
   # 全角英数→半角、空白・記号の除去、大文字化。「ＡＮＴＨＲＯＰＩＣ＊　ＣＬＡＵＤＥ」→「ANTHROPIC*CLAUDE」

@@ -73,6 +73,36 @@ class ExpenseCategoryDeciderTest < Minitest::Test
     end
   end
 
+  # AI が私的支出(business=false)と見た行は、科目は入れるが確定させない
+  def test_ai_private_row_is_not_confirmed
+    with_ai({ "スーパーマーケツト" => { account_category: "消耗品費", confidence: 95, business: false } }) do |_sent|
+      decision = ExpenseCategoryDecider.call([ { description: "スーパーマーケツト", amount: 4300 } ]).first
+      assert_equal "消耗品費", decision.account_category
+      assert decision.needs_review?
+      assert decision.private_suspected?
+    end
+  end
+
+  # 私的支出の疑いがある店(ゴルフ・美容室・整骨院)は AI が言い切っても要確認に残す
+  def test_private_suspect_merchant_is_not_confirmed
+    [ "スマートゴルフ", "ワンストツプビヨウサロン  ミダシー", "六実駅前整骨院" ].each do |description|
+      with_ai({ description => { account_category: "接待交際費", confidence: 95, business: true } }) do |_sent|
+        decision = ExpenseCategoryDecider.call([ { description: description, amount: 8800 } ]).first
+        assert_equal "接待交際費", decision.account_category, description
+        assert decision.needs_review?, "#{description} を確定にしてはいけない"
+      end
+    end
+  end
+
+  # 外注工賃・減価償却費は別ロジックで計上するので AI には選ばせない(二重計上になる)
+  def test_ai_cannot_choose_categories_counted_elsewhere
+    with_ai({ "ＰＡＹＰＡＬ＊ナゾノソウキン" => { account_category: "外注工賃", confidence: 95 } }) do |_sent|
+      decision = ExpenseCategoryDecider.call([ { description: "ＰＡＹＰＡＬ＊ナゾノソウキン", amount: 1669 } ]).first
+      assert_nil decision.account_category
+      assert decision.needs_review?
+    end
+  end
+
   # AI が落ちても例外は投げず、要確認として残す(登録自体は通す)
   def test_ai_failure_does_not_raise
     original = TransactionCategorizer.method(:call)
