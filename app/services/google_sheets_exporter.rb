@@ -5,6 +5,8 @@ require "google/apis/sheets_v4"
 # シート1: 現在のタスク（処理済→処理中→未対応）
 # シート2: 完了タスク
 class GoogleSheetsExporter
+  include BacklogSheetAuth
+
   # 色定義 (RGB 0-1)
   # 色を付けるのは見出しだけ:
   #   ヘッダ行(本日行う/タスク名/…/id) と セクション見出し(【処理中】など) を黄色。
@@ -37,8 +39,7 @@ class GoogleSheetsExporter
   end
 
   def call
-    @service = Google::Apis::SheetsV4::SheetsService.new
-    @service.authorization = build_auth
+    @service = authorized_sheets_service(@spreadsheet_id, @user)
 
     spreadsheet = @service.get_spreadsheet(@spreadsheet_id)
     existing = spreadsheet.sheets.map { |s| s.properties.title }
@@ -77,11 +78,6 @@ class GoogleSheetsExporter
     m = url.match(%r{/spreadsheets/d/([a-zA-Z0-9_-]+)})
     raise "スプレッドシートのURLが不正です" unless m
     m[1]
-  end
-
-  # トークンが無い操作者は admin(西野) にフォールバック
-  def build_auth
-    GoogleAuth.build_with_fallback(@user)
   end
 
   def ensure_sheet(existing, title)

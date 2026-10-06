@@ -5,6 +5,8 @@ require "date"
 # 進捗管理_西野.xlsx と同じフォーマットを想定:
 # B列: タスク名(SAP-XXXX)、F:予定開始、G:予定終了、H:実績開始、I:実績終了、J:進捗率
 class GoogleSheetsImporter
+  include BacklogSheetAuth
+
   # workspace_id: 案件ごとに別シートを使うため、取り込んだタスクをそのワークスペースへ入れる。
   def initialize(user:, spreadsheet_url:, sheet_name: nil, only_flagged: false, workspace_id: nil)
     @user = user
@@ -16,8 +18,7 @@ class GoogleSheetsImporter
   end
 
   def call
-    service = Google::Apis::SheetsV4::SheetsService.new
-    service.authorization = build_auth
+    service = authorized_sheets_service(@spreadsheet_id, @user)
 
     # シート一覧取得
     spreadsheet = service.get_spreadsheet(@spreadsheet_id)
@@ -47,8 +48,7 @@ class GoogleSheetsImporter
   end
 
   def list_sheets
-    service = Google::Apis::SheetsV4::SheetsService.new
-    service.authorization = build_auth
+    service = authorized_sheets_service(@spreadsheet_id, @user)
     spreadsheet = service.get_spreadsheet(@spreadsheet_id)
     spreadsheet.sheets.map { |s| s.properties.title }
   end
@@ -59,11 +59,6 @@ class GoogleSheetsImporter
     m = url.match(%r{/spreadsheets/d/([a-zA-Z0-9_-]+)})
     raise "スプレッドシートのURLが不正です" unless m
     m[1]
-  end
-
-  # トークンが無い操作者は admin(西野) にフォールバック (進捗管理もスキルシートと同じ挙動)
-  def build_auth
-    GoogleAuth.build_with_fallback(@user)
   end
 
   def parse_and_import(rows, formula_rows = [])
