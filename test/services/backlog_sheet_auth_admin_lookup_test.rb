@@ -1,5 +1,4 @@
 require "test_helper"
-require "ostruct"
 
 # AC-03: BacklogSheetAuth#authorized_sheets_service は admin 候補を where.not(SQL) で探していた。
 # 暗号化後も refresh_token 保持 admin が候補になり、空/nil/非 admin は候補にならないこと。

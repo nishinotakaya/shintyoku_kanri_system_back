@@ -1,9 +1,14 @@
 require "test_helper"
-require "ostruct"
 
 # NotionTaskImporter: Notion(WBS) タブのスプレッドシートを読み、notion_tasks の「修正後」値を取り込む（スプシ→アプリ）。
 # Google API は呼ばず、authorized_sheets_service を偽 service に差し替えてタブ解決・range・値反映を検証する。
 class NotionTaskImporterTest < Minitest::Test
+  # Google Sheets API レスポンスの偽物（必要な属性だけ持つ）
+  SheetProperties = Struct.new(:sheet_id, :title, keyword_init: true)
+  SheetEntry = Struct.new(:properties, keyword_init: true)
+  SpreadsheetResponse = Struct.new(:sheets, keyword_init: true)
+  ValuesResponse = Struct.new(:values, keyword_init: true)
+
   HEADER_ROW = [
     "担当", "WBSレベル", "タスク名",
     "開始日(修正前)", "開始日(修正後)",
@@ -198,18 +203,18 @@ class NotionTaskImporterTest < Minitest::Test
   end
 
   def sheet_properties(sheet_id:, title:)
-    OpenStruct.new(properties: OpenStruct.new(sheet_id: sheet_id, title: title))
+    SheetEntry.new(properties: SheetProperties.new(sheet_id: sheet_id, title: title))
   end
 
   # get_spreadsheet / get_spreadsheet_values の最小限のスタブ。呼ばれた range は recorded_ranges に記録する。
   def fake_service(sheets:, values:, recorded_ranges: [])
     service = Object.new
     service.define_singleton_method(:get_spreadsheet) do |_id, fields:|
-      OpenStruct.new(sheets: sheets)
+      SpreadsheetResponse.new(sheets: sheets)
     end
     service.define_singleton_method(:get_spreadsheet_values) do |_id, range, value_render_option:|
       recorded_ranges << range
-      OpenStruct.new(values: values)
+      ValuesResponse.new(values: values)
     end
     service
   end

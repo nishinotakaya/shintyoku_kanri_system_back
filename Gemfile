@@ -1,7 +1,10 @@
 source "https://rubygems.org"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem "rails", "~> 8.0.3"
+gem "rails", "~> 8.1.4"
+
+# Ruby 3.4 で csv は default gem から bundled gem になったため明示が必要（無いと本番 eager_load で LoadError）
+gem "csv"
 # Use sqlite3 as the database for Active Record
 gem "sqlite3", ">= 2.1"
 # Use the Puma web server [https://github.com/puma/puma]
@@ -26,8 +29,6 @@ gem "rack-attack", "~> 6.8"
 # Auth
 gem "devise", "~> 5.0"
 gem "devise-jwt", "~> 0.12"
-# Devise 4.9.4 が Zeitwerk 2.7 の strict require と非互換のため 2.6 系に固定
-gem "zeitwerk", "~> 2.6.0"
 
 # Excel 既存テンプレートを書式維持で編集
 gem "rubyXL", "~> 3.4"
