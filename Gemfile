@@ -21,9 +21,10 @@ gem "thruster", require: false
 
 # Use Rack CORS for handling Cross-Origin Resource Sharing (CORS), making cross-origin Ajax possible
 gem "rack-cors"
+gem "rack-attack", "~> 6.8"
 
 # Auth
-gem "devise", "~> 4.9"
+gem "devise", "~> 5.0"
 gem "devise-jwt", "~> 0.12"
 # Devise 4.9.4 が Zeitwerk 2.7 の strict require と非互換のため 2.6 系に固定
 gem "zeitwerk", "~> 2.6.0"
