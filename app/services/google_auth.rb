@@ -11,9 +11,16 @@ module GoogleAuth
   # Google 連携済みの admin (西野) のトークンにフォールバックする。
   def credential_user(operator)
     return operator if has_token?(operator)
-    User.where.not(google_refresh_token: [ nil, "" ]).detect(&:admin?) ||
-      User.where.not(google_access_token: [ nil, "" ]).detect(&:admin?) ||
+    admins_with_token(:google_refresh_token).first ||
+      admins_with_token(:google_access_token).first ||
       operator
+  end
+
+  # 指定トークン列を持つ admin を id 順で返す。
+  # トークン列は暗号化されていて SQL で比較できないため、母集団(admin メール)だけ SQL で絞り、有無は Ruby 側で判定する。
+  def admins_with_token(token_column)
+    User.where("lower(email) IN (?)", User::ADMIN_EMAILS.map(&:downcase)).order(:id)
+        .select { |user| user.public_send(token_column).present? }
   end
 
   def has_token?(user)
@@ -24,8 +31,8 @@ module GoogleAuth
   # 書き込みは write スコープを持つ管理者(西野)のトークンで行うのが確実なので、
   # 操作者が誰であろうと「トークンを持つ管理者」を優先する（無ければ操作者にフォールバック）。
   def writer_user(operator)
-    admin = User.where.not(google_refresh_token: [ nil, "" ]).order(:id).detect(&:admin?) ||
-            User.where.not(google_access_token: [ nil, "" ]).order(:id).detect(&:admin?)
+    admin = admins_with_token(:google_refresh_token).first ||
+            admins_with_token(:google_access_token).first
     (admin if has_token?(admin)) || credential_user(operator)
   end
 

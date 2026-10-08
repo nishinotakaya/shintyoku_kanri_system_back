@@ -49,6 +49,10 @@ class User < ApplicationRecord
 
   # マイナンバーカード撮影→AI読取で取得した個人番号。他の連携キーと同様に暗号化して保存する。
   encrypts :my_number
+  # 外部サービス連携のトークン・API キー。DB 流出時にそのまま使われないよう暗号化する(非決定的: SQL 検索不可)。
+  encrypts :openai_api_key, :google_access_token, :google_refresh_token, :wantedly_token,
+           :anotherworks_token, :heygen_api_key, :canva_access_token, :canva_refresh_token,
+           :trello_api_key, :trello_api_token
   # 保存前に全角数字→半角・数字以外除去まで揃える(表記ゆれのまま保存しない)。
   normalizes :my_number, with: ->(raw) { MyNumber.normalize(raw) }
   validate :my_number_must_be_valid

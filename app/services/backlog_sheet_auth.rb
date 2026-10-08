@@ -11,7 +11,7 @@ module BacklogSheetAuth
 
   # 対象シートに実際にアクセスできる管理者アカウントの service を返す（所有アカウントが分かれるため総当たり）。
   def authorized_sheets_service(spreadsheet_id, operator)
-    candidates = User.where.not(google_refresh_token: [ nil, "" ]).select(&:admin?)
+    candidates = GoogleAuth.admins_with_token(:google_refresh_token)
     candidates.unshift(operator) if GoogleAuth.has_token?(operator)
     candidates.uniq!
     candidates.each do |candidate|

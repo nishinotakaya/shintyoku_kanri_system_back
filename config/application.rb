@@ -33,6 +33,13 @@ module RailsBackend
     # These settings can be overridden in specific environments using the files
     # in config/environments, which are processed later.
     #
+    # 既存の平文行を読めるようにする(デプロイ時は新コードが db:migrate より先に動くため必須)。
+    # 全行を暗号化するデータ移行の適用後、平文が無くなったらこの行を外す。
+    # 注意: この設定は encrypts 宣言のある全列に効く(User: my_number と外部トークン10列 /
+    # BacklogSetting: backlog_password, api_key, session_cookie / FreeeConnection: session_cookie,
+    # password_encrypted / GithubSetting: personal_access_token)。外す前に本番の rails runner で
+    # 各列の生値(connection.select_value)が暗号文 {"p": で始まらない行が 0 件と確認してから削除する。
+    config.active_record.encryption.support_unencrypted_data = true
     config.time_zone = "Asia/Tokyo"
     config.i18n.default_locale = :ja
     config.i18n.available_locales = [ :ja, :en ]
