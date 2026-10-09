@@ -12,6 +12,7 @@ class NotionSyncServiceTest < ActiveSupport::TestCase
 
   def teardown
     NotionTask.where(notion_block_id: @block_id).delete_all
+    NotionTask.where(notion_block_id: [ @manual_block_id, @stale_block_id ]).delete_all
   end
 
   def test_first_sync_stores_notion_values_without_before_sync
@@ -53,6 +54,34 @@ class NotionSyncServiceTest < ActiveSupport::TestCase
     assert_in_delta 1.0, task.progress_rate_prev, 0.001
     assert_equal "進行中", task.status_prev
     assert_equal Date.new(2026, 8, 1), task.start_date
+  end
+
+  # 同期(call)後も手動追加(manual)タスクは残り、Notion から消えた Notion 由来タスクは従来どおり削除される
+  def test_call_keeps_manual_tasks_and_deletes_vanished_notion_tasks
+    @manual_block_id = "manual-#{SecureRandom.uuid}"
+    @stale_block_id = SecureRandom.uuid
+    NotionTask.create!(notion_block_id: @manual_block_id, title: "新規タスク", manual: true, synced_at: Time.current)
+    NotionTask.create!(notion_block_id: @stale_block_id, title: "Notionから消えた", synced_at: Time.current)
+    ids = NotionClient::PROPERTY_IDS
+    block = { "properties" => { ids[:title] => [ [ "残るタスク" ] ], ids[:wbs_level] => [ [ "7.7" ] ] } }
+    fake_data = {
+      "recordMap" => { "block" => { @block_id => { "value" => block } }, "notion_user" => {} },
+      "result" => { "reducerResults" => { "collection_group_results" => { "blockIds" => [ @block_id ] } } }
+    }
+    fake_client = Object.new
+    fake_client.define_singleton_method(:query_assigned_tasks) { fake_data }
+
+    original_new = NotionClient.method(:new)
+    NotionClient.define_singleton_method(:new) { |*| fake_client }
+    begin
+      NotionSyncService.new.call
+    ensure
+      NotionClient.define_singleton_method(:new, original_new)
+    end
+
+    assert NotionTask.exists?(notion_block_id: @block_id)
+    assert NotionTask.exists?(notion_block_id: @manual_block_id), "手動追加タスクが同期で削除された"
+    assert_not NotionTask.exists?(notion_block_id: @stale_block_id), "Notion から消えたタスクが残っている"
   end
 
   private

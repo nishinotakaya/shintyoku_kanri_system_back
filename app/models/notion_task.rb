@@ -40,8 +40,10 @@ class NotionTask < ApplicationRecord
     block_ids.empty? ? none : where("REPLACE(notion_block_id, '-', '') IN (?)", block_ids)
   }
 
-  # Notion 上でこのタスクを開く URL (フロントのリビングタスクリンクと同じ形式)
+  # Notion 上でこのタスクを開く URL (フロントのリビングタスクリンクと同じ形式)。手動追加タスクは Notion に無いので nil
   def url
+    return nil if manual?
+
     "https://www.notion.so/#{NotionClient::PAGE_ID.delete('-')}?v=#{NotionClient::COLLECTION_VIEW_ID.delete('-')}&p=#{notion_block_id.to_s.delete('-')}&pm=s"
   end
 

@@ -79,6 +79,7 @@ module Api
           note: task.note,
           memo: task.memo,
           url: task.url,
+          manual: task.manual,
           # 前回同期からの変更前の値。LINE 報告の「修正前 → 修正後」表示に使う
           # (WBS 画面の「修正後」*_prev とは別物。あちらは /backlog_activities が返す)
           start_date_before_sync: task.start_date_before_sync,

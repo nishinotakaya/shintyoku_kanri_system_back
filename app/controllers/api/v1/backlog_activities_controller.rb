@@ -208,6 +208,7 @@ module Api
         task.title_prev           = params[:title_prev].to_s.strip.presence if params.key?(:title_prev)
         task.assignee_name_prev   = params[:assignee_name_prev].to_s.strip.presence if params.key?(:assignee_name_prev)
         task.workload_prev        = params[:workload_prev].presence if params.key?(:workload_prev)
+        task.wbs_level            = params[:wbs_level].to_s.strip.presence if task.manual? && params.key?(:wbs_level)
         task.memo               = params[:memo].to_s if params.key?(:memo)
         task.note               = params[:note].to_s if params.key?(:note) # 備考(Notion由来)の画面編集。次回同期でNotion値に戻る点は許容。
         task.save!
@@ -216,7 +217,53 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/v1/backlog_activities/notion_task?user_id=
+      # 基準行(after_notion_block_id)の下に手動タスクを追加する。WBS レベルは基準行の子の次番号。
+      def create_notion_task
+        resolve_target_user or return
+        if params[:after_notion_block_id].present?
+          base_task = NotionTask.find_by(notion_block_id: params[:after_notion_block_id])
+          return render json: { error: "Notion タスクが見つかりません" }, status: :not_found unless base_task
+        end
+        created_task = NotionTask.create!(
+          notion_block_id: "manual-#{SecureRandom.uuid}",
+          manual: true,
+          synced_at: Time.current,
+          title: "新規タスク",
+          wbs_level: base_task && next_child_wbs_level(base_task.wbs_level),
+          assignee_name: base_task&.effective_assignee_name
+        )
+        render json: { ok: true, created_notion_block_id: created_task.notion_block_id, notion_tasks: notion_task_options }
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # DELETE /api/v1/backlog_activities/notion_task?user_id=
+      # 手動追加(manual)タスクだけ削除できる。Notion 由来の行は削除不可。
+      def destroy_notion_task
+        resolve_target_user or return
+        task = NotionTask.find_by(notion_block_id: params[:notion_block_id])
+        return render json: { error: "Notion タスクが見つかりません" }, status: :not_found unless task
+        return render json: { error: "Notion 由来のタスクは削除できません" }, status: :unprocessable_entity unless task.manual?
+
+        task.destroy!
+        render json: { ok: true, notion_tasks: notion_task_options }
+      rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
+
+      # 基準 WBS レベル直下の子("基準.数字" の形のみ。孫は除く)の最大番号+1。基準が空なら nil。
+      def next_child_wbs_level(base_wbs_level)
+        return nil if base_wbs_level.blank?
+
+        child_pattern = /\A#{Regexp.escape(base_wbs_level)}\.(\d+)\z/
+        child_numbers = NotionTask.where.not(wbs_level: nil).pluck(:wbs_level).filter_map do |wbs_level|
+          wbs_level[child_pattern, 1]&.to_i
+        end
+        "#{base_wbs_level}.#{(child_numbers.max || 0) + 1}"
+      end
 
       def date_param(value)
         str = value.to_s.strip
@@ -260,6 +307,7 @@ module Api
             assignee_name:   task.assignee_name,
             assignee_name_prev: task.assignee_name_prev,
             wbs_level:       task.wbs_level,
+            manual:          task.manual,
             title:           task.title,
             title_prev:      task.title_prev,
             start_date:      task.start_date&.to_s,

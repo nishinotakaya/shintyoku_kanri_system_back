@@ -108,6 +108,20 @@ class Api::V1::NotionTasksControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  def test_index_serializes_manual_flag
+    manual_task = NotionTask.create!(notion_block_id: "manual-#{SecureRandom.uuid}", title: "手動追加", manual: true,
+                                     synced_at: Time.current)
+
+    get "/api/v1/notion_tasks", params: { ignore_date: "true" }, headers: auth_headers(@admin)
+
+    assert_response :success
+    serialized = response.parsed_body.index_by { |row| row["notion_block_id"] }
+    assert_equal true, serialized.fetch(manual_task.notion_block_id)["manual"]
+    assert_equal false, serialized.fetch(@task.notion_block_id)["manual"]
+  ensure
+    manual_task&.destroy
+  end
+
   def test_user_without_notion_permission_is_forbidden
     post "/api/v1/notion_tasks/line_report", params: { issue_keys: [ @issue_key ] },
          headers: auth_headers(@plain_user), as: :json

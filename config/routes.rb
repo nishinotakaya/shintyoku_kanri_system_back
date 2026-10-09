@@ -349,6 +349,8 @@ Rails.application.routes.draw do
       post  "backlog_activities/import",  to: "backlog_activities#import"
       patch "backlog_activities/note",    to: "backlog_activities#update_note"
       patch "backlog_activities/notion_task", to: "backlog_activities#update_notion_task"
+      post  "backlog_activities/notion_task", to: "backlog_activities#create_notion_task"
+      delete "backlog_activities/notion_task", to: "backlog_activities#destroy_notion_task"
       get   "backlog_activities",         to: "backlog_activities#index"
       post  "work_reports/apply_transit",  to: "work_reports#apply_transit"
 

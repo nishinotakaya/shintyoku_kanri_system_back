@@ -102,4 +102,19 @@ class NotionTaskTest < Minitest::Test
 
     assert @task.red_cell?(:progress_rate, { progress_rate: 0.8 })
   end
+
+  # url: Notion 由来行は従来どおり Notion のページ URL を返す
+  def test_url_returns_notion_page_url_for_notion_derived_task
+    assert_includes @task.url, "https://www.notion.so/"
+    assert_includes @task.url, "p=#{@task.notion_block_id.delete('-')}"
+  end
+
+  # url: 手動追加行は Notion に存在しないので nil
+  def test_url_is_nil_for_manual_task
+    manual_task = NotionTask.create!(notion_block_id: "manual-#{SecureRandom.uuid}", title: "手動", manual: true, synced_at: Time.current)
+
+    assert_nil manual_task.url
+  ensure
+    manual_task&.destroy
+  end
 end

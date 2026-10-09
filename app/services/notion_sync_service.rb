@@ -20,7 +20,7 @@ class NotionSyncService
         upserted_ids << block_id
       end
 
-      NotionTask.where.not(notion_block_id: upserted_ids).delete_all if upserted_ids.any?
+      NotionTask.where(manual: false).where.not(notion_block_id: upserted_ids).delete_all if upserted_ids.any?
     end
 
     upserted_ids.size
