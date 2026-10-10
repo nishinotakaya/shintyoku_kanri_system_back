@@ -1,6 +1,7 @@
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    origins ENV.fetch("FRONTEND_ORIGIN", "http://localhost:5173")
+    # カンマ区切りで複数指定可(例: 旧URL react-frontend-beige と新URL worktempo の併用)
+    origins(*ENV.fetch("FRONTEND_ORIGIN", "http://localhost:5173").split(",").map(&:strip).reject(&:empty?))
     resource "*",
       headers: :any,
       expose: [ "Authorization", "Content-Disposition",
