@@ -89,11 +89,11 @@ module UserProvisioning
     tenant_name = inviter.owned_tenants.first&.name
     manuals = MEMBER_MANUALS.fetch(tenant_name, [])
     manual_section = manuals.map { |manual| manual_section(manual) }.join
-    subject = "【勤怠アプリ】#{inviter.display_name}さんから招待が届きました"
+    subject = "【WorkTempo】#{inviter.display_name}さんから招待が届きました"
     body = <<~BODY
       #{invitee.display_name} 様
 
-      #{inviter.display_name}さんが勤怠アプリ#{tenant_name.present? ? "（#{tenant_name}）" : ""}にあなたを招待しました。
+      #{inviter.display_name}さんが WorkTempo#{tenant_name.present? ? "（#{tenant_name}）" : ""}にあなたを招待しました。
 
       下記URLからパスワードを設定して、登録を完了してください（リンクの有効期限: 14日間）。
       #{invite_url}
@@ -103,7 +103,7 @@ module UserProvisioning
       ご不明点があれば #{inviter.email} までご連絡ください。
 
       ---
-      勤怠アプリ
+      WorkTempo
     BODY
 
     GmailSender.new(user: GoogleAuth.credential_user(inviter)).send_mail(
@@ -117,11 +117,11 @@ module UserProvisioning
 
   # 登録完了の確認メール。招待リンクからパスワードを設定し終えたユーザーに送る。
   def send_registration_complete!(user:)
-    subject = "【勤怠アプリ】登録が完了しました"
+    subject = "【WorkTempo】登録が完了しました"
     body = <<~BODY
       #{user.display_name} 様
 
-      勤怠アプリへの登録が完了しました。このメールは登録確認のお知らせです。
+      WorkTempo への登録が完了しました。このメールは登録確認のお知らせです。
 
       ログインはこちら:
       #{frontend_url}/sign_in
@@ -129,11 +129,11 @@ module UserProvisioning
       メールアドレス: #{user.email}
 
       ---
-      勤怠アプリ
+      WorkTempo
     BODY
 
     GmailSender.new(user: GoogleAuth.credential_user(user)).send_mail(
-      to: user.email, subject: subject, body: body, from_name: "勤怠アプリ"
+      to: user.email, subject: subject, body: body, from_name: "WorkTempo"
     )
   end
 
@@ -143,7 +143,7 @@ module UserProvisioning
   def send_signed_notice!(contract:)
     owner = contract.user
     app_url = ENV["FRONTEND_URL"].presence || "https://react-frontend-beige.vercel.app"
-    subject = "【勤怠アプリ】#{contract.party_b_name}さんが契約書に署名しました"
+    subject = "【WorkTempo】#{contract.party_b_name}さんが契約書に署名しました"
     body = <<~BODY
       #{owner.display_name} 様
 
@@ -158,11 +158,11 @@ module UserProvisioning
       #{app_url}/contracts
 
       ---
-      勤怠アプリ
+      WorkTempo
     BODY
 
     GmailSender.new(user: GoogleAuth.credential_user(owner)).send_mail(
-      to: owner.email, subject: subject, body: body, from_name: "勤怠アプリ"
+      to: owner.email, subject: subject, body: body, from_name: "WorkTempo"
     )
   end
 end

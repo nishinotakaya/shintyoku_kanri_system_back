@@ -6,7 +6,7 @@ class Contract < ApplicationRecord
   # app/models/contract/default_articles.rb (Zeitwerk規約で Contract::DefaultArticles) から取り込む。
   DEFAULT_ARTICLES = DefaultArticles::LIST
 
-  # HAUKUR運送の紙の原本どおりの条文(全29条・6ページ)。改ページ位置は page_break_before で持つ。
+  # HAUKUR運送の紙の原本どおりの条文(全30条・6ページ。第27条 任意保険等はアプリで追加)。改ページ位置は page_break_before で持つ。
   TRANSPORT_ARTICLES = TransportArticles::LIST
 
   # 契約書作成時に選べる条文テンプレート。キーはフロントから渡ってくる template パラメータ。

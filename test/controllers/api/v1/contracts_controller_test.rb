@@ -91,7 +91,9 @@ class Api::V1::ContractsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :created
     body = response.parsed_body
-    assert_equal 29, body["articles"].size
+    assert_equal 30, body["articles"].size
+    assert_equal "第27条（任意保険等）", body["articles"][26]["heading"]
+    assert_equal "第30条（特記事項）", body["articles"].last["heading"]
     assert_equal "第1条（目的）", body["articles"].first["heading"]
     # 強制改ページは廃止(ページ下部の空白の原因)。条文は自然に流し込む
     assert_empty body["articles"].select { |article| article["page_break_before"] }

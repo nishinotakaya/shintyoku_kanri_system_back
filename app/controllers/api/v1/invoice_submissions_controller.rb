@@ -487,7 +487,7 @@ module Api
           subject: "📨 [一括申請] #{applicant.display_name} #{first.year}年#{first.month}月分 (#{records.size}件)",
           body: body_lines.join("\n"),
           attachments: attachments,
-          from_name: "勤怠アプリ通知"
+          from_name: "WorkTempo 通知"
         )
       rescue => e
         Rails.logger.warn("[InvoiceSubmissions] bulk mail notify failed: #{e.class}: #{e.message}")
@@ -587,7 +587,7 @@ module Api
           subject: "📨 [#{kind_label}申請] #{applicant.display_name} #{record.year}年#{record.month}月分 #{cat_label}",
           body: body,
           attachments: attachments,
-          from_name: "勤怠アプリ通知"
+          from_name: "WorkTempo 通知"
         )
       rescue => e
         Rails.logger.warn("[InvoiceSubmissions] mail notify failed: #{e.class}: #{e.message}")
