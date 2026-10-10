@@ -20,13 +20,18 @@ module Api
           sign_in(user)
 
           token = Warden::JWTAuth::UserEncoder.new.call(user, :user, nil).first
-          frontend = ENV.fetch("FRONTEND_ORIGIN", "http://localhost:5173")
-          redirect_to "#{frontend}/auth/callback?token=#{token}", allow_other_host: true
+          redirect_to "#{frontend_origin}/auth/callback?token=#{token}", allow_other_host: true
         end
 
         def failure
-          frontend = ENV.fetch("FRONTEND_ORIGIN", "http://localhost:5173")
-          redirect_to "#{frontend}/sign_in?error=google_auth_failed", allow_other_host: true
+          redirect_to "#{frontend_origin}/sign_in?error=google_auth_failed", allow_other_host: true
+        end
+
+        private
+
+        # ログインを始めた画面(旧URL/新URL)へ戻す。OmniAuth がリクエスト時の origin パラメータを omniauth.origin に保持している。
+        def frontend_origin
+          FrontendOrigin.resolve(request.env["omniauth.origin"])
         end
       end
     end
